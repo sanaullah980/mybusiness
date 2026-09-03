@@ -12,8 +12,14 @@
 </head>
 <body>
 
-    <!-- AUTH SCREEN -->
-    <div id="auth-screen">
+    <!-- AUTH LOADING SCREEN (Visible by default to prevent flash) -->
+    <div id="auth-loading" class="auth-loading">
+        <div class="spinner"></div>
+        <p>Checking authentication...</p
+    </div>
+
+    <!-- AUTH SCREEN (Hidden initially) -->
+    <div id="auth-screen" class="hidden">
         <div class="landing-container">
             <div class="landing-text">
                 <h1>Professional Shop & Business Management</h1>
@@ -45,7 +51,7 @@
         </div>
     </div>
 
-    <!-- MAIN APP -->
+    <!-- MAIN APP (Hidden initially) -->
     <div id="main-app" class="hidden">
         <header class="app-header">
             <h1 id="header-title">Dashboard</h1>
@@ -66,11 +72,8 @@
             <button class="nav-item" data-page="inventory" onclick="navigate('inventory')">
                 <i class="fas fa-boxes-stacked"></i><span>Stock</span>
             </button>
-            <button class="nav-item" data-page="customers" onclick="navigate('customers')">
-                <i class="fas fa-users"></i><span>People</span>
-            </button>
             <button class="nav-item" data-page="more" onclick="navigate('more')">
-                <i class="fas fa-ellipsis-h"></i><span>More</span>
+                <i class="fas fa-bars"></i><span>More</span>
             </button>
         </nav>
     </div>

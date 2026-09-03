@@ -7,7 +7,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { 
     getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, setDoc,
-    onSnapshot, query, where, runTransaction, getDocs, orderBy
+    onSnapshot, query, where, runTransaction
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -25,6 +25,7 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 
+// Ensure persistent login
 setPersistence(auth, browserLocalPersistence).catch(console.error);
 
 let currentUserId = null;
@@ -32,6 +33,8 @@ let isLoginMode = true;
 let data = { products: [], customers: [], sales: [], expenses: [], stockPurchases: [], customerTransactions: [], settings: {} };
 let listeners = [];
 let cart = [];
+let activeReportTab = 'daily';
+let currentReportMonth = new Date();
 
 // --- UTILITIES ---
 function formatCurrency(amount) {
@@ -39,16 +42,15 @@ function formatCurrency(amount) {
     return "Rs. " + Number(amount).toLocaleString('en-PK', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
-function getLocalDateStr(dateInput) {
-    const d = new Date(dateInput);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
+function getStartOfDay(date) { const d = new Date(date); d.setHours(0, 0, 0, 0); return d; }
+function getEndOfDay(date) { const d = new Date(date); d.setHours(23, 59, 59, 999); return d; }
+function getStartOfMonth(date) { const d = new Date(date); d.setDate(1); d.setHours(0, 0, 0, 0); return d; }
+function getEndOfMonth(date) { const d = new Date(date); d.setMonth(d.getMonth() + 1); d.setDate(0); d.setHours(23, 59, 59, 999); return d; }
 
 function showLoading(btnId, text) {
     const btn = document.getElementById(btnId);
     if (btn) { btn.disabled = true; btn.dataset.originalText = btn.innerText; btn.innerText = text || "Processing..."; }
 }
-
 function hideLoading(btnId) {
     const btn = document.getElementById(btnId);
     if (btn) { btn.disabled = false; btn.innerText = btn.dataset.originalText || "Submit"; }
@@ -109,7 +111,6 @@ window.forgotPassword = async (e) => {
 };
 
 window.signInWithGoogle = async () => {
-    showLoading('google-btn-placeholder', "Signing in..."); // Note: applied to button via querySelector below
     const btn = document.querySelector('.google-btn');
     btn.disabled = true;
     try { await signInWithPopup(auth, googleProvider); } 
@@ -127,7 +128,10 @@ window.handleLogout = async () => {
     catch (error) { console.error("Logout error:", error); alert("Failed to log out."); }
 };
 
+// FIXED AUTH FLASH: Wait for Firebase to determine state before showing UI
 onAuthStateChanged(auth, (user) => {
+    document.getElementById('auth-loading').classList.add('hidden'); // Hide loading screen
+    
     if (user) {
         currentUserId = user.uid;
         document.getElementById('auth-screen').classList.add('hidden');
@@ -181,46 +185,74 @@ window.navigate = (page) => {
     if (page === 'dashboard') { title.innerText = 'Dashboard'; renderDashboard(content); }
     else if (page === 'sales') { title.innerText = 'New Sale'; renderSales(content); }
     else if (page === 'inventory') { title.innerText = 'Inventory'; renderInventory(content); }
-    else if (page === 'customers') { title.innerText = 'Customers'; renderCustomers(content); }
     else if (page === 'more') { title.innerText = 'More'; renderMore(content); }
+    else if (page === 'expenses') { title.innerText = 'Expenses'; renderExpenses(content); }
+    else if (page === 'stockPurchases') { title.innerText = 'Stock Purchases'; renderStockPurchases(content); }
+    else if (page === 'reports') { title.innerText = 'Reports'; renderReports(content); }
+    else if (page === 'settings') { title.innerText = 'Settings'; renderSettings(content); }
 };
 
-// --- RENDER FUNCTIONS ---
-function renderDashboard(container) {
-    const todayStr = getLocalDateStr(new Date());
-    
-    let todaySales = 0, todayKnownProfit = 0, todayUnknownCount = 0, todayExpenses = 0, todayStockPurchases = 0;
+// --- REPORT CALCULATION LOGIC ---
+function calculateReportData(startDate, endDate) {
+    let totalSales = 0, knownProfit = 0, unknownCount = 0, txCount = 0;
+    let totalExpenses = 0, totalStockPurchases = 0, customerPayments = 0, newDebt = 0;
 
     data.sales.forEach(s => {
-        if (getLocalDateStr(s.date) === todayStr) {
-            todaySales += (s.total || 0);
-            if (s.profitKnown) todayKnownProfit += (s.totalProfit || 0);
-            else todayUnknownCount++;
+        const d = new Date(s.date);
+        if (d >= startDate && d <= endDate) {
+            totalSales += (s.total || 0);
+            if (s.profitKnown) knownProfit += (s.totalProfit || 0);
+            else unknownCount++;
+            txCount++;
         }
     });
 
-    data.expenses.forEach(e => { if (getLocalDateStr(e.date) === todayStr) todayExpenses += (e.amount || 0); });
-    data.stockPurchases.forEach(p => { if (getLocalDateStr(p.date) === todayStr) todayStockPurchases += (p.amount || 0); });
+    data.expenses.forEach(e => {
+        const d = new Date(e.date);
+        if (d >= startDate && d <= endDate) totalExpenses += (e.amount || 0);
+    });
 
-    const totalDebt = data.customers.reduce((sum, c) => sum + (c.balance || 0), 0);
-    const todayNetProfit = todayKnownProfit - todayExpenses;
+    data.stockPurchases.forEach(p => {
+        const d = new Date(p.date);
+        if (d >= startDate && d <= endDate) totalStockPurchases += (p.amount || 0);
+    });
+
+    data.customerTransactions.forEach(t => {
+        const d = new Date(t.date);
+        if (d >= startDate && d <= endDate) {
+            if (t.type === 'payment') customerPayments += (t.amount || 0);
+            else if (t.type === 'sale_debt' || t.type === 'manual_debt') newDebt += (t.amount || 0);
+        }
+    });
+
+    const netProfit = knownProfit - totalExpenses;
+    const outstandingDebt = data.customers.reduce((sum, c) => sum + (c.balance || 0), 0);
+
+    return { totalSales, knownProfit, unknownCount, totalExpenses, netProfit, totalStockPurchases, customerPayments, newDebt, outstandingDebt, txCount };
+}
+
+// --- RENDER FUNCTIONS ---
+function renderDashboard(container) {
+    const dayStartStr = data.settings.businessDayStart || getStartOfDay(new Date()).toISOString();
+    const stats = calculateReportData(new Date(dayStartStr), new Date());
 
     container.innerHTML = `
         <div class="dashboard-grid">
-            <div class="card profit"><h3>Today's Sales</h3><div class="value">${formatCurrency(todaySales)}</div></div>
-            <div class="card profit"><h3>Known Profit</h3><div class="value">${formatCurrency(todayKnownProfit)}</div></div>
-            <div class="card"><h3>Net Profit</h3><div class="value">${formatCurrency(todayNetProfit)}</div></div>
-            <div class="card debt"><h3>Customer Debt</h3><div class="value">${formatCurrency(totalDebt)}</div></div>
+            <div class="card profit"><h3>Today's Sales</h3><div class="value">${formatCurrency(stats.totalSales)}</div></div>
+            <div class="card profit"><h3>Known Profit</h3><div class="value">${formatCurrency(stats.knownProfit)}</div></div>
+            <div class="card"><h3>Net Profit</h3><div class="value">${formatCurrency(stats.netProfit)}</div></div>
+            <div class="card debt"><h3>Customer Debt</h3><div class="value">${formatCurrency(stats.outstandingDebt)}</div></div>
         </div>
         <div class="dashboard-grid">
-            <div class="card"><h3>Today's Expenses</h3><div class="value">${formatCurrency(todayExpenses)}</div></div>
-            <div class="card"><h3>Stock Purchases</h3><div class="value">${formatCurrency(todayStockPurchases)}</div></div>
-        ${todayUnknownCount > 0 ? `<div class="card" style="grid-column: span 2;"><h3>⚠️ Unknown Profit Sales</h3><div class="value" style="font-size:20px; color:var(--warning);">${todayUnknownCount} transaction(s) not included in profit total</div></div>` : ''}
+            <div class="card"><h3>Today's Expenses</h3><div class="value">${formatCurrency(stats.totalExpenses)}</div></div>
+            <div class="card"><h3>Stock Purchases</h3><div class="value">${formatCurrency(stats.totalStockPurchases)}</div></div>
+        ${stats.unknownCount > 0 ? `<div class="card" style="grid-column: span 2;"><h3>⚠️ Unknown Profit Sales</h3><div class="value" style="font-size:20px; color:var(--warning);">${stats.unknownCount} transaction(s) not included in profit total</div></div>` : ''}
         </div>
+        <button class="btn" style="margin-bottom:20px;" onclick="navigate('reports')">View Detailed Reports</button>
         <div class="card">
             <h3>Recent Sales</h3>
             ${data.sales.slice().reverse().slice(0, 5).map(s => `
-                <div class="list-item">
+                <div class="list-item" style="cursor:default;">
                     <div class="list-item-info">
                         <h4>${s.customerName || 'Walk-in'} <span class="badge ${s.profitKnown ? 'badge-ok' : 'badge-unknown'}">${s.profitKnown ? 'Known' : 'Unknown'}</span></h4>
                         <p>${new Date(s.date).toLocaleString()}</p>
@@ -329,7 +361,7 @@ function renderCart() {
         container.innerHTML = cart.map((item, index) => {
             const sub = item.price * item.qty;
             total += sub;
-            return `<div class="list-item">
+            return `<div class="list-item" style="cursor:default;">
                 <div class="list-item-info"><h4>${item.name} x${item.qty}</h4><p>${formatCurrency(item.price)} each</p></div>
                 <div style="display:flex; align-items:center; gap:10px;">
                     <span style="font-weight:bold;">${formatCurrency(sub)}</span>
@@ -359,10 +391,7 @@ window.addSaleItem = () => {
     if (!qty || qty < 1) return alert("Quantity must be at least 1.");
     
     const availableStock = parseInt(option.dataset.stock);
-    const item = {
-        id: option.value, name: option.text.split(' (')[0],
-        price: parseFloat(option.dataset.price), cost: parseFloat(option.dataset.cost), qty: qty
-    };
+    const item = { id: option.value, name: option.text.split(' (')[0], price: parseFloat(option.dataset.price), cost: parseFloat(option.dataset.cost), qty: qty };
     
     const existing = cart.find(i => i.id === item.id);
     if (existing) {
@@ -379,6 +408,7 @@ window.addSaleItem = () => {
 
 window.removeCartItem = (index) => { cart.splice(index, 1); renderCart(); };
 
+// FIXED TRANSACTION: Phase 1 (Reads) -> Phase 2 (Calculations) -> Phase 3 (Writes)
 window.completeNormalSale = async () => {
     if(cart.length === 0) return alert("Cart is empty!");
     const btn = document.getElementById('btn-complete-sale');
@@ -387,45 +417,54 @@ window.completeNormalSale = async () => {
     try {
         const customerId = document.getElementById('sale-customer').value || null;
         const amountPaid = parseFloat(document.getElementById('sale-amount-paid').value) || 0;
-        const total = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
-        const totalProfit = cart.reduce((sum, item) => sum + ((item.price - item.cost) * item.qty), 0);
-        
-        let customerName = "Walk-in";
-        if (customerId) {
-            const c = data.customers.find(x => x.id === customerId);
-            if (c) customerName = c.name;
-        }
-
-        const saleData = {
-            ownerId: currentUserId, customerId, customerName, saleType: 'normal',
-            date: new Date().toISOString(), items: cart, total, amountPaid,
-            amountDue: Math.max(0, total - amountPaid), totalProfit, profitKnown: true, note: ''
-        };
 
         await runTransaction(db, async (transaction) => {
-            const saleRef = doc(collection(db, "sales"));
-            transaction.set(saleRef, saleData);
-
+            // PHASE 1: READS ONLY
+            const productSnapshots = [];
             for (const item of cart) {
-                const productRef = doc(db, "products", item.id);
-                const productSnap = await transaction.get(productRef);
-                if (!productSnap.exists()) throw new Error(`Product ${item.name} deleted during checkout!`);
-                const newStock = productSnap.data().stock - item.qty;
-                if (newStock < 0) throw new Error(`Not enough stock for ${item.name}`);
-                transaction.update(productRef, { stock: newStock });
+                const snap = await transaction.get(doc(db, "products", item.id));
+                productSnapshots.push({ item, snap });
+            }
+            let customerSnap = null;
+            if (customerId) customerSnap = await transaction.get(doc(db, "customers", customerId));
+
+            // PHASE 2: VALIDATION & CALCULATION
+            let total = 0, totalProfit = 0;
+            for (const { item, snap } of productSnapshots) {
+                if (!snap.exists()) throw new Error(`Product ${item.name} not found.`);
+                const pData = snap.data();
+                if (pData.ownerId !== currentUserId) throw new Error("Unauthorized product access.");
+                if (pData.stock < item.qty) throw new Error(`Insufficient stock for ${item.name}.`);
+                total += item.price * item.qty;
+                totalProfit += (item.price - pData.cost) * item.qty;
+            }
+            
+            const amountDue = Math.max(0, total - amountPaid);
+            let newCustomerBalance = 0;
+            if (customerId && amountDue > 0 && customerSnap && customerSnap.exists()) {
+                newCustomerBalance = (customerSnap.data().balance || 0) + amountDue;
+            } else if (customerId && customerSnap && customerSnap.exists()) {
+                newCustomerBalance = customerSnap.data().balance || 0;
             }
 
-            if (customerId && saleData.amountDue > 0) {
-                const customerRef = doc(db, "customers", customerId);
-                const customerSnap = await transaction.get(customerRef);
-                const currentBalance = customerSnap.data().balance || 0;
-                const newBalance = currentBalance + saleData.amountDue;
-                transaction.update(customerRef, { balance: newBalance });
-                
+            // PHASE 3: WRITES ONLY
+            const saleRef = doc(collection(db, "sales"));
+            const customerName = (customerId && customerSnap && customerSnap.exists()) ? customerSnap.data().name : "Walk-in";
+            
+            transaction.set(saleRef, {
+                ownerId: currentUserId, customerId: customerId || null, customerName, saleType: 'normal',
+                date: new Date().toISOString(), items: cart, total, amountPaid, amountDue, totalProfit, profitKnown: true, note: ''
+            });
+
+            for (const { item, snap } of productSnapshots) {
+                transaction.update(doc(db, "products", item.id), { stock: snap.data().stock - item.qty });
+            }
+
+            if (customerId && amountDue > 0) {
+                transaction.update(doc(db, "customers", customerId), { balance: newCustomerBalance });
                 const txnRef = doc(collection(db, "customerTransactions"));
                 transaction.set(txnRef, {
-                    ownerId: currentUserId, customerId, type: 'sale_debt',
-                    amount: saleData.amountDue, balanceAfter: newBalance,
+                    ownerId: currentUserId, customerId, type: 'sale_debt', amount: amountDue, balanceAfter: newCustomerBalance,
                     date: new Date().toISOString(), note: `Sale #${saleRef.id.substring(0,8)}`, saleId: saleRef.id
                 });
             }
@@ -471,6 +510,7 @@ window.completeManualSale = async () => {
     }
 };
 
+// FIXED TRANSACTION: Phase 1 (Reads) -> Phase 2 (Calculations) -> Phase 3 (Writes)
 window.completeBulkSale = async () => {
     const customerId = document.getElementById('bulk-customer').value || null;
     const total = parseFloat(document.getElementById('bulk-total').value);
@@ -487,33 +527,31 @@ window.completeBulkSale = async () => {
         const profitKnown = profitInput !== "";
         const totalProfit = profitKnown ? parseFloat(profitInput) : 0;
         const amountDue = Math.max(0, total - amountPaid);
-        
-        let customerName = "Walk-in";
-        if (customerId) {
-            const c = data.customers.find(x => x.id === customerId);
-            if (c) customerName = c.name;
-        }
-
-        const saleData = {
-            ownerId: currentUserId, customerId, customerName, saleType: 'bulk',
-            date: new Date().toISOString(), items: [], total, amountPaid, amountDue, totalProfit, profitKnown, note
-        };
 
         await runTransaction(db, async (transaction) => {
+            // PHASE 1: READS ONLY
+            let customerSnap = null;
+            if (customerId) customerSnap = await transaction.get(doc(db, "customers", customerId));
+
+            // PHASE 2: VALIDATION & CALCULATION
+            const newCustomerBalance = (customerId && amountDue > 0 && customerSnap && customerSnap.exists()) 
+                ? (customerSnap.data().balance || 0) + amountDue 
+                : (customerSnap && customerSnap.exists() ? customerSnap.data().balance || 0 : 0);
+
+            // PHASE 3: WRITES ONLY
             const saleRef = doc(collection(db, "sales"));
-            transaction.set(saleRef, saleData);
+            const customerName = (customerId && customerSnap && customerSnap.exists()) ? customerSnap.data().name : "Walk-in";
+
+            transaction.set(saleRef, {
+                ownerId: currentUserId, customerId: customerId || null, customerName, saleType: 'bulk',
+                date: new Date().toISOString(), items: [], total, amountPaid, amountDue, totalProfit, profitKnown, note
+            });
 
             if (customerId && amountDue > 0) {
-                const customerRef = doc(db, "customers", customerId);
-                const customerSnap = await transaction.get(customerRef);
-                const currentBalance = customerSnap.data().balance || 0;
-                const newBalance = currentBalance + amountDue;
-                transaction.update(customerRef, { balance: newBalance });
-                
+                transaction.update(doc(db, "customers", customerId), { balance: newCustomerBalance });
                 const txnRef = doc(collection(db, "customerTransactions"));
                 transaction.set(txnRef, {
-                    ownerId: currentUserId, customerId, type: 'sale_debt',
-                    amount: amountDue, balanceAfter: newBalance,
+                    ownerId: currentUserId, customerId, type: 'sale_debt', amount: amountDue, balanceAfter: newCustomerBalance,
                     date: new Date().toISOString(), note: `Bulk Sale #${saleRef.id.substring(0,8)}`, saleId: saleRef.id
                 });
             }
@@ -535,7 +573,7 @@ function renderInventory(container) {
         <div class="card" id="product-list">
             ${data.products.length === 0 ? '<p style="color:var(--gray); text-align:center; padding:10px;">No products found.</p>' :
               data.products.map(p => `
-                <div class="list-item">
+                <div class="list-item" style="cursor:default;">
                     <div class="list-item-info">
                         <h4>${p.name}</h4>
                         <p>Cost: ${formatCurrency(p.cost)} | Price: ${formatCurrency(p.price)}</p>
@@ -587,29 +625,20 @@ window.saveProduct = async (productId) => {
     showLoading('btn-save-product', "Saving...");
     try {
         const pData = { name, cost, price, stock, minStock, ownerId: currentUserId };
-        if (productId) {
-            await updateDoc(doc(db, "products", productId), pData);
-        } else {
-            await addDoc(collection(db, "products"), pData);
-        }
+        if (productId) await updateDoc(doc(db, "products", productId), pData);
+        else await addDoc(collection(db, "products"), pData);
         alert(productId ? "Product updated!" : "Product added!");
         closeModal();
     } catch (error) {
         console.error(error);
         alert("Failed to save product.");
-    } finally {
-        hideLoading('btn-save-product');
-    }
+    } finally { hideLoading('btn-save-product'); }
 };
 
 window.deleteProduct = async (id) => {
     if (!confirm("Are you sure you want to delete this product? This cannot be undone.")) return;
-    try {
-        await deleteDoc(doc(db, "products", id));
-    } catch (error) {
-        console.error(error);
-        alert("Failed to delete product.");
-    }
+    try { await deleteDoc(doc(db, "products", id)); } 
+    catch (error) { console.error(error); alert("Failed to delete product."); }
 };
 
 window.openStockAdjustModal = (productId) => {
@@ -638,7 +667,6 @@ window.saveStockAdjustment = async (productId) => {
     const note = document.getElementById('adj-note').value.trim();
 
     if (!qty || qty <= 0) return alert("Please enter a valid quantity.");
-    
     const p = data.products.find(x => x.id === productId);
     if (type === 'remove' && p.stock - qty < 0) return alert("Cannot reduce stock below zero.");
 
@@ -646,7 +674,6 @@ window.saveStockAdjustment = async (productId) => {
     try {
         const newStock = type === 'add' ? p.stock + qty : p.stock - qty;
         await updateDoc(doc(db, "products", productId), { stock: newStock });
-        
         await addDoc(collection(db, "stockAdjustments"), {
             ownerId: currentUserId, productId, type, quantity: qty,
             date: new Date().toISOString(), note: note || `${type === 'add' ? 'Added' : 'Removed'} stock`
@@ -656,9 +683,7 @@ window.saveStockAdjustment = async (productId) => {
     } catch (error) {
         console.error(error);
         alert("Failed to update stock.");
-    } finally {
-        hideLoading('btn-save-adj');
-    }
+    } finally { hideLoading('btn-save-adj'); }
 };
 
 // --- CUSTOMERS ---
@@ -668,7 +693,7 @@ function renderCustomers(container) {
         <div class="card" id="customer-list">
             ${data.customers.length === 0 ? '<p style="color:var(--gray); text-align:center; padding:10px;">No customers found.</p>' : 
               data.customers.map(c => `
-                <div class="list-item">
+                <div class="list-item" style="cursor:default;">
                     <div class="list-item-info">
                         <h4>${c.name}</h4>
                         <p>${c.phone || 'No phone'} | Debt: <span style="color:var(--danger); font-weight:bold;">${formatCurrency(c.balance || 0)}</span></p>
@@ -678,7 +703,7 @@ function renderCustomers(container) {
                         <div style="display:flex; gap:5px;">
                             <button class="btn btn-sm btn-secondary" onclick="openAddDebtModal('${c.id}')">+ Debt</button>
                             <button class="btn btn-sm btn-secondary" onclick="openRecordPaymentModal('${c.id}')">Payment</button>
-                       0</div>
+                        </div>
                     </div>
                 </div>
             `).join('')}
@@ -703,32 +728,24 @@ window.saveCustomer = async (customerId) => {
     const name = document.getElementById('c-name').value.trim();
     const phone = document.getElementById('c-phone').value.trim();
     const notes = document.getElementById('c-notes').value.trim();
-
     if (!name) return alert("Customer name is required.");
 
     showLoading('btn-save-customer', "Saving...");
     try {
         const cData = { name, phone, notes, ownerId: currentUserId };
-        if (customerId) {
-            await updateDoc(doc(db, "customers", customerId), cData);
-        } else {
-            cData.balance = 0;
-            await addDoc(collection(db, "customers"), cData);
-        }
+        if (customerId) await updateDoc(doc(db, "customers", customerId), cData);
+        else { cData.balance = 0; await addDoc(collection(db, "customers"), cData); }
         alert(customerId ? "Customer updated!" : "Customer added!");
         closeModal();
     } catch (error) {
         console.error(error);
         alert("Unable to save customer.");
-    } finally {
-        hideLoading('btn-save-customer');
-    }
+    } finally { hideLoading('btn-save-customer'); }
 };
 
 window.openCustomerLedger = (customerId) => {
     const c = data.customers.find(x => x.id === customerId);
     const txns = data.customerTransactions.filter(t => t.customerId === customerId).sort((a,b) => new Date(b.date) - new Date(a.date));
-    
     const modal = document.getElementById('modal-body');
     modal.innerHTML = `
         <div class="modal-header"><h2>Ledger: ${c.name}</h2><button class="close-btn" onclick="closeModal()">&times;</button></div>
@@ -738,15 +755,15 @@ window.openCustomerLedger = (customerId) => {
         </div>
         <div style="max-height:300px; overflow-y:auto;">
             <table class="ledger-table">
-                <thead><tr><th>Date</th><th>Description</th><th class="text-right">Amount</th><th class="text-right">Balance</th></tr></thead>
+                <thead><tr><th>Date</th><th>Description</th><th style="text-align:right;">Amount</th><th style="text-align:right;">Balance</th></tr></thead>
                 <tbody>
                     ${txns.length === 0 ? '<tr><td colspan="4" style="text-align:center; color:var(--gray);">No transactions</td></tr>' : 
                       txns.map(t => `
                         <tr>
                             <td>${new Date(t.date).toLocaleDateString()}</td>
                             <td>${t.note || t.type}<br><small style="color:var(--gray);">${t.type === 'payment' ? 'Payment Received' : 'Debt Added'}</small></td>
-                            <td class="text-right ${t.type === 'payment' ? 'text-success' : 'text-danger'}">${t.type === 'payment' ? '-' : '+'}${formatCurrency(t.amount)}</td>
-                            <td class="text-right">${formatCurrency(t.balanceAfter)}</td>
+                            <td style="text-align:right;" class="${t.type === 'payment' ? 'text-success' : 'text-danger'}">${t.type === 'payment' ? '-' : '+'}${formatCurrency(t.amount)}</td>
+                            <td style="text-align:right;">${formatCurrency(t.balanceAfter)}</td>
                         </tr>
                     `).join('')}
                 </tbody>
@@ -776,15 +793,18 @@ window.addCustomerDebt = async (customerId) => {
 
     showLoading('btn-add-debt', "Processing...");
     try {
-        const c = data.customers.find(x => x.id === customerId);
-        const newBalance = (c.balance || 0) + amount;
-        
         await runTransaction(db, async (transaction) => {
-            transaction.update(doc(db, "customers", customerId), { balance: newBalance });
+            // PHASE 1: READ
+            const cRef = doc(db, "customers", customerId);
+            const cSnap = await transaction.get(cRef);
+            // PHASE 2: CALCULATE
+            const newBalance = (cSnap.data().balance || 0) + amount;
+            // PHASE 3: WRITE
+            transaction.update(cRef, { balance: newBalance });
             const txnRef = doc(collection(db, "customerTransactions"));
             transaction.set(txnRef, {
-                ownerId: currentUserId, customerId, type: 'manual_debt',
-                amount, balanceAfter: newBalance, date: new Date().toISOString(), note: note || 'Manual debt addition'
+                ownerId: currentUserId, customerId, type: 'manual_debt', amount, balanceAfter: newBalance,
+                date: new Date().toISOString(), note: note || 'Manual debt addition'
             });
         });
         alert("Debt added successfully!");
@@ -792,9 +812,7 @@ window.addCustomerDebt = async (customerId) => {
     } catch (error) {
         console.error(error);
         alert("Failed to add debt.");
-    } finally {
-        hideLoading('btn-add-debt');
-    }
+    } finally { hideLoading('btn-add-debt'); }
 };
 
 window.openRecordPaymentModal = (customerId) => {
@@ -820,14 +838,18 @@ window.recordCustomerPayment = async (customerId) => {
 
     showLoading('btn-record-payment', "Processing...");
     try {
-        const newBalance = Math.max(0, (c.balance || 0) - amount);
-        
         await runTransaction(db, async (transaction) => {
-            transaction.update(doc(db, "customers", customerId), { balance: newBalance });
+            // PHASE 1: READ
+            const cRef = doc(db, "customers", customerId);
+            const cSnap = await transaction.get(cRef);
+            // PHASE 2: CALCULATE
+            const newBalance = Math.max(0, (cSnap.data().balance || 0) - amount);
+            // PHASE 3: WRITE
+            transaction.update(cRef, { balance: newBalance });
             const txnRef = doc(collection(db, "customerTransactions"));
             transaction.set(txnRef, {
-                ownerId: currentUserId, customerId, type: 'payment',
-                amount, balanceAfter: newBalance, date: new Date().toISOString(), note: note || 'Payment received'
+                ownerId: currentUserId, customerId, type: 'payment', amount, balanceAfter: newBalance,
+                date: new Date().toISOString(), note: note || 'Payment received'
             });
         });
         alert("Payment recorded successfully!");
@@ -835,13 +857,230 @@ window.recordCustomerPayment = async (customerId) => {
     } catch (error) {
         console.error(error);
         alert("Failed to record payment.");
-    } finally {
-        hideLoading('btn-record-payment');
-    }
+    } finally { hideLoading('btn-record-payment'); }
 };
 
-// --- MORE / SETTINGS / REPORTS ---
+// --- EXPENSES ---
+function renderExpenses(container) {
+    const todayExpenses = data.expenses.filter(e => getLocalDateStr(e.date) === getLocalDateStr(new Date())).reduce((sum, e) => sum + (e.amount || 0), 0);
+    
+    container.innerHTML = `
+        <button class="btn" style="margin-bottom:20px;" onclick="openExpenseModal()">+ Add Expense</button>
+        <div class="card">
+            <h3>Today's Expenses: ${formatCurrency(todayExpenses)}</h3>
+        </div>
+        <div class="card" id="expense-list">
+            ${data.expenses.length === 0 ? '<p style="color:var(--gray); text-align:center; padding:10px;">No expenses recorded.</p>' : 
+              data.expenses.slice().reverse().map(e => `
+                <div class="list-item" style="cursor:default;">
+                    <div class="list-item-info">
+                        <h4>${e.category || 'Uncategorized'}</h4>
+                        <p>${new Date(e.date).toLocaleDateString()} ${e.note ? '| ' + e.note : ''}</p>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <span style="font-weight:bold; color:var(--danger);">${formatCurrency(e.amount)}</span>
+                        <button class="btn btn-sm btn-danger" onclick="deleteExpense('${e.id}')"><i class="fas fa-trash"></i></button>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+window.openExpenseModal = (expenseId = null) => {
+    const e = expenseId ? data.expenses.find(x => x.id === expenseId) : null;
+    const modal = document.getElementById('modal-body');
+    modal.innerHTML = `
+        <div class="modal-header"><h2>${e ? 'Edit' : 'Add'} Expense</h2><button class="close-btn" onclick="closeModal()">&times;</button></div>
+        <div class="form-group"><label>Amount (Rs.) *</label><input type="number" id="exp-amount" min="0" step="0.01" value="${e ? e.amount : ''}"></div>
+        <div class="form-group"><label>Date *</label><input type="date" id="exp-date" value="${e ? getLocalDateStr(e.date) : getLocalDateStr(new Date())}"></div>
+        <div class="form-group"><label>Category (Optional)</label><input type="text" id="exp-category" placeholder="e.g., Electricity, Rent" value="${e ? (e.category || '') : ''}"></div>
+        <div class="form-group"><label>Note (Optional)</label><input type="text" id="exp-note" value="${e ? (e.note || '') : ''}"></div>
+        <button class="btn" id="btn-save-expense" onclick="saveExpense('${expenseId || ''}')">${e ? 'Update' : 'Save'} Expense</button>
+    `;
+    document.getElementById('modal-overlay').classList.remove('hidden');
+};
+
+window.saveExpense = async (expenseId) => {
+    const amount = parseFloat(document.getElementById('exp-amount').value);
+    const date = document.getElementById('exp-date').value;
+    const category = document.getElementById('exp-category').value.trim();
+    const note = document.getElementById('exp-note').value.trim();
+
+    if (isNaN(amount) || amount <= 0 || !date) return alert("Please enter a valid amount and date.");
+
+    showLoading('btn-save-expense', "Saving...");
+    try {
+        const eData = { amount, date: new Date(date).toISOString(), category, note, ownerId: currentUserId };
+        if (expenseId) await updateDoc(doc(db, "expenses", expenseId), eData);
+        else await addDoc(collection(db, "expenses"), eData);
+        alert(expenseId ? "Expense updated!" : "Expense added!");
+        closeModal();
+    } catch (error) {
+        console.error(error);
+        alert("Failed to save expense.");
+    } finally { hideLoading('btn-save-expense'); }
+};
+
+window.deleteExpense = async (id) => {
+    if (!confirm("Are you sure you want to delete this expense?")) return;
+    try { await deleteDoc(doc(db, "expenses", id)); } 
+    catch (error) { console.error(error); alert("Failed to delete expense."); }
+};
+
+// --- STOCK PURCHASES ---
+function renderStockPurchases(container) {
+    container.innerHTML = `
+        <button class="btn" style="margin-bottom:20px;" onclick="openStockPurchaseModal()">+ Record Stock Purchase</button>
+        <div class="card" id="purchase-list">
+            ${data.stockPurchases.length === 0 ? '<p style="color:var(--gray); text-align:center; padding:10px;">No stock purchases recorded.</p>' : 
+              data.stockPurchases.slice().reverse().map(p => `
+                <div class="list-item" style="cursor:default;">
+                    <div class="list-item-info">
+                        <h4>${p.category || 'Stock Purchase'}</h4>
+                        <p>${new Date(p.date).toLocaleDateString()} ${p.supplier ? '| ' + p.supplier : ''} ${p.note ? '| ' + p.note : ''}</p>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <span style="font-weight:bold;">${formatCurrency(p.amount)}</span>
+                        <button class="btn btn-sm btn-danger" onclick="deleteStockPurchase('${p.id}')"><i class="fas fa-trash"></i></button>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+window.openStockPurchaseModal = () => {
+    const modal = document.getElementById('modal-body');
+    modal.innerHTML = `
+        <div class="modal-header"><h2>Record Stock Purchase</h2><button class="close-btn" onclick="closeModal()">&times;</button></div>
+        <div class="form-group"><label>Amount (Rs.) *</label><input type="number" id="sp-amount" min="0" step="0.01"></div>
+        <div class="form-group"><label>Date *</label><input type="date" id="sp-date" value="${getLocalDateStr(new Date())}"></div>
+        <div class="form-group"><label>Category (Optional)</label><input type="text" id="sp-category" placeholder="e.g., Grocery Stock"></div>
+        <div class="form-group"><label>Supplier (Optional)</label><input type="text" id="sp-supplier"></div>
+        <div class="form-group"><label>Note (Optional)</label><input type="text" id="sp-note"></div>
+        <button class="btn" id="btn-save-sp" onclick="saveStockPurchase()">Save Purchase</button>
+    `;
+    document.getElementById('modal-overlay').classList.remove('hidden');
+};
+
+window.saveStockPurchase = async () => {
+    const amount = parseFloat(document.getElementById('sp-amount').value);
+    const date = document.getElementById('sp-date').value;
+    const category = document.getElementById('sp-category').value.trim();
+    const supplier = document.getElementById('sp-supplier').value.trim();
+    const note = document.getElementById('sp-note').value.trim();
+
+    if (isNaN(amount) || amount <= 0 || !date) return alert("Please enter a valid amount and date.");
+
+    showLoading('btn-save-sp', "Saving...");
+    try {
+        await addDoc(collection(db, "stockPurchases"), { amount, date: new Date(date).toISOString(), category, supplier, note, ownerId: currentUserId });
+        alert("Stock purchase recorded!");
+        closeModal();
+    } catch (error) {
+        console.error(error);
+        alert("Failed to record purchase.");
+    } finally { hideLoading('btn-save-sp'); }
+};
+
+window.deleteStockPurchase = async (id) => {
+    if (!confirm("Are you sure you want to delete this record?")) return;
+    try { await deleteDoc(doc(db, "stockPurchases", id)); } 
+    catch (error) { console.error(error); alert("Failed to delete record."); }
+};
+
+// --- REPORTS ---
+function renderReports(container) {
+    let startDate, endDate;
+    if (activeReportTab === 'daily') {
+        const dayStartStr = data.settings.businessDayStart || getStartOfDay(new Date()).toISOString();
+        startDate = new Date(dayStartStr);
+        endDate = new Date();
+    } else if (activeReportTab === 'monthly') {
+        startDate = getStartOfMonth(currentReportMonth);
+        endDate = getEndOfMonth(currentReportMonth);
+    } else {
+        startDate = new Date(2000, 0, 1);
+        endDate = new Date();
+    }
+
+    const stats = calculateReportData(startDate, endDate);
+    const monthName = currentReportMonth.toLocaleString('default', { month: 'long', year: 'numeric' });
+
+    container.innerHTML = `
+        <div class="tabs">
+            <button class="tab-btn ${activeReportTab === 'daily' ? 'active' : ''}" onclick="setReportTab('daily')">Daily</button>
+            <button class="tab-btn ${activeReportTab === 'monthly' ? 'active' : ''}" onclick="setReportTab('monthly')">Monthly</button>
+            <button class="tab-btn ${activeReportTab === 'total' ? 'active' : ''}" onclick="setReportTab('total')">Total</button>
+        </div>
+        
+        ${activeReportTab === 'monthly' ? `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+            <button class="btn btn-sm btn-secondary" onclick="changeReportMonth(-1)"><i class="fas fa-chevron-left"></i></button>
+            <h3 style="margin:0;">${monthName}</h3>
+            <button class="btn btn-sm btn-secondary" onclick="changeReportMonth(1)"><i class="fas fa-chevron-right"></i></button>
+        </div>
+        ` : ''}
+
+        ${activeReportTab === 'daily' ? `
+        <button class="btn btn-secondary" style="margin-bottom:15px;" id="btn-reset-day" onclick="resetDailyReport()">
+            <i class="fas fa-sync-alt"></i> Start New Business Day
+        </button>
+        ` : ''}
+
+        <div class="dashboard-grid">
+            <div class="card profit"><h3>Total Sales</h3><div class="value">${formatCurrency(stats.totalSales)}</div></div>
+            <div class="card profit"><h3>Known Profit</h3><div class="value">${formatCurrency(stats.knownProfit)}</div></div>
+            <div class="card"><h3>Transactions</h3><div class="value">${stats.txCount}</div></div>
+            <div class="card"><h3>Unknown Profit Txns</h3><div class="value" style="color:var(--warning);">${stats.unknownCount}</div></div>
+            <div class="card debt"><h3>Expenses</h3><div class="value">${formatCurrency(stats.totalExpenses)}</div></div>
+            <div class="card profit"><h3>Net Profit</h3><div class="value">${formatCurrency(stats.netProfit)}</div></div>
+            <div class="card"><h3>Stock Purchases</h3><div class="value">${formatCurrency(stats.totalStockPurchases)}</div></div>
+            <div class="card"><h3>Customer Payments</h3><div class="value" style="color:var(--primary);">${formatCurrency(stats.customerPayments)}</div></div>
+        </div>
+        
+        <div class="card debt">
+            <h3>Outstanding Customer Debt</h3>
+            <div class="value">${formatCurrency(stats.outstandingDebt)}</div>
+            <p style="font-size:13px; color:var(--gray); margin-top:5px;">Total across all customers</p>
+        </div>
+    `;
+}
+
+window.setReportTab = (tab) => { activeReportTab = tab; renderReports(document.getElementById('app-content')); };
+window.changeReportMonth = (direction) => { currentReportMonth.setMonth(currentReportMonth.getMonth() + direction); renderReports(document.getElementById('app-content')); };
+
+window.resetDailyReport = async () => {
+    if (!confirm("Start a new business day?\n\nYour previous sales and records will NOT be deleted. They will remain available in Monthly and Total Reports.")) return;
+    
+    showLoading('btn-reset-day', "Resetting...");
+    try {
+        await setDoc(doc(db, "settings", currentUserId), { businessDayStart: new Date().toISOString() }, { merge: true });
+        data.settings.businessDayStart = new Date().toISOString();
+        alert("New business day started!");
+        renderReports(document.getElementById('app-content'));
+    } catch (error) {
+        console.error(error);
+        alert("Failed to reset daily report.");
+    } finally { hideLoading('btn-reset-day'); }
+};
+
+// --- MORE / SETTINGS ---
 function renderMore(container) {
+    container.innerHTML = `
+        <div class="card">
+            <div class="list-item" onclick="navigate('customers')"><div class="list-item-info"><h4><i class="fas fa-users"></i> Customers</h4></div><i class="fas fa-chevron-right"></i></div>
+            <div class="list-item" onclick="navigate('expenses')"><div class="list-item-info"><h4><i class="fas fa-receipt"></i> Expenses</h4></div><i class="fas fa-chevron-right"></i></div>
+            <div class="list-item" onclick="navigate('stockPurchases')"><div class="list-item-info"><h4><i class="fas fa-truck-loading"></i> Stock Purchases</h4></div><i class="fas fa-chevron-right"></i></div>
+            <div class="list-item" onclick="navigate('reports')"><div class="list-item-info"><h4><i class="fas fa-chart-pie"></i> Reports</h4></div><i class="fas fa-chevron-right"></i></div>
+            <div class="list-item" onclick="navigate('settings')"><div class="list-item-info"><h4><i class="fas fa-cog"></i> Settings</h4></div><i class="fas fa-chevron-right"></i></div>
+            <div class="list-item" onclick="handleLogout()" style="color: var(--danger);"><div class="list-item-info"><h4><i class="fas fa-sign-out-alt"></i> Logout</h4></div></div>
+        </div>
+    `;
+}
+
+function renderSettings(container) {
     const userEmail = auth.currentUser ? auth.currentUser.email : 'Not logged in';
     const isEmailUser = auth.currentUser && auth.currentUser.providerData.some(p => p.providerId === 'password');
     
@@ -851,7 +1090,7 @@ function renderMore(container) {
             <div class="form-group"><label>Business Name</label><input type="text" id="set-name" value="${data.settings.name || ''}"></div>
             <div class="form-group"><label>Currency Symbol</label><input type="text" id="set-currency" value="${data.settings.currency || 'Rs.'}"></div>
             <button class="btn" id="btn-save-settings" onclick="saveSettings()">Save Settings</button>
-        </div>
+        </ to the user.
         ${isEmailUser ? `
         <div class="card">
             <h3>Account Security</h3>
@@ -865,14 +1104,6 @@ function renderMore(container) {
             <p style="font-size:12px; color:var(--gray);">Password management is handled by your Google account.</p>
         </div>
         `}
-        <div class="card">
-            <h3>Reports</h3>
-            <p style="font-size:14px; color:var(--gray); margin-bottom:15px;">View detailed financial reports and filter by date.</p>
-            <button class="btn" onclick="navigate('dashboard')">View Dashboard Summary</button>
-        </div>
-        <div class="card">
-            <button class="btn btn-danger" onclick="handleLogout()">Logout</button>
-        </div>
     `;
 }
 
@@ -882,14 +1113,12 @@ window.saveSettings = async () => {
     showLoading('btn-save-settings', "Saving...");
     try {
         await setDoc(doc(db, "settings", currentUserId), { name, currency, ownerId: currentUserId }, { merge: true });
-        data.settings = { name, currency };
+        data.settings = { ...data.settings, name, currency };
         alert("Settings saved!");
     } catch (error) {
         console.error(error);
         alert("Failed to save settings.");
-    } finally {
-        hideLoading('btn-save-settings');
-    }
+    } finally { hideLoading('btn-save-settings'); }
 };
 
 window.openChangePasswordModal = () => {
@@ -926,9 +1155,7 @@ window.changePassword = async () => {
         if (error.code === 'auth/wrong-password') alert("Current password is incorrect.");
         else if (error.code === 'auth/requires-recent-login') alert("For security, please log out and log back in before changing your password.");
         else alert("Failed to update password.");
-    } finally {
-        hideLoading('btn-cp-submit');
-    }
+    } finally { hideLoading('btn-cp-submit'); }
 };
 
 // --- MODAL UTILS ---
@@ -937,3 +1164,9 @@ window.closeModal = (e) => {
         document.getElementById('modal-overlay').classList.add('hidden');
     }
 };
+
+// Helper for local date string
+function getLocalDateStr(dateInput) {
+    const d = new Date(dateInput);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
