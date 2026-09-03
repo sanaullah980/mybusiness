@@ -189,13 +189,13 @@ window.navigate = (page) => {
     if (page === 'dashboard') { title.innerText = 'Dashboard'; renderDashboard(content); }
     else if (page === 'sales') { title.innerText = 'New Sale'; renderSales(content); }
     else if (page === 'inventory') { title.innerText = 'Inventory'; renderInventory(content); }
+    else if (page === 'customers') { title.innerText = 'Customers'; renderCustomers(content); } // THIS WAS MISSING!
     else if (page === 'more') { title.innerText = 'More'; renderMore(content); }
     else if (page === 'expenses') { title.innerText = 'Expenses'; renderExpenses(content); }
     else if (page === 'stockPurchases') { title.innerText = 'Stock Purchases'; renderStockPurchases(content); }
     else if (page === 'reports') { title.innerText = 'Reports'; renderReports(content); }
     else if (page === 'settings') { title.innerText = 'Settings'; renderSettings(content); }
 };
-
 // --- REPORT CALCULATION LOGIC ---
 function calculateReportData(startDate, endDate) {
     let totalSales = 0, knownProfit = 0, unknownCount = 0, txCount = 0;
