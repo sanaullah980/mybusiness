@@ -188,6 +188,7 @@ window.navigate = (page) => {
     if (page === 'dashboard') { title.innerText = 'Dashboard'; renderDashboard(content); }
     else if (page === 'sales') { title.innerText = 'New Sale'; renderSales(content); }
     else if (page === 'inventory') { title.innerText = 'Inventory'; renderInventory(content); }
+    else if (page === 'customers') { title.innerText = 'Customers'; renderCustomers(content); }
     else if (page === 'more') { title.innerText = 'More'; renderMore(content); }
     else if (page === 'expenses') { title.innerText = 'Expenses'; renderExpenses(content); }
     else if (page === 'stockPurchases') { title.innerText = 'Stock Purchases'; renderStockPurchases(content); }
@@ -266,7 +267,7 @@ window.viewSaleDetail = (saleId) => {
             </div>
             <div style="display:flex; justify-content:space-between;">
                 <div><div class="label">Sale Type</div><div class="val">${sale.saleType ? sale.saleType.charAt(0).toUpperCase() + sale.saleType.slice(1) : 'Normal'}</div></div>
-                <div style="text-align:right;"><div class="label">Profit Status</div><div class="val" style="color:${sale.profitKnown ? 'var(--primary)' : 'var(--warning)'};">${sale.profitKnown ? 'Known' : 'Unknown'}</div></div>
+                <div style="text-align:right;"><div class="label">Profit Status</div><div class="val" style="color:${sale.profitKnown ? 'var(--primary)' : 'var(--warning)'};">${sale.profitKnown ?[...]
             </div>
         </div>
         ${sale.customerId && sale.customerId !== 'walk-in' ? `
@@ -365,7 +366,7 @@ function renderSales(container) {
                         <label>Product</label>
                         <select id="sale-product">
                             <option value="">Select Product</option>
-                            ${data.products.map(p => `<option value="${p.id}" data-price="${p.price}" data-cost="${p.cost}" data-stock="${p.stock}">${p.name} (Stock: ${p.stock})</option>`).join('')}
+                            ${data.products.map(p => `<option value="${p.id}" data-price="${p.price}" data-cost="${p.cost}" data-stock="${p.stock}">${p.name} (Stock: ${p.stock})</option>`).join('[...]
                         </select>
                     </div>
                     <div class="form-group">
@@ -445,7 +446,7 @@ window.onSaleCustomerChange = () => {
     if (c && c.balance > 0) {
         display.innerHTML = `<div class="customer-debt-display"><span class="debt-label">Current Debt:</span> <span class="debt-amount">${formatCurrency(c.balance)}</span></div>`;
     } else if (c) {
-        display.innerHTML = `<div class="customer-debt-display" style="background:#e8f5e9; border-color:#a5d6a7;"><span class="debt-label">Current Debt:</span> <span class="debt-amount" style="color:var(--primary);">Rs. 0 (Clear)</span></div>`;
+        display.innerHTML = `<div class="customer-debt-display" style="background:#e8f5e9; border-color:#a5d6a7;"><span class="debt-label">Current Debt:</span> <span class="debt-amount" style="co`;
     }
 };
 
@@ -457,7 +458,7 @@ window.onManualCustomerChange = () => {
     if (c && c.balance > 0) {
         display.innerHTML = `<div class="customer-debt-display"><span class="debt-label">Current Debt:</span> <span class="debt-amount">${formatCurrency(c.balance)}</span></div>`;
     } else if (c) {
-        display.innerHTML = `<div class="customer-debt-display" style="background:#e8f5e9; border-color:#a5d6a7;"><span class="debt-label">Current Debt:</span> <span class="debt-amount" style="color:var(--primary);">Rs. 0 (Clear)</span></div>`;
+        display.innerHTML = `<div class="customer-debt-display" style="background:#e8f5e9; border-color:#a5d6a7;"><span class="debt-label">Current Debt:</span> <span class="debt-amount" style="co`;
     }
 };
 
@@ -469,7 +470,7 @@ window.onBulkCustomerChange = () => {
     if (c && c.balance > 0) {
         display.innerHTML = `<div class="customer-debt-display"><span class="debt-label">Current Debt:</span> <span class="debt-amount">${formatCurrency(c.balance)}</span></div>`;
     } else if (c) {
-        display.innerHTML = `<div class="customer-debt-display" style="background:#e8f5e9; border-color:#a5d6a7;"><span class="debt-label">Current Debt:</span> <span class="debt-amount" style="color:var(--primary);">Rs. 0 (Clear)</span></div>`;
+        display.innerHTML = `<div class="customer-debt-display" style="background:#e8f5e9; border-color:#a5d6a7;"><span class="debt-label">Current Debt:</span> <span class="debt-amount" style="co`;
     }
 };
 
@@ -1384,4 +1385,4 @@ window.closeModal = (e) => {
     if (!e || e.target.id === 'modal-overlay' || e.target.classList.contains('close-btn')) {
         document.getElementById('modal-overlay').classList.add('hidden');
     }
-}; 
+};
