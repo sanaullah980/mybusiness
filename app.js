@@ -132,10 +132,8 @@ window.handleLogout = async () => {
     catch (error) { console.error("Logout error:", error); alert("Failed to log out."); }
 };
 
-// FIXED AUTH FLASH: Wait for Firebase to determine state before showing UI
 onAuthStateChanged(auth, (user) => {
-    document.getElementById('auth-loading').classList.add('hidden'); // Hide loading screen
-    
+    document.getElementById('auth-loading').classList.add('hidden');
     if (user) {
         currentUserId = user.uid;
         document.getElementById('auth-screen').classList.add('hidden');
@@ -189,13 +187,14 @@ window.navigate = (page) => {
     if (page === 'dashboard') { title.innerText = 'Dashboard'; renderDashboard(content); }
     else if (page === 'sales') { title.innerText = 'New Sale'; renderSales(content); }
     else if (page === 'inventory') { title.innerText = 'Inventory'; renderInventory(content); }
-    else if (page === 'customers') { title.innerText = 'Customers'; renderCustomers(content); } // THIS WAS MISSING!
+    else if (page === 'customers') { title.innerText = 'Customers'; renderCustomers(content); }
     else if (page === 'more') { title.innerText = 'More'; renderMore(content); }
     else if (page === 'expenses') { title.innerText = 'Expenses'; renderExpenses(content); }
     else if (page === 'stockPurchases') { title.innerText = 'Stock Purchases'; renderStockPurchases(content); }
     else if (page === 'reports') { title.innerText = 'Reports'; renderReports(content); }
     else if (page === 'settings') { title.innerText = 'Settings'; renderSettings(content); }
 };
+
 // --- REPORT CALCULATION LOGIC ---
 function calculateReportData(startDate, endDate) {
     let totalSales = 0, knownProfit = 0, unknownCount = 0, txCount = 0;
@@ -239,8 +238,6 @@ function calculateReportData(startDate, endDate) {
 function renderDashboard(container) {
     const dayStartStr = data.settings.businessDayStart || getStartOfDay(new Date()).toISOString();
     const stats = calculateReportData(new Date(dayStartStr), new Date());
-    
-    // FIXED: Proper date sorting so newest sales always appear at the top
     const sortedSales = [...data.sales].sort((a,b) => new Date(a.date) - new Date(b.date)).reverse();
 
     container.innerHTML = `
@@ -256,9 +253,9 @@ function renderDashboard(container) {
         </div>
         <button class="btn" style="margin-bottom:20px;" onclick="navigate('reports')">View Detailed Reports</button>
         <div class="card">
-            <h3>Recent Sales (Tap to view details)</h3>
+            <h3>Recent Sales</h3>
             ${sortedSales.slice(0, 5).map(s => `
-                <div class="list-item" onclick="viewSaleDetail('${s.id}')">
+                <div class="list-item" style="cursor:default;">
                     <div class="list-item-info">
                         <h4>${s.customerName || 'Walk-in'} <span class="badge ${s.profitKnown ? 'badge-ok' : 'badge-unknown'}">${s.profitKnown ? 'Known' : 'Unknown'}</span></h4>
                         <p>${new Date(s.date).toLocaleString()}</p>
@@ -269,6 +266,7 @@ function renderDashboard(container) {
         </div>
     `;
 }
+
 function renderSales(container) {
     container.innerHTML = `
         <div class="tabs">
@@ -486,9 +484,9 @@ window.completeManualSale = async () => {
     const name = document.getElementById('manual-item-name').value.trim();
     const amount = parseFloat(document.getElementById('manual-amount').value);
     const profitInput = document.getElementById('manual-profit').value;
-    
+
     if (!name || isNaN(amount) || amount <= 0) return alert("Please enter a valid item name and amount.");
-    
+
     const btn = document.getElementById('btn-manual-sale');
     showLoading('btn-manual-sale', "Saving...");
 
@@ -594,7 +592,10 @@ window.openProductModal = (productId = null) => {
     const p = productId ? data.products.find(x => x.id === productId) : null;
     const modal = document.getElementById('modal-body');
     modal.innerHTML = `
-        <div class="modal-header"><h2>${p ? 'Edit' : 'Add'} Product</h2><button class="close-btn" onclick="closeModal()">&times;</button></div>
+        <div class="modal-header">
+            <h2>${p ? 'Edit' : 'Add'} Product</h2>
+            <button class="close-btn" onclick="closeModal()">&times;</button>
+        </div>
         <div class="form-group"><label>Product Name *</label><input type="text" id="p-name" value="${p ? p.name : ''}"></div>
         <div class="form-row">
             <div class="form-group"><label>Cost Price (Rs.) *</label><input type="number" id="p-cost" step="0.01" min="0" value="${p ? p.cost : ''}"></div>
@@ -642,7 +643,10 @@ window.openStockAdjustModal = (productId) => {
     const p = data.products.find(x => x.id === productId);
     const modal = document.getElementById('modal-body');
     modal.innerHTML = `
-        <div class="modal-header"><h2>Adjust Stock: ${p.name}</h2><button class="close-btn" onclick="closeModal()">&times;</button></div>
+        <div class="modal-header">
+            <h2>Adjust Stock: ${p.name}</h2>
+            <button class="close-btn" onclick="closeModal()">&times;</button>
+        </div>
         <p style="margin-bottom:15px; color:var(--gray);">Current Stock: <strong>${p.stock}</strong></p>
         <div class="form-group">
             <label>Action</label>
@@ -712,7 +716,10 @@ window.openCustomerModal = (customerId = null) => {
     const c = customerId ? data.customers.find(x => x.id === customerId) : null;
     const modal = document.getElementById('modal-body');
     modal.innerHTML = `
-        <div class="modal-header"><h2>${c ? 'Edit' : 'Add'} Customer</h2><button class="close-btn" onclick="closeModal()">&times;</button></div>
+        <div class="modal-header">
+            <h2>${c ? 'Edit' : 'Add'} Customer</h2>
+            <button class="close-btn" onclick="closeModal()">&times;</button>
+        </div>
         <div class="form-group"><label>Customer Name *</label><input type="text" id="c-name" value="${c ? c.name : ''}"></div>
         <div class="form-group"><label>Phone / Contact</label><input type="text" id="c-phone" value="${c ? (c.phone || '') : ''}"></div>
         <div class="form-group"><label>Notes</label><textarea id="c-notes" rows="2" style="width:100%; padding:12px; border:1px solid #ddd; border-radius:8px;">${c ? (c.notes || '') : ''}</textarea></div>
@@ -743,16 +750,48 @@ window.saveCustomer = async (customerId) => {
 // FIXED: Corrected arrow function syntax
 window.openCustomerLedger = (customerId) => {
     const c = data.customers.find(x => x.id === customerId);
+    if (!c) return alert("Customer not found.");
+    
     const txns = data.customerTransactions.filter(t => t.customerId === customerId).sort((a,b) => new Date(b.date) - new Date(a.date));
     const modal = document.getElementById('modal-body');
-    modal.innerHTML = `<div class="modal-header"><h2>Ledger: ${c.name}</h2><button class="close-btn" onclick="closeModal()">&times;</button></div> <div style="background:#f8f9fa; padding:15px; border-radius:8px; margin-bottom:15px; text-align:center;"> <div style="font-size:14px; color:var(--gray);">Current Balance</div> <div style="font-size:28px; font-weight:bold; color:var(--danger);">${formatCurrency(c.balance || 0)}</div> </div> <div style="max-height:300px; overflow-y:auto;"> <table class="ledger-table"> <thead><tr><th>Date</th><th>Description</th><th style="text-align:right;">Amount</th><th style="text-align:right;">Balance</th></tr></thead> <tbody> ${txns.length === 0 ? '<tr><td colspan="4" style="text-align:center; color:var(--gray);">No transactions</td></tr>' : txns.map(t => `<tr> <td>${new Date(t.date).toLocaleDateString()}</td> <td>${t.note || t.type}<br><small style="color:var(--gray);">${t.type === 'payment' ? 'Payment Received' : 'Debt Added'}</small></td> <td style="text-align:right;" class="${t.type === 'payment' ? 'text-success' : 'text-danger'}">${t.type === 'payment' ? '-' : '+'}${formatCurrency(t.amount)}</td> <td style="text-align:right;">${formatCurrency(t.balanceAfter)}</td> </tr>`).join('')} </tbody> </table> </div>`;
+    
+    modal.innerHTML = `
+        <div class="modal-header">
+            <h2>Ledger: ${c.name}</h2>
+            <button class="close-btn" onclick="closeModal()">&times;</button>
+        </div>
+        <div style="background:#f8f9fa; padding:15px; border-radius:8px; margin-bottom:15px; text-align:center;">
+            <div style="font-size:14px; color:var(--gray);">Current Balance</div>
+            <div style="font-size:28px; font-weight:bold; color:var(--danger);">${formatCurrency(c.balance || 0)}</div>
+        </div>
+        <div style="max-height:300px; overflow-y:auto;">
+            <table class="ledger-table">
+                <thead><tr><th>Date</th><th>Description</th><th style="text-align:right;">Amount</th><th style="text-align:right;">Balance</th></tr></thead>
+                <tbody>
+                    ${txns.length === 0 ? '<tr><td colspan="4" style="text-align:center; color:var(--gray);">No transactions</td></tr>' :
+                      txns.map(t => `
+                        <tr>
+                            <td>${new Date(t.date).toLocaleDateString()}</td>
+                            <td>${t.note || t.type}<br><small style="color:var(--gray);">${t.type === 'payment' ? 'Payment Received' : 'Debt Added'}</small></td>
+                            <td style="text-align:right;" class="${t.type === 'payment' ? 'text-success' : 'text-danger'}">${t.type === 'payment' ? '-' : '+'}${formatCurrency(t.amount)}</td>
+                            <td style="text-align:right;">${formatCurrency(t.balanceAfter)}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
     document.getElementById('modal-overlay').classList.remove('hidden');
 };
+
 window.openAddDebtModal = (customerId) => {
     const c = data.customers.find(x => x.id === customerId);
     const modal = document.getElementById('modal-body');
     modal.innerHTML = `
-        <div class="modal-header"><h2>Add Debt: ${c.name}</h2><button class="close-btn" onclick="closeModal()">&times;</button></div>
+        <div class="modal-header">
+            <h2>Add Debt: ${c.name}</h2>
+            <button class="close-btn" onclick="closeModal()">&times;</button>
+        </div>
         <p style="margin-bottom:15px;">Current Debt: <strong>${formatCurrency(c.balance || 0)}</strong></p>
         <div class="form-group"><label>Amount to Add (Rs.) *</label><input type="number" id="debt-amount" min="1"></div>
         <div class="form-group"><label>Reason / Note</label><input type="text" id="debt-note" placeholder="e.g., Borrowed cash"></div>
@@ -791,7 +830,10 @@ window.openRecordPaymentModal = (customerId) => {
     const c = data.customers.find(x => x.id === customerId);
     const modal = document.getElementById('modal-body');
     modal.innerHTML = `
-        <div class="modal-header"><h2>Record Payment: ${c.name}</h2><button class="close-btn" onclick="closeModal()">&times;</button></div>
+        <div class="modal-header">
+            <h2>Record Payment: ${c.name}</h2>
+            <button class="close-btn" onclick="closeModal()">&times;</button>
+        </div>
         <p style="margin-bottom:15px;">Current Debt: <strong>${formatCurrency(c.balance || 0)}</strong></p>
         <div class="form-group"><label>Amount Paid (Rs.) *</label><input type="number" id="pay-amount" min="1" max="${c.balance || 0}"></div>
         <div class="form-group"><label>Note</label><input type="text" id="pay-note" placeholder="e.g., Cash payment"></div>
@@ -804,7 +846,7 @@ window.recordCustomerPayment = async (customerId) => {
     const amount = parseFloat(document.getElementById('pay-amount').value);
     const note = document.getElementById('pay-note').value.trim();
     const c = data.customers.find(x => x.id === customerId);
-    
+
     if (!amount || amount <= 0) return alert("Please enter a valid amount.");
     if (amount > (c.balance || 0)) return alert("Payment amount cannot exceed current debt.");
 
@@ -832,7 +874,7 @@ window.recordCustomerPayment = async (customerId) => {
 // --- EXPENSES ---
 function renderExpenses(container) {
     const todayExpenses = data.expenses.filter(e => getLocalDateStr(e.date) === getLocalDateStr(new Date())).reduce((sum, e) => sum + (e.amount || 0), 0);
-    
+
     container.innerHTML = `
         <button class="btn" style="margin-bottom:20px;" onclick="openExpenseModal()">+ Add Expense</button>
         <div class="card">
@@ -860,7 +902,10 @@ window.openExpenseModal = (expenseId = null) => {
     const e = expenseId ? data.expenses.find(x => x.id === expenseId) : null;
     const modal = document.getElementById('modal-body');
     modal.innerHTML = `
-        <div class="modal-header"><h2>${e ? 'Edit' : 'Add'} Expense</h2><button class="close-btn" onclick="closeModal()">&times;</button></div>
+        <div class="modal-header">
+            <h2>${e ? 'Edit' : 'Add'} Expense</h2>
+            <button class="close-btn" onclick="closeModal()">&times;</button>
+        </div>
         <div class="form-group"><label>Amount (Rs.) *</label><input type="number" id="exp-amount" min="0" step="0.01" value="${e ? e.amount : ''}"></div>
         <div class="form-group"><label>Date *</label><input type="date" id="exp-date" value="${e ? getLocalDateStr(e.date) : getLocalDateStr(new Date())}"></div>
         <div class="form-group"><label>Category (Optional)</label><input type="text" id="exp-category" placeholder="e.g., Electricity, Rent" value="${e ? (e.category || '') : ''}"></div>
@@ -922,7 +967,10 @@ function renderStockPurchases(container) {
 window.openStockPurchaseModal = () => {
     const modal = document.getElementById('modal-body');
     modal.innerHTML = `
-        <div class="modal-header"><h2>Record Stock Purchase</h2><button class="close-btn" onclick="closeModal()">&times;</button></div>
+        <div class="modal-header">
+            <h2>Record Stock Purchase</h2>
+            <button class="close-btn" onclick="closeModal()">&times;</button>
+        </div>
         <div class="form-group"><label>Amount (Rs.) *</label><input type="number" id="sp-amount" min="0" step="0.01"></div>
         <div class="form-group"><label>Date *</label><input type="date" id="sp-date" value="${getLocalDateStr(new Date())}"></div>
         <div class="form-group"><label>Category (Optional)</label><input type="text" id="sp-category" placeholder="e.g., Grocery Stock"></div>
@@ -983,7 +1031,6 @@ function renderReports(container) {
             <button class="tab-btn ${activeReportTab === 'monthly' ? 'active' : ''}" onclick="setReportTab('monthly')">Monthly</button>
             <button class="tab-btn ${activeReportTab === 'total' ? 'active' : ''}" onclick="setReportTab('total')">Total</button>
         </div>
-        
         ${activeReportTab === 'monthly' ? `
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
             <button class="btn btn-sm btn-secondary" onclick="changeReportMonth(-1)"><i class="fas fa-chevron-left"></i></button>
@@ -991,13 +1038,11 @@ function renderReports(container) {
             <button class="btn btn-sm btn-secondary" onclick="changeReportMonth(1)"><i class="fas fa-chevron-right"></i></button>
         </div>
         ` : ''}
-
         ${activeReportTab === 'daily' ? `
         <button class="btn btn-secondary" style="margin-bottom:15px;" id="btn-reset-day" onclick="resetDailyReport()">
             <i class="fas fa-sync-alt"></i> Start New Business Day
         </button>
         ` : ''}
-
         <div class="dashboard-grid">
             <div class="card profit"><h3>Total Sales</h3><div class="value">${formatCurrency(stats.totalSales)}</div></div>
             <div class="card profit"><h3>Known Profit</h3><div class="value">${formatCurrency(stats.knownProfit)}</div></div>
@@ -1008,7 +1053,6 @@ function renderReports(container) {
             <div class="card"><h3>Stock Purchases</h3><div class="value">${formatCurrency(stats.totalStockPurchases)}</div></div>
             <div class="card"><h3>Customer Payments</h3><div class="value" style="color:var(--primary);">${formatCurrency(stats.customerPayments)}</div></div>
         </div>
-        
         <div class="card debt">
             <h3>Outstanding Customer Debt</h3>
             <div class="value">${formatCurrency(stats.outstandingDebt)}</div>
@@ -1022,7 +1066,6 @@ window.changeReportMonth = (direction) => { currentReportMonth.setMonth(currentR
 
 window.resetDailyReport = async () => {
     if (!confirm("Start a new business day?\n\nYour previous sales and records will NOT be deleted. They will remain available in Monthly and Total Reports.")) return;
-    
     showLoading('btn-reset-day', "Resetting...");
     try {
         await setDoc(doc(db, "settings", currentUserId), { businessDayStart: new Date().toISOString() }, { merge: true });
@@ -1037,11 +1080,6 @@ window.resetDailyReport = async () => {
 
 // --- MORE / SETTINGS ---
 function renderMore(container) {
-    // Get sales from the last 7 days
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    const recentSales = [...data.sales].filter(s => new Date(s.date) >= sevenDaysAgo).sort((a,b) => new Date(a.date) - new Date(b.date)).reverse();
-
     container.innerHTML = `
         <div class="card">
             <div class="list-item" onclick="navigate('customers')"><div class="list-item-info"><h4><i class="fas fa-users"></i> Customers</h4></div><i class="fas fa-chevron-right"></i></div>
@@ -1051,25 +1089,14 @@ function renderMore(container) {
             <div class="list-item" onclick="navigate('settings')"><div class="list-item-info"><h4><i class="fas fa-cog"></i> Settings</h4></div><i class="fas fa-chevron-right"></i></div>
             <div class="list-item" onclick="handleLogout()" style="color: var(--danger);"><div class="list-item-info"><h4><i class="fas fa-sign-out-alt"></i> Logout</h4></div></div>
         </div>
-        <div class="card">
-            <h3>Sale History (Last 7 Days)</h3>
-            ${recentSales.length === 0 ? '<p style="color:var(--gray); text-align:center; padding:10px;">No sales in the last 7 days.</p>' :
-              recentSales.map(s => `
-                <div class="list-item" onclick="viewSaleDetail('${s.id}')">
-                    <div class="list-item-info">
-                        <h4>${s.customerName || 'Walk-in'} <span class="badge ${s.profitKnown ? 'badge-ok' : 'badge-unknown'}">${s.profitKnown ? 'Known' : 'Unknown'}</span></h4>
-                        <p>${new Date(s.date).toLocaleString()}</p>
-                    </div>
-                    <div style="font-weight:bold; color:var(--primary);">${formatCurrency(s.total)}</div>
-                </div>
-            `).join('')}
-        </div>
     `;
 }
+
 // FIXED: Removed broken template literal text
 function renderSettings(container) {
     const userEmail = auth.currentUser ? auth.currentUser.email : 'Not logged in';
     const isEmailUser = auth.currentUser && auth.currentUser.providerData.some(p => p.providerId === 'password');
+
     container.innerHTML = `
         <div class="card">
             <h3>Business Settings</h3>
@@ -1092,6 +1119,7 @@ function renderSettings(container) {
         `}
     `;
 }
+
 window.saveSettings = async () => {
     const name = document.getElementById('set-name').value.trim();
     const currency = document.getElementById('set-currency').value.trim() || 'Rs.';
@@ -1109,7 +1137,10 @@ window.saveSettings = async () => {
 window.openChangePasswordModal = () => {
     const modal = document.getElementById('modal-body');
     modal.innerHTML = `
-        <div class="modal-header"><h2>Change Password</h2><button class="close-btn" onclick="closeModal()">&times;</button></div>
+        <div class="modal-header">
+            <h2>Change Password</h2>
+            <button class="close-btn" onclick="closeModal()">&times;</button>
+        </div>
         <div class="form-group"><label>Current Password</label><input type="password" id="cp-current"></div>
         <div class="form-group"><label>New Password</label><input type="password" id="cp-new"></div>
         <div class="form-group"><label>Confirm New Password</label><input type="password" id="cp-confirm"></div>
@@ -1142,60 +1173,10 @@ window.changePassword = async () => {
         else alert("Failed to update password.");
     } finally { hideLoading('btn-cp-submit'); }
 };
-// --- SALE DETAIL MODAL ---
-window.viewSaleDetail = (saleId) => {
-    const sale = data.sales.find(s => s.id === saleId);
-    if (!sale) return;
 
-    let debtHtml = '';
-    if (sale.customerId) {
-        const customer = data.customers.find(c => c.id === sale.customerId);
-        const currentDebt = customer ? (customer.balance || 0) : 0;
-        debtHtml = `
-        <div style="background:#fff3e0; border-left:4px solid var(--warning); padding:12px; border-radius:6px; margin:15px 0;">
-            <div style="font-size:14px; color:var(--gray);">Customer Debt Info</div>
-            <div style="font-size:16px; font-weight:bold; color:var(--danger);">Current Total Debt: ${formatCurrency(currentDebt)}</div>
-            <div style="font-size:13px; margin-top:5px;">Amount due from this specific sale: ${formatCurrency(sale.amountDue || 0)}</div>
-        </div>`;
+// --- MODAL UTILS ---
+window.closeModal = (e) => {
+    if (!e || e.target.id === 'modal-overlay' || e.target.classList.contains('close-btn')) {
+        document.getElementById('modal-overlay').classList.add('hidden');
     }
-
-    const modal = document.getElementById('modal-body');
-    modal.innerHTML = `
-        <div class="modal-header">
-            <h2>Sale Details</h2>
-            <button class="close-btn" onclick="closeModal()">&times;</button>
-        </div>
-        <div style="background:#f8f9fa; padding:15px; border-radius:8px; margin-bottom:15px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
-                <div><div style="font-size:12px; color:var(--gray);">Date & Time</div><div style="font-size:16px; font-weight:bold;">${new Date(sale.date).toLocaleString()}</div></div>
-                <div style="text-align:right;"><div style="font-size:12px; color:var(--gray);">Customer</div><div style="font-size:16px; font-weight:bold;">${sale.customerName || 'Walk-in'}</div></div>
-            </div>
-            <div style="display:flex; justify-content:space-between;">
-                <div><div style="font-size:12px; color:var(--gray);">Sale Type</div><div style="font-size:16px; font-weight:bold;">${sale.saleType ? sale.saleType.charAt(0).toUpperCase() + sale.saleType.slice(1) : 'Normal'}</div></div>
-                <div style="text-align:right;"><div style="font-size:12px; color:var(--gray);">Profit Status</div><div style="font-size:16px; font-weight:bold; color:${sale.profitKnown ? 'var(--primary)' : 'var(--warning)'};">${sale.profitKnown ? 'Known' : 'Unknown'}</div></div>
-            </div>
-        </div>
-        ${debtHtml}
-        <h3 style="margin:15px 0 10px 0; font-size:16px;">Items Purchased</h3>
-        <div style="max-height:250px; overflow-y:auto;">
-            ${(sale.items || []).map(item => `
-                <div style="display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid #eee;">
-                    <div>
-                        <div style="font-weight:600;">${item.name} x${item.qty}</div>
-                        <div style="font-size:13px; color:var(--gray);">Cost: ${formatCurrency(item.cost)} | Price: ${formatCurrency(item.price)}</div>
-                    </div>
-                    <div style="text-align:right;">
-                        <div style="font-weight:bold; color:var(--primary);">${formatCurrency(item.price * item.qty)}</div>
-                        <div style="font-size:13px; color:var(--gray);">Profit: ${formatCurrency((item.price - item.cost) * item.qty)}</div>
-                    </div>
-                </div>
-            `).join('') || '<p style="color:var(--gray); text-align:center;">No item details (Bulk/Manual sale)</p>'}
-        </div>
-        <div style="background:#f8f9fa; padding:15px; border-radius:8px; margin-top:15px;">
-            <div style="display:flex; justify-content:space-between; padding:5px 0;"><span>Subtotal:</span><span style="font-weight:bold;">${formatCurrency(sale.total)}</span></div>
-            <div style="display:flex; justify-content:space-between; padding:5px 0;"><span>Amount Paid:</span><span style="font-weight:bold; color:var(--primary);">${formatCurrency(sale.amountPaid || 0)}</span></div>
-            <div style="display:flex; justify-content:space-between; padding:5px 0; border-top:2px solid var(--dark); margin-top:5px; padding-top:10px;"><span style="font-weight:bold;">Total Profit:</span><span style="font-weight:bold; color:${sale.profitKnown ? 'var(--primary)' : 'var(--warning)'};">${sale.profitKnown ? formatCurrency(sale.totalProfit) : 'Unknown'}</span></div>
-        </div>
-    `;
-    document.getElementById('modal-overlay').classList.remove('hidden');
 };
