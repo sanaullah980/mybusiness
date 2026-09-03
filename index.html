@@ -12,13 +12,11 @@
 </head>
 <body>
 
-    <!-- AUTH LOADING SCREEN (Visible by default to prevent flash) -->
     <div id="auth-loading" class="auth-loading">
         <div class="spinner"></div>
-        <p>Checking authentication...</p
+        <p>Checking authentication...</p>
     </div>
 
-    <!-- AUTH SCREEN (Hidden initially) -->
     <div id="auth-screen" class="hidden">
         <div class="landing-container">
             <div class="landing-text">
@@ -26,7 +24,7 @@
                 <p>Track inventory, manage sales, monitor daily profit, and handle customer debt (udhaar) securely in one easy-to-use platform.</p>
             </div>
             <div class="login-box">
-                <h2>🔒 Access Dashboard</h2>
+                <h2> Access Dashboard</h2>
                 <div id="login-error" class="error-msg" role="alert"></div>
                 <form id="auth-form" onsubmit="event.preventDefault(); handleAuth();">
                     <div class="form-group">
@@ -51,7 +49,6 @@
         </div>
     </div>
 
-    <!-- MAIN APP (Hidden initially) -->
     <div id="main-app" class="hidden">
         <header class="app-header">
             <h1 id="header-title">Dashboard</h1>
@@ -78,7 +75,6 @@
         </nav>
     </div>
 
-    <!-- MODAL CONTAINER -->
     <div id="modal-overlay" class="modal-overlay hidden" onclick="closeModal(event)" role="dialog" aria-modal="true">
         <div class="modal-content" id="modal-body"></div>
     </div>
