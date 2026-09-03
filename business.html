@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Business Management System</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #f4f7f6; color: #333; }
+        header { background: #2c3e50; color: white; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; }
+        header h1 { margin: 0; font-size: 24px; }
+        nav { display: flex; background: #34495e; flex-wrap: wrap; }
+        nav button { background: none; border: none; color: white; padding: 15px 25px; cursor: pointer; font-size: 16px; transition: 0.3s; }
+        nav button:hover, nav button.active { background: #1abc9c; }
+        .container { padding: 30px; max-width: 1200px; margin: auto; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        #login-screen { display: flex; justify-content: center; align-items: center; height: 100vh; background: #2c3e50; }
+        .login-box { background: white; padding: 40px; border-radius: 10px; width: 300px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
+        .login-box h2 { text-align: center; margin-top: 0; }
+        .login-box input { width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; }
+        .login-box button { width: 100%; padding: 12px; background: #1abc9c; color: white; border: none; border-radius: 5px; font-size: 16px; font-weight: bold; cursor: pointer; }
+        .login-box button:hover { background: #16a085; }
+        #login-error { color: red; text-align: center; font-size: 14px; margin-bottom: 10px; display: none; }
+
+        .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .card { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .card h3 { margin: 0 0 10px 0; color: #7f8c8d; font-size: 16px; }
+        .card .value { font-size: 32px; font-weight: bold; color: #2c3e50; }
+        .card.profit .value { color: #27ae60; }
+        
+        .form-section { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .form-row { display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 15px; }
+        .form-group { flex: 1; min-width: 150px; display: flex; flex-direction: column; }
+        label { margin-bottom: 5px; font-weight: 600; font-size: 14px; }
+        input, select { padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+        button.btn { background: #1abc9c; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 16px; font-weight: bold; }
+        button.btn:hover { background: #16a085; }
+        button.btn-danger { background: #e74c3c; }
+        button.btn-danger:hover { background: #c0392b; }
+        
+        table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #ecf0f1; font-weight: 600; }
+        tr:hover { background: #f9f9f9; }
+        .low-stock { color: #e74c3c; font-weight: bold; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<div id="login-screen">
+    <div class="login-box">
+        <h2>🔒 Business Login</h2>
+        <div id="login-error">Invalid email or password</div>
+        <input type="email" id="login-email" placeholder="Email Address">
+        <input type="password" id="login-password" placeholder="Password">
+        <button onclick="handleLogin()">Log In</button>
+    </div>
+</div>
+
+<div id="main-app" class="hidden">
+    <header>
+        <h1>📊 Business Manager</h1>
+        <button class="btn btn-danger" onclick="handleLogout()">Logout</button>
+    </header>
+
+    <nav>
+        <button class="active" onclick="showTab('dashboard', this)">Dashboard</button>
+        <button onclick="showTab('inventory', this)">Inventory / Stock</button>
+        <button onclick="showTab('sales', this)">Make a Sale</button>
+        <button onclick="showTab('customers', this)">Customers</button>
+    </nav>
+
+    <div class="container">
+        <div id="dashboard" class="tab-content active">
+            <h2>Today's Overview</h2>
+            <div class="dashboard-grid">
+                <div class="card"><h3>Total Sales Today</h3><div class="value" id="total-sales">$0.00</div></div>
+                <div class="card profit"><h3>Total Profit Today</h3><div class="value" id="total-profit">$0.00</div></div>
+                <div class="card"><h3>Total Transactions</h3><div class="value" id="total-transactions">0</div></div>
+            </div>
+            <h3>Recent Sales</h3>
+            <table>
+                <thead><tr><th>Date/Time</th><th>Customer</th><th>Items</th><th>Total</th><th>Profit</th></tr></thead>
+                <tbody id="recent-sales-table"></tbody>
+            </table>
+        </div>
+
+        <div id="inventory" class="tab-content">
+            <h2>Manage Stock</h2>
+            <div class="form-section">
+                <h3>Add / Update Product</h3>
+                <div class="form-row">
+                    <div class="form-group"><label>Product Name</label><input type="text" id="prod-name" placeholder="e.g. Coffee Beans"></div>
+                    <div class="form-group"><label>Cost Price ($)</label><input type="number" id="prod-cost" step="0.01" placeholder="5.00"></div>
+                    <div class="form-group"><label>Selling Price ($)</label><input type="number" id="prod-price" step="0.01" placeholder="10.00"></div>
+                    <div class="form-group"><label>Current Stock</label><input type="number" id="prod-stock" placeholder="100"></div>
+                </div>
+                <button class="btn" onclick="addProduct()">Add Product</button>
+            </div>
+            <table>
+                <thead><tr><th>Name</th><th>Cost</th><th>Price</th><th>Stock</th><th>Actions</th></tr></thead>
+                <tbody id="inventory-table"></tbody>
+            </table>
+        </div>
+
+        <div id="sales" class="tab-content">
+            <h2>Record a Sale</h2>
+            <div class="form-section">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Select Customer</label>
+                        <select id="sale-customer"><option value="Walk-in">Walk-in Customer</option></select>
+                    </div>
+                </div>
+                <div id="sale-items-container">
+                    <div class="form-row sale-item-row">
+                        <div class="form-group"><label>Product</label><select class="sale-product" onchange="updateSaleCalc(this)"></select></div>
+                        <div class="form-group"><label>Quantity</label><input type="number" class="sale-qty" value="1" min="1" onchange="updateSaleCalc(this)"></div>
+                        <div class="form-group"><label>Subtotal</label><input type="text" class="sale-subtotal" readonly></div>
+                    </div>
+                </div>
+                <button class="btn" onclick="addSaleItemRow()" style="background:#3498db; margin-bottom:15px;">+ Add Another Item</button>
+                <hr>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px;">
+                    <h3>Total: $<span id="sale-total">0.00</span> | Profit: $<span id="sale-profit" style="color:#27ae60">0.00</span></h3>
+                    <button class="btn" onclick="completeSale()" style="font-size:18px; padding: 15px 30px;">Complete Sale</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="customers" class="tab-content">
+            <h2>Customer Directory</h2>
+            <div class="form-section">
+                <div class="form-row">
+                    <div class="form-group"><label>Customer Name</label><input type="text" id="cust-name" placeholder="John Doe"></div>
+                    <div class="form-group"><label>Phone / Email</label><input type="text" id="cust-phone" placeholder="555-0199"></div>
+                </div>
+                <button class="btn" onclick="addCustomer()">Add Customer</button>
+            </div>
+            <table>
+                <thead><tr><th>Name</th><th>Contact</th><th>Total Purchases</th></tr></thead>
+                <tbody id="customers-table"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, query, where } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyBQqnIhMCGd4_FRApjkns3HjIrqw2V1qFc",
+      authDomain: "mybusinessapp-4734c.firebaseapp.com",
+      projectId: "mybusinessapp-4734c",
+      storageBucket: "mybusinessapp-4734c.firebasestorage.app",
+      messagingSenderId: "367002926256",
+      appId: "1:367002926256:web:0b5139dab24d901d9c8f75",
+      measurementId: "G-HBC31ZFKMG"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    let products = [];
+    let customers = [];
+    let sales = [];
+    let currentUserId = null;
+
+    window.handleLogin = async () => {
+        const email = document.getElementById('login-email').value;
+        const pass = document.getElementById('login-password').value;
+        try {
+            await signInWithEmailAndPassword(auth, email, pass);
+        } catch (error) {
+            document.getElementById('login-error').style.display = 'block';
+        }
+    };
+
+    window.handleLogout = () => signOut(auth);
+
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            currentUserId = user.uid; // Capture the unique User ID
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('main-app').classList.remove('hidden');
+            startRealtimeListeners();
+        } else {
+            currentUserId = null;
+            document.getElementById('login-screen').classList.remove('hidden');
+            document.getElementById('main-app').classList.add('hidden');
+            // Clear data on logout
+            products = []; customers = []; sales = [];
+        }
+    });
+
+    function startRealtimeListeners() {
+        // ONLY listen to data owned by the current logged-in user
+        const productsQuery = query(collection(db, "products"), where("ownerId", "==", currentUserId));
+        const customersQuery = query(collection(db, "customers"), where("ownerId", "==", currentUserId));
+        const salesQuery = query(collection(db, "sales"), where("ownerId", "==", currentUserId));
+
+        onSnapshot(productsQuery, (snapshot) => {
+            products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            renderInventory();
+            renderSaleDropdowns();
+        });
+
+        onSnapshot(customersQuery, (snapshot) => {
+            customers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            renderCustomers();
+        });
+
+        onSnapshot(salesQuery, (snapshot) => {
+            sales = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            renderDashboard();
+        });
+    }
+
+    window.showTab = (tabId, btn) => {
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+        document.getElementById(tabId).classList.add('active');
+        btn.classList.add('active');
+    };
+
+    window.addProduct = async () => {
+        const name = document.getElementById('prod-name').value;
+        const cost = parseFloat(document.getElementById('prod-cost').value);
+        const price = parseFloat(document.getElementById('prod-price').value);
+        const stock = parseInt(document.getElementById('prod-stock').value);
+
+        if(!name || isNaN(cost) || isNaN(price) || isNaN(stock)) return alert("Please fill all fields correctly.");
+
+        // Tag the product with the current user's ID
+        await addDoc(collection(db, "products"), { name, cost, price, stock, ownerId: currentUserId });
+        ['prod-name', 'prod-cost', 'prod-price', 'prod-stock'].forEach(id => document.getElementById(id).value = '');
+    };
+
+    window.deleteProduct = async (id) => {
+        if(confirm("Delete this product?")) {
+            await deleteDoc(doc(db, "products", id));
+        }
+    };
+
+    function renderInventory() {
+        const tbody = document.getElementById('inventory-table');
+        tbody.innerHTML = '';
+        products.forEach(p => {
+            const stockClass = p.stock <= 5 ? 'low-stock' : '';
+            tbody.innerHTML += `<tr>
+                <td>${p.name}</td>
+                <td>$${p.cost.toFixed(2)}</td>
+                <td>$${p.price.toFixed(2)}</td>
+                <td class="${stockClass}">${p.stock} ${p.stock <= 5 ? '(Low!)' : ''}</td>
+                <td><button class="btn btn-danger" onclick="deleteProduct('${p.id}')">Delete</button></td>
+            </tr>`;
+        });
+    }
+
+    window.addCustomer = async () => {
+        const name = document.getElementById('cust-name').value;
+        const phone = document.getElementById('cust-phone').value;
+        if(!name) return alert("Please enter a name.");
+        
+        // Tag the customer with the current user's ID
+        await addDoc(collection(db, "customers"), { name, phone, ownerId: currentUserId });
+        document.getElementById('cust-name').value = '';
+        document.getElementById('cust-phone').value = '';
+    };
+
+    function renderCustomers() {
+        const tbody = document.getElementById('customers-table');
+        tbody.innerHTML = '';
+        customers.forEach(c => {
+            const totalPurchases = sales.filter(s => s.customer === c.name).reduce((sum, s) => sum + s.total, 0);
+            tbody.innerHTML += `<tr>
+                <td>${c.name}</td>
+                <td>${c.phone}</td>
+                <td>$${totalPurchases.toFixed(2)}</td>
+            </tr>`;
+        });
+        
+        const select = document.getElementById('sale-customer');
+        select.innerHTML = '<option value="Walk-in">Walk-in Customer</option>';
+        customers.forEach(c => {
+            select.innerHTML += `<option value="${c.name}">${c.name}</option>`;
+        });
+    }
+
+    function renderSaleDropdowns() {
+        document.querySelectorAll('.sale-product').forEach(select => {
+            const currentVal = select.value;
+            select.innerHTML = '<option value="">Select Product</option>';
+            products.forEach(p => {
+                select.innerHTML += `<option value="${p.id}" ${p.id == currentVal ? 'selected' : ''}>${p.name} (Stock: ${p.stock})</option>`;
+            });
+        });
+    }
+
+    window.addSaleItemRow = () => {
+        const container = document.getElementById('sale-items-container');
+        const row = document.createElement('div');
+        row.className = 'form-row sale-item-row';
+        row.innerHTML = `
+            <div class="form-group"><label>Product</label><select class="sale-product" onchange="updateSaleCalc(this)"></select></div>
+            <div class="form-group"><label>Quantity</label><input type="number" class="sale-qty" value="1" min="1" onchange="updateSaleCalc(this)"></div>
+            <div class="form-group"><label>Subtotal</label><input type="text" class="sale-subtotal" readonly></div>
+            <div class="form-group" style="flex:0;"><label>&nbsp;</label><button class="btn btn-danger" onclick="this.closest('.sale-item-row').remove(); calculateSaleTotals();">X</button></div>
+        `;
+        container.appendChild(row);
+        renderSaleDropdowns();
+    };
+
+    window.updateSaleCalc = (el) => {
+        const row = el.closest('.sale-item-row');
+        const prodId = row.querySelector('.sale-product').value;
+        const qty = parseInt(row.querySelector('.sale-qty').value) || 0;
+        const product = products.find(p => p.id === prodId);
+        
+        if(product) {
+            row.querySelector('.sale-subtotal').value = `$${(product.price * qty).toFixed(2)}`;
+        } else {
+            row.querySelector('.sale-subtotal').value = `$0.00`;
+        }
+        calculateSaleTotals();
+    };
+
+    function calculateSaleTotals() {
+        let total = 0;
+        let profit = 0;
+        document.querySelectorAll('.sale-item-row').forEach(row => {
+            const prodId = row.querySelector('.sale-product').value;
+            const qty = parseInt(row.querySelector('.sale-qty').value) || 0;
+            const product = products.find(p => p.id === prodId);
+            if(product) {
+                total += product.price * qty;
+                profit += (product.price - product.cost) * qty;
+            }
+        });
+        document.getElementById('sale-total').innerText = total.toFixed(2);
+        document.getElementById('sale-profit').innerText = profit.toFixed(2);
+    }
+
+    window.completeSale = async () => {
+        const customer = document.getElementById('sale-customer').value;
+        let items = [];
+        let total = 0;
+        let totalProfit = 0;
+        let isValid = true;
+        let stockUpdates = [];
+
+        document.querySelectorAll('.sale-item-row').forEach(row => {
+            const prodId = row.querySelector('.sale-product').value;
+            const qty = parseInt(row.querySelector('.sale-qty').value) || 0;
+            const product = products.find(p => p.id === prodId);
+            
+            if(!product || qty <= 0) return;
+            if(qty > product.stock) {
+                alert(`Not enough stock for ${product.name}! Available: ${product.stock}`);
+                isValid = false;
+                return;
+            }
+
+            items.push({ productId: prodId, name: product.name, qty, price: product.price });
+            total += product.price * qty;
+            totalProfit += (product.price - product.cost) * qty;
+            
+            stockUpdates.push({ id: prodId, newStock: product.stock - qty });
+        });
+
+        if(!isValid || items.length === 0) return alert("Please add valid items to the sale.");
+
+        // Tag the sale with the current user's ID
+        await addDoc(collection(db, "sales"), {
+            date: new Date().toISOString(),
+            customer,
+            items,
+            total,
+            totalProfit,
+            ownerId: currentUserId
+        });
+
+        const updatePromises = stockUpdates.map(u => 
+            updateDoc(doc(db, "products", u.id), { stock: u.newStock })
+        );
+        await Promise.all(updatePromises);
+
+        alert("Sale Completed Successfully!\nTotal: $" + total.toFixed(2) + "\nProfit: $" + totalProfit.toFixed(2));
+        
+        document.getElementById('sale-items-container').innerHTML = `
+            <div class="form-row sale-item-row">
+                <div class="form-group"><label>Product</label><select class="sale-product" onchange="updateSaleCalc(this)"></select></div>
+                <div class="form-group"><label>Quantity</label><input type="number" class="sale-qty" value="1" min="1" onchange="updateSaleCalc(this)"></div>
+                <div class="form-group"><label>Subtotal</label><input type="text" class="sale-subtotal" readonly></div>
+            </div>`;
+        renderSaleDropdowns();
+        calculateSaleTotals();
+    };
+
+    function renderDashboard() {
+        const today = new Date().toISOString().split('T')[0];
+        const todaySales = sales.filter(s => s.date.startsWith(today));
+        
+        const totalSales = todaySales.reduce((sum, s) => sum + s.total, 0);
+        const totalProfit = todaySales.reduce((sum, s) => sum + s.totalProfit, 0);
+
+        document.getElementById('total-sales').innerText = `$${totalSales.toFixed(2)}`;
+        document.getElementById('total-profit').innerText = `$${totalProfit.toFixed(2)}`;
+        document.getElementById('total-transactions').innerText = todaySales.length;
+
+        const tbody = document.getElementById('recent-sales-table');
+        tbody.innerHTML = '';
+        
+        const sortedSales = [...sales].sort((a, b) => new Date(b.date) - new Date(a.date));
+        sortedSales.slice(0, 5).forEach(s => {
+            const itemNames = s.items.map(i => `${i.name} (x${i.qty})`).join(', ');
+            const displayDate = new Date(s.date).toLocaleString();
+            tbody.innerHTML += `<tr>
+                <td>${displayDate}</td>
+                <td>${s.customer}</td>
+                <td>${itemNames}</td>
+                <td>$${s.total.toFixed(2)}</td>
+                <td style="color:#27ae60; font-weight:bold;">$${s.totalProfit.toFixed(2)}</td>
+            </tr>`;
+        });
+    }
+</script>
+
+</body>
+</html>
