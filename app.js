@@ -894,25 +894,30 @@ window.saveCustomer = async (customerId) => {
 window.openCustomerLedger = (customerId) => {
     const c = data.customers.find(x => x.id === customerId);
     if (!c) return alert("Customer not found.");
-    const txns = data.customerTransactions.filter(t => t.customerId === customerId).sort((a,b) => new Date(b.date) - new Date(a.date));
+    
+    const txns = data.customerTransactions.filter(t => t.customerId === customerId).sort((a, b) => new Date(b.date) - new Date(a.date));
     const modal = document.getElementById('modal-body');
+    
     modal.innerHTML = `
-        <div class="modal-header"><h2>Ledger: ${c.name}</h2><button class="close-btn" onclick="closeModal()">&times;</button></div>
+        <div class="modal-header">
+            <h2>Ledger: ${c.name}</h2>
+            <button class="close-btn" onclick="closeModal()">&times;</button>
+        </div>
         <div style="background:#f8f9fa; padding:15px; border-radius:8px; margin-bottom:15px; text-align:center;">
             <div style="font-size:14px; color:var(--gray);">Current Balance</div>
             <div style="font-size:28px; font-weight:bold; color:var(--danger);">${formatCurrency(c.balance || 0)}</div>
         </div>
         <div style="max-height:300px; overflow-y:auto;">
             <table class="ledger-table">
-                <thead><tr><th>Date</th><th>Description</th><th class="text-right">Amount</th><th class="text-right">Balance</th></tr></thead>
+                <thead><tr><th>Date</th><th>Description</th><th style="text-align:right;">Amount</th><th style="text-align:right;">Balance</th></tr></thead>
                 <tbody>
                     ${txns.length === 0 ? '<tr><td colspan="4" style="text-align:center; color:var(--gray);">No transactions</td></tr>' :
                       txns.map(t => `
                         <tr>
                             <td>${new Date(t.date).toLocaleDateString()}</td>
                             <td>${t.note || t.type}<br><small style="color:var(--gray);">${t.type === 'payment' ? 'Payment Received' : 'Debt Added'}</small></td>
-                            <td class="text-right ${t.type === 'payment' ? 'text-success' : 'text-danger'}">${t.type === 'payment' ? '-' : '+'}${formatCurrency(t.amount)}</td>
-                            <td class="text-right">${formatCurrency(t.balanceAfter)}</td>
+                            <td style="text-align:right;" class="${t.type === 'payment' ? 'text-success' : 'text-danger'}">${t.type === 'payment' ? '-' : '+'}${formatCurrency(t.amount)}</td>
+                            <td style="text-align:right;">${formatCurrency(t.balanceAfter)}</td>
                         </tr>
                     `).join('')}
                 </tbody>
@@ -921,7 +926,6 @@ window.openCustomerLedger = (customerId) => {
     `;
     document.getElementById('modal-overlay').classList.remove('hidden');
 };
-
 window.openAddDebtModal = (customerId) => {
     const c = data.customers.find(x => x.id === customerId);
     const modal = document.getElementById('modal-body');
@@ -1328,7 +1332,6 @@ function renderSettings(container) {
         `}
     `;
 }
-
 window.saveSettings = async () => {
     const name = document.getElementById('set-name').value.trim();
     const currency = document.getElementById('set-currency').value.trim() || 'Rs.';
