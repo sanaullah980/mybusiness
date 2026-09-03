@@ -1,19 +1,15 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-// FIX 1: Added setPersistence and browserLocalPersistence to the imports
 import { 
-    getAuth, 
-    setPersistence, 
-    browserLocalPersistence, 
-    signInWithEmailAndPassword, 
-    createUserWithEmailAndPassword, 
-    signOut, 
-    onAuthStateChanged, 
-    GoogleAuthProvider, 
-    signInWithPopup 
+    getAuth, setPersistence, browserLocalPersistence, 
+    signInWithEmailAndPassword, createUserWithEmailAndPassword, 
+    signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup,
+    sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { 
+    getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, setDoc,
+    onSnapshot, query, where, runTransaction, getDocs, orderBy
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-// --- FIREBASE CONFIG ---
 const firebaseConfig = {
   apiKey: "AIzaSyBQqnIhMCGd4_FRApjkns3HjIrqw2V1qFc",
   authDomain: "mybusinessapp-4734c.firebaseapp.com",
@@ -29,59 +25,124 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 
-// FIX 2: Set persistence to LOCAL immediately after auth initialization.
-// This ensures the token is saved in localStorage and survives browser restarts.
-setPersistence(auth, browserLocalPersistence).catch((error) => {
-    console.error("Failed to set auth persistence:", error);
-});
+setPersistence(auth, browserLocalPersistence).catch(console.error);
 
-// --- GLOBAL STATE ---
 let currentUserId = null;
 let isLoginMode = true;
-let data = { products: [], customers: [], sales: [], expenses: [], settings: {} };
+let data = { products: [], customers: [], sales: [], expenses: [], stockPurchases: [], customerTransactions: [], settings: {} };
 let listeners = [];
+let cart = [];
+
+// --- UTILITIES ---
+function formatCurrency(amount) {
+    if (amount === null || amount === undefined || isNaN(amount)) return "Unknown";
+    return "Rs. " + Number(amount).toLocaleString('en-PK', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+function getLocalDateStr(dateInput) {
+    const d = new Date(dateInput);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function showLoading(btnId, text) {
+    const btn = document.getElementById(btnId);
+    if (btn) { btn.disabled = true; btn.dataset.originalText = btn.innerText; btn.innerText = text || "Processing..."; }
+}
+
+function hideLoading(btnId) {
+    const btn = document.getElementById(btnId);
+    if (btn) { btn.disabled = false; btn.innerText = btn.dataset.originalText || "Submit"; }
+}
 
 // --- AUTHENTICATION ---
 window.toggleAuthMode = () => {
     isLoginMode = !isLoginMode;
-    document.getElementById('auth-button').innerText = isLoginMode ? 'Log In' : 'Sign Up';
-    document.getElementById('toggle-auth').innerText = isLoginMode ? "Don't have an account? Sign Up" : "Already have an account? Log In";
+    const btn = document.getElementById('auth-button');
+    const toggle = document.getElementById('toggle-auth');
     document.getElementById('login-error').innerText = '';
+    document.getElementById('login-password').value = '';
+    btn.innerText = isLoginMode ? 'Log In' : 'Sign Up';
+    toggle.innerText = isLoginMode ? "Don't have an account? Sign Up" : "Already have an account? Log In";
 };
 
-window.handleAuth = async () => {
-    const email = document.getElementById('login-email').value;
+window.handleAuth = async (e) => {
+    if (e) e.preventDefault();
+    const email = document.getElementById('login-email').value.trim();
     const pass = document.getElementById('login-password').value;
     const errorDiv = document.getElementById('login-error');
+    const btn = document.getElementById('auth-button');
+
+    if (!email || !pass) { errorDiv.innerText = "Please enter both email and password."; return; }
+
+    showLoading('auth-button', isLoginMode ? "Logging in..." : "Creating account...");
+    errorDiv.innerText = "";
 
     try {
         if (isLoginMode) await signInWithEmailAndPassword(auth, email, pass);
         else await createUserWithEmailAndPassword(auth, email, pass);
     } catch (error) {
-        errorDiv.innerText = error.message.replace('Firebase: ', '');
+        console.error("Auth error:", error);
+        if (error.code === 'auth/email-already-in-use') errorDiv.innerText = "Email already registered. Please log in.";
+        else if (error.code === 'auth/weak-password') errorDiv.innerText = "Password must be at least 6 characters.";
+        else if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') errorDiv.innerText = "Invalid email or password.";
+        else errorDiv.innerText = "Authentication failed. Please try again.";
+    } finally {
+        hideLoading('auth-button');
+    }
+};
+
+window.forgotPassword = async (e) => {
+    if (e) e.preventDefault();
+    const email = document.getElementById('login-email').value.trim();
+    if (!email || !email.includes('@')) {
+        alert("Please enter your email address in the field above first.");
+        document.getElementById('login-email').focus();
+        return;
+    }
+    try {
+        await sendPasswordResetEmail(auth, email);
+        alert("Password reset email sent! Please check your inbox.");
+    } catch (error) {
+        console.error(error);
+        alert("If an account exists with this email, a reset link has been sent.");
     }
 };
 
 window.signInWithGoogle = async () => {
+    showLoading('google-btn-placeholder', "Signing in..."); // Note: applied to button via querySelector below
+    const btn = document.querySelector('.google-btn');
+    btn.disabled = true;
     try { await signInWithPopup(auth, googleProvider); } 
-    catch (error) { alert("Google Sign-In failed."); }
+    catch (error) { 
+        console.error("Google Sign-In error:", error);
+        alert("Google Sign-In failed. Please try again.");
+    } finally {
+        btn.disabled = false;
+    }
 };
 
-window.handleLogout = () => signOut(auth);
+window.handleLogout = async () => {
+    if (!confirm("Are you sure you want to log out?")) return;
+    try { await signOut(auth); } 
+    catch (error) { console.error("Logout error:", error); alert("Failed to log out."); }
+};
 
 onAuthStateChanged(auth, (user) => {
     if (user) {
         currentUserId = user.uid;
-        document.getElementById('login-screen').classList.add('hidden');
+        document.getElementById('auth-screen').classList.add('hidden');
         document.getElementById('main-app').classList.remove('hidden');
         startListeners();
         navigate('dashboard');
     } else {
         currentUserId = null;
-        document.getElementById('login-screen').classList.remove('hidden');
+        document.getElementById('auth-screen').classList.remove('hidden');
         document.getElementById('main-app').classList.add('hidden');
         clearListeners();
-        data = { products: [], customers: [], sales: [], expenses: [], settings: {} };
+        data = { products: [], customers: [], sales: [], expenses: [], stockPurchases: [], customerTransactions: [], settings: {} };
+        document.getElementById('login-email').value = '';
+        document.getElementById('login-password').value = '';
+        document.getElementById('login-error').innerText = '';
     }
 });
 
@@ -94,6 +155,12 @@ function startListeners() {
     listeners.push(onSnapshot(q("customers"), s => { data.customers = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); }));
     listeners.push(onSnapshot(q("sales"), s => { data.sales = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); }));
     listeners.push(onSnapshot(q("expenses"), s => { data.expenses = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); }));
+    listeners.push(onSnapshot(q("stockPurchases"), s => { data.stockPurchases = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); }));
+    listeners.push(onSnapshot(q("customerTransactions"), s => { data.customerTransactions = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); }));
+    listeners.push(onSnapshot(doc(db, "settings", currentUserId), (snap) => {
+        data.settings = snap.exists() ? snap.data() : {};
+        refreshCurrentView();
+    }));
 }
 
 function clearListeners() { listeners.forEach(unsub => unsub()); listeners = []; }
@@ -105,238 +172,768 @@ function refreshCurrentView() {
 // --- NAVIGATION ---
 window.navigate = (page) => {
     document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-    const btn = document.querySelector(`.nav-item[onclick="navigate('${page}')"]`);
+    const btn = document.querySelector(`.nav-item[data-page="${page}"]`);
     if(btn) btn.classList.add('active');
 
     const content = document.getElementById('app-content');
     const title = document.getElementById('header-title');
 
     if (page === 'dashboard') { title.innerText = 'Dashboard'; renderDashboard(content); }
-    else if (page === 'sales') { title.innerText = 'New Sale'; renderSaleForm(content); }
+    else if (page === 'sales') { title.innerText = 'New Sale'; renderSales(content); }
     else if (page === 'inventory') { title.innerText = 'Inventory'; renderInventory(content); }
     else if (page === 'customers') { title.innerText = 'Customers'; renderCustomers(content); }
-    else if (page === 'settings') { title.innerText = 'Settings'; renderSettings(content); }
+    else if (page === 'more') { title.innerText = 'More'; renderMore(content); }
 };
 
 // --- RENDER FUNCTIONS ---
 function renderDashboard(container) {
-    const today = new Date().toISOString().split('T')[0];
-    const todaySales = data.sales.filter(s => s.date && s.date.startsWith(today));
+    const todayStr = getLocalDateStr(new Date());
     
-    const totalSales = todaySales.reduce((sum, s) => sum + (s.total || 0), 0);
-    const totalProfit = todaySales.reduce((sum, s) => sum + (s.profit || 0), 0);
-    const totalExpenses = data.expenses.filter(e => e.date && e.date.startsWith(today)).reduce((sum, e) => sum + (e.amount || 0), 0);
-    const lowStock = data.products.filter(p => p.stock <= (p.minStock || 5)).length;
+    let todaySales = 0, todayKnownProfit = 0, todayUnknownCount = 0, todayExpenses = 0, todayStockPurchases = 0;
+
+    data.sales.forEach(s => {
+        if (getLocalDateStr(s.date) === todayStr) {
+            todaySales += (s.total || 0);
+            if (s.profitKnown) todayKnownProfit += (s.totalProfit || 0);
+            else todayUnknownCount++;
+        }
+    });
+
+    data.expenses.forEach(e => { if (getLocalDateStr(e.date) === todayStr) todayExpenses += (e.amount || 0); });
+    data.stockPurchases.forEach(p => { if (getLocalDateStr(p.date) === todayStr) todayStockPurchases += (p.amount || 0); });
+
+    const totalDebt = data.customers.reduce((sum, c) => sum + (c.balance || 0), 0);
+    const todayNetProfit = todayKnownProfit - todayExpenses;
 
     container.innerHTML = `
         <div class="dashboard-grid">
-            <div class="card profit"><h3>Today's Sales</h3><div class="value">$${totalSales.toFixed(2)}</div></div>
-            <div class="card profit"><h3>Net Profit</h3><div class="value">$${(totalProfit - totalExpenses).toFixed(2)}</div></div>
-            <div class="card"><h3>Transactions</h3><div class="value">${todaySales.length}</div></div>
-            <div class="card debt"><h3>Low Stock</h3><div class="value">${lowStock}</div></div>
+            <div class="card profit"><h3>Today's Sales</h3><div class="value">${formatCurrency(todaySales)}</div></div>
+            <div class="card profit"><h3>Known Profit</h3><div class="value">${formatCurrency(todayKnownProfit)}</div></div>
+            <div class="card"><h3>Net Profit</h3><div class="value">${formatCurrency(todayNetProfit)}</div></div>
+            <div class="card debt"><h3>Customer Debt</h3><div class="value">${formatCurrency(totalDebt)}</div></div>
+        </div>
+        <div class="dashboard-grid">
+            <div class="card"><h3>Today's Expenses</h3><div class="value">${formatCurrency(todayExpenses)}</div></div>
+            <div class="card"><h3>Stock Purchases</h3><div class="value">${formatCurrency(todayStockPurchases)}</div></div>
+        ${todayUnknownCount > 0 ? `<div class="card" style="grid-column: span 2;"><h3>⚠️ Unknown Profit Sales</h3><div class="value" style="font-size:20px; color:var(--warning);">${todayUnknownCount} transaction(s) not included in profit total</div></div>` : ''}
         </div>
         <div class="card">
             <h3>Recent Sales</h3>
-            <div id="recent-sales-list">
-                ${data.sales.slice().reverse().slice(0, 5).map(s => `
-                    <div class="list-item">
-                        <div class="list-item-info">
-                            <h4>${s.customer || 'Walk-in'}</h4>
-                            <p>${new Date(s.date).toLocaleDateString()}</p>
-                        </div>
-                        <div style="font-weight:bold; color:var(--primary);">$${s.total.toFixed(2)}</div>
+            ${data.sales.slice().reverse().slice(0, 5).map(s => `
+                <div class="list-item">
+                    <div class="list-item-info">
+                        <h4>${s.customerName || 'Walk-in'} <span class="badge ${s.profitKnown ? 'badge-ok' : 'badge-unknown'}">${s.profitKnown ? 'Known' : 'Unknown'}</span></h4>
+                        <p>${new Date(s.date).toLocaleString()}</p>
                     </div>
-                `).join('') || '<p style="color:var(--gray); text-align:center;">No sales yet.</p>'}
-            </div>
+                    <div style="font-weight:bold; color:var(--primary);">${formatCurrency(s.total)}</div>
+                </div>
+            `).join('') || '<p style="color:var(--gray); text-align:center; padding:10px;">No sales yet.</p>'}
         </div>
     `;
 }
 
+function renderSales(container) {
+    container.innerHTML = `
+        <div class="tabs">
+            <button class="tab-btn active" onclick="showSaleTab('normal', this)">Normal Sale</button>
+            <button class="tab-btn" onclick="showSaleTab('manual', this)">Manual Item</button>
+            <button class="tab-btn" onclick="showSaleTab('bulk', this)">Quick / Bulk</button>
+        </div>
+        <div id="sale-tab-normal" class="sale-tab">
+            <div class="card">
+                <div class="form-group">
+                    <label>Customer (Optional)</label>
+                    <select id="sale-customer">
+                        <option value="">Walk-in Customer</option>
+                        ${data.customers.map(c => `<option value="${c.id}">${c.name} (Debt: ${formatCurrency(c.balance || 0)})</option>`).join('')}
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group" style="flex:2;">
+                        <label>Product</label>
+                        <select id="sale-product">
+                            <option value="">Select Product</option>
+                            ${data.products.map(p => `<option value="${p.id}" data-price="${p.price}" data-cost="${p.cost}" data-stock="${p.stock}">${p.name} (Stock: ${p.stock})</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Qty</label>
+                        <input type="number" id="sale-qty" value="1" min="1">
+                    </div>
+                </div>
+                <button class="btn" onclick="addSaleItem()">Add to Cart</button>
+            </div>
+            <div class="card">
+                <h3>Cart</h3>
+                <div id="cart-items"></div>
+                <hr style="margin:15px 0;">
+                <div class="form-row">
+                    <div class="form-group"><label>Total</label><input type="text" id="cart-total-display" readonly value="Rs. 0"></div>
+                    <div class="form-group"><label>Amount Paid</label><input type="number" id="sale-amount-paid" value="0" min="0" oninput="updateSaleDue()"></div>
+                </div>
+                <div class="form-group"><label>Remaining Due (Added to Debt)</label><input type="text" id="sale-amount-due" readonly value="Rs. 0"></div>
+                <button class="btn" id="btn-complete-sale" onclick="completeNormalSale()">Complete Sale</button>
+            </div>
+        </div>
+        <div id="sale-tab-manual" class="sale-tab hidden">
+            <div class="card">
+                <h3>Manual Item Sale</h3>
+                <div class="form-group"><label>Item Name</label><input type="text" id="manual-item-name"></div>
+                <div class="form-row">
+                    <div class="form-group"><label>Selling Amount (Rs.)</label><input type="number" id="manual-amount" min="0"></div>
+                    <div class="form-group"><label>Estimated Profit (Rs.)</label><input type="number" id="manual-profit" min="0"></div>
+                </div>
+                <button class="btn" id="btn-manual-sale" onclick="completeManualSale()">Record Manual Sale</button>
+            </div>
+        </div>
+        <div id="sale-tab-bulk" class="sale-tab hidden">
+            <div class="card">
+                <h3>Quick / Bulk Sale</h3>
+                <div class="form-group">
+                    <label>Customer (Optional)</label>
+                    <select id="bulk-customer">
+                        <option value="">Walk-in Customer</option>
+                        ${data.customers.map(c => `<option value="${c.id}">${c.name} (Debt: ${formatCurrency(c.balance || 0)})</option>`).join('')}
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Total Selling Amount (Rs.)</label><input type="number" id="bulk-total" min="0"></div>
+                    <div class="form-group"><label>Estimated Profit (Rs.) <small>(Leave blank if unknown)</small></label><input type="number" id="bulk-profit" min="0"></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Amount Paid (Rs.)</label><input type="number" id="bulk-paid" value="0" min="0"></div>
+                    <div class="form-group"><label>Note</label><input type="text" id="bulk-note" placeholder="e.g., Evening sales"></div>
+                </div>
+                <button class="btn" id="btn-bulk-sale" onclick="completeBulkSale()">Record Bulk Sale</button>
+            </div>
+        </div>
+    `;
+    cart = [];
+    renderCart();
+}
+
+window.showSaleTab = (tab, btn) => {
+    document.querySelectorAll('.sale-tab').forEach(t => t.classList.add('hidden'));
+    document.getElementById(`sale-tab-${tab}`).classList.remove('hidden');
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+};
+
+function renderCart() {
+    const container = document.getElementById('cart-items');
+    if (!container) return;
+    let total = 0;
+    if (cart.length === 0) {
+        container.innerHTML = '<p style="color:var(--gray); text-align:center; padding:10px;">Cart is empty.</p>';
+    } else {
+        container.innerHTML = cart.map((item, index) => {
+            const sub = item.price * item.qty;
+            total += sub;
+            return `<div class="list-item">
+                <div class="list-item-info"><h4>${item.name} x${item.qty}</h4><p>${formatCurrency(item.price)} each</p></div>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span style="font-weight:bold;">${formatCurrency(sub)}</span>
+                    <i class="fas fa-trash" style="color:var(--danger); cursor:pointer; padding:5px;" onclick="removeCartItem(${index})"></i>
+                </div>
+            </div>`;
+        }).join('');
+    }
+    document.getElementById('cart-total-display').value = formatCurrency(total);
+    updateSaleDue();
+}
+
+window.updateSaleDue = () => {
+    const total = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+    const paid = parseFloat(document.getElementById('sale-amount-paid')?.value) || 0;
+    const due = Math.max(0, total - paid);
+    if(document.getElementById('sale-amount-due')) document.getElementById('sale-amount-due').value = formatCurrency(due);
+};
+
+window.addSaleItem = () => {
+    const select = document.getElementById('sale-product');
+    const qtyInput = document.getElementById('sale-qty');
+    const qty = parseInt(qtyInput.value);
+    const option = select.options[select.selectedIndex];
+    
+    if (!option.value) return alert("Please select a product.");
+    if (!qty || qty < 1) return alert("Quantity must be at least 1.");
+    
+    const availableStock = parseInt(option.dataset.stock);
+    const item = {
+        id: option.value, name: option.text.split(' (')[0],
+        price: parseFloat(option.dataset.price), cost: parseFloat(option.dataset.cost), qty: qty
+    };
+    
+    const existing = cart.find(i => i.id === item.id);
+    if (existing) {
+        if (existing.qty + qty > availableStock) return alert(`Not enough stock! Available: ${availableStock}`);
+        existing.qty += qty;
+    } else {
+        if (qty > availableStock) return alert(`Not enough stock! Available: ${availableStock}`);
+        cart.push(item);
+    }
+    renderCart();
+    qtyInput.value = 1;
+    select.selectedIndex = 0;
+};
+
+window.removeCartItem = (index) => { cart.splice(index, 1); renderCart(); };
+
+window.completeNormalSale = async () => {
+    if(cart.length === 0) return alert("Cart is empty!");
+    const btn = document.getElementById('btn-complete-sale');
+    showLoading('btn-complete-sale', "Processing...");
+
+    try {
+        const customerId = document.getElementById('sale-customer').value || null;
+        const amountPaid = parseFloat(document.getElementById('sale-amount-paid').value) || 0;
+        const total = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+        const totalProfit = cart.reduce((sum, item) => sum + ((item.price - item.cost) * item.qty), 0);
+        
+        let customerName = "Walk-in";
+        if (customerId) {
+            const c = data.customers.find(x => x.id === customerId);
+            if (c) customerName = c.name;
+        }
+
+        const saleData = {
+            ownerId: currentUserId, customerId, customerName, saleType: 'normal',
+            date: new Date().toISOString(), items: cart, total, amountPaid,
+            amountDue: Math.max(0, total - amountPaid), totalProfit, profitKnown: true, note: ''
+        };
+
+        await runTransaction(db, async (transaction) => {
+            const saleRef = doc(collection(db, "sales"));
+            transaction.set(saleRef, saleData);
+
+            for (const item of cart) {
+                const productRef = doc(db, "products", item.id);
+                const productSnap = await transaction.get(productRef);
+                if (!productSnap.exists()) throw new Error(`Product ${item.name} deleted during checkout!`);
+                const newStock = productSnap.data().stock - item.qty;
+                if (newStock < 0) throw new Error(`Not enough stock for ${item.name}`);
+                transaction.update(productRef, { stock: newStock });
+            }
+
+            if (customerId && saleData.amountDue > 0) {
+                const customerRef = doc(db, "customers", customerId);
+                const customerSnap = await transaction.get(customerRef);
+                const currentBalance = customerSnap.data().balance || 0;
+                const newBalance = currentBalance + saleData.amountDue;
+                transaction.update(customerRef, { balance: newBalance });
+                
+                const txnRef = doc(collection(db, "customerTransactions"));
+                transaction.set(txnRef, {
+                    ownerId: currentUserId, customerId, type: 'sale_debt',
+                    amount: saleData.amountDue, balanceAfter: newBalance,
+                    date: new Date().toISOString(), note: `Sale #${saleRef.id.substring(0,8)}`, saleId: saleRef.id
+                });
+            }
+        });
+
+        alert("Sale completed successfully!");
+        cart = [];
+        navigate('dashboard');
+    } catch (error) {
+        console.error("Sale error:", error);
+        alert(error.message || "Unable to complete sale. Please try again.");
+    } finally {
+        hideLoading('btn-complete-sale');
+    }
+};
+
+window.completeManualSale = async () => {
+    const name = document.getElementById('manual-item-name').value.trim();
+    const amount = parseFloat(document.getElementById('manual-amount').value);
+    const profitInput = document.getElementById('manual-profit').value;
+    
+    if (!name || isNaN(amount) || amount <= 0) return alert("Please enter a valid item name and amount.");
+    
+    const btn = document.getElementById('btn-manual-sale');
+    showLoading('btn-manual-sale', "Saving...");
+
+    try {
+        const profitKnown = profitInput !== "";
+        const totalProfit = profitKnown ? parseFloat(profitInput) : 0;
+
+        await addDoc(collection(db, "sales"), {
+            ownerId: currentUserId, customerId: null, customerName: "Walk-in", saleType: 'manual',
+            date: new Date().toISOString(), items: [{ name, price: amount, cost: amount - totalProfit, qty: 1 }],
+            total: amount, amountPaid: amount, amountDue: 0, totalProfit, profitKnown, note: "Manual entry"
+        });
+        alert("Manual sale recorded!");
+        navigate('dashboard');
+    } catch (error) {
+        console.error(error);
+        alert("Failed to record sale.");
+    } finally {
+        hideLoading('btn-manual-sale');
+    }
+};
+
+window.completeBulkSale = async () => {
+    const customerId = document.getElementById('bulk-customer').value || null;
+    const total = parseFloat(document.getElementById('bulk-total').value);
+    const profitInput = document.getElementById('bulk-profit').value;
+    const amountPaid = parseFloat(document.getElementById('bulk-paid').value) || 0;
+    const note = document.getElementById('bulk-note').value.trim();
+
+    if (isNaN(total) || total <= 0) return alert("Please enter a valid total amount.");
+
+    const btn = document.getElementById('btn-bulk-sale');
+    showLoading('btn-bulk-sale', "Saving...");
+
+    try {
+        const profitKnown = profitInput !== "";
+        const totalProfit = profitKnown ? parseFloat(profitInput) : 0;
+        const amountDue = Math.max(0, total - amountPaid);
+        
+        let customerName = "Walk-in";
+        if (customerId) {
+            const c = data.customers.find(x => x.id === customerId);
+            if (c) customerName = c.name;
+        }
+
+        const saleData = {
+            ownerId: currentUserId, customerId, customerName, saleType: 'bulk',
+            date: new Date().toISOString(), items: [], total, amountPaid, amountDue, totalProfit, profitKnown, note
+        };
+
+        await runTransaction(db, async (transaction) => {
+            const saleRef = doc(collection(db, "sales"));
+            transaction.set(saleRef, saleData);
+
+            if (customerId && amountDue > 0) {
+                const customerRef = doc(db, "customers", customerId);
+                const customerSnap = await transaction.get(customerRef);
+                const currentBalance = customerSnap.data().balance || 0;
+                const newBalance = currentBalance + amountDue;
+                transaction.update(customerRef, { balance: newBalance });
+                
+                const txnRef = doc(collection(db, "customerTransactions"));
+                transaction.set(txnRef, {
+                    ownerId: currentUserId, customerId, type: 'sale_debt',
+                    amount: amountDue, balanceAfter: newBalance,
+                    date: new Date().toISOString(), note: `Bulk Sale #${saleRef.id.substring(0,8)}`, saleId: saleRef.id
+                });
+            }
+        });
+        alert("Bulk sale recorded!");
+        navigate('dashboard');
+    } catch (error) {
+        console.error(error);
+        alert("Failed to record bulk sale.");
+    } finally {
+        hideLoading('btn-bulk-sale');
+    }
+};
+
+// --- INVENTORY ---
 function renderInventory(container) {
     container.innerHTML = `
         <button class="btn" style="margin-bottom:20px;" onclick="openProductModal()">+ Add Product</button>
         <div class="card" id="product-list">
-            ${data.products.map(p => `
+            ${data.products.length === 0 ? '<p style="color:var(--gray); text-align:center; padding:10px;">No products found.</p>' :
+              data.products.map(p => `
                 <div class="list-item">
                     <div class="list-item-info">
                         <h4>${p.name}</h4>
-                        <p>Stock: ${p.stock} | Price: $${p.price}</p>
+                        <p>Cost: ${formatCurrency(p.cost)} | Price: ${formatCurrency(p.price)}</p>
+                        <p>Stock: ${p.stock}</p>
                     </div>
-                    <span class="badge ${p.stock <= (p.minStock||5) ? 'badge-low' : 'badge-ok'}">${p.stock <= (p.minStock||5) ? 'Low' : 'OK'}</span>
+                    <div style="display:flex; flex-direction:column; gap:8px; align-items:flex-end;">
+                        <span class="badge ${p.stock <= (p.minStock||5) ? 'badge-low' : 'badge-ok'}">${p.stock <= (p.minStock||5) ? 'Low Stock' : 'OK'}</span>
+                        <div style="display:flex; gap:5px;">
+                            <button class="btn btn-sm btn-secondary" onclick="openStockAdjustModal('${p.id}')">Adjust</button>
+                            <button class="btn btn-sm" onclick="openProductModal('${p.id}')">Edit</button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteProduct('${p.id}')">Delete</button>
+                        </div>
+                    </div>
                 </div>
-            `).join('') || '<p style="color:var(--gray); text-align:center;">No products found.</p>'}
+            `).join('')}
         </div>
     `;
 }
 
+window.openProductModal = (productId = null) => {
+    const p = productId ? data.products.find(x => x.id === productId) : null;
+    const modal = document.getElementById('modal-body');
+    modal.innerHTML = `
+        <div class="modal-header"><h2>${p ? 'Edit' : 'Add'} Product</h2><button class="close-btn" onclick="closeModal()">&times;</button></div>
+        <div class="form-group"><label>Product Name *</label><input type="text" id="p-name" value="${p ? p.name : ''}"></div>
+        <div class="form-row">
+            <div class="form-group"><label>Cost Price (Rs.) *</label><input type="number" id="p-cost" step="0.01" min="0" value="${p ? p.cost : ''}"></div>
+            <div class="form-group"><label>Selling Price (Rs.) *</label><input type="number" id="p-price" step="0.01" min="0" value="${p ? p.price : ''}"></div>
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label>Current Stock *</label><input type="number" id="p-stock" min="0" value="${p ? p.stock : ''}"></div>
+            <div class="form-group"><label>Min Stock Alert</label><input type="number" id="p-min" min="0" value="${p ? (p.minStock||5) : 5}"></div>
+        </div>
+        <button class="btn" id="btn-save-product" onclick="saveProduct('${productId || ''}')">${p ? 'Update' : 'Save'} Product</button>
+    `;
+    document.getElementById('modal-overlay').classList.remove('hidden');
+};
+
+window.saveProduct = async (productId) => {
+    const name = document.getElementById('p-name').value.trim();
+    const cost = parseFloat(document.getElementById('p-cost').value);
+    const price = parseFloat(document.getElementById('p-price').value);
+    const stock = parseInt(document.getElementById('p-stock').value);
+    const minStock = parseInt(document.getElementById('p-min').value) || 5;
+
+    if (!name || isNaN(cost) || isNaN(price) || isNaN(stock)) return alert("Please fill all required fields with valid numbers.");
+    if (cost < 0 || price < 0 || stock < 0) return alert("Values cannot be negative.");
+
+    showLoading('btn-save-product', "Saving...");
+    try {
+        const pData = { name, cost, price, stock, minStock, ownerId: currentUserId };
+        if (productId) {
+            await updateDoc(doc(db, "products", productId), pData);
+        } else {
+            await addDoc(collection(db, "products"), pData);
+        }
+        alert(productId ? "Product updated!" : "Product added!");
+        closeModal();
+    } catch (error) {
+        console.error(error);
+        alert("Failed to save product.");
+    } finally {
+        hideLoading('btn-save-product');
+    }
+};
+
+window.deleteProduct = async (id) => {
+    if (!confirm("Are you sure you want to delete this product? This cannot be undone.")) return;
+    try {
+        await deleteDoc(doc(db, "products", id));
+    } catch (error) {
+        console.error(error);
+        alert("Failed to delete product.");
+    }
+};
+
+window.openStockAdjustModal = (productId) => {
+    const p = data.products.find(x => x.id === productId);
+    const modal = document.getElementById('modal-body');
+    modal.innerHTML = `
+        <div class="modal-header"><h2>Adjust Stock: ${p.name}</h2><button class="close-btn" onclick="closeModal()">&times;</button></div>
+        <p style="margin-bottom:15px; color:var(--gray);">Current Stock: <strong>${p.stock}</strong></p>
+        <div class="form-group">
+            <label>Action</label>
+            <select id="adj-type">
+                <option value="add">Add Stock</option>
+                <option value="remove">Remove Stock</option>
+            </select>
+        </div>
+        <div class="form-group"><label>Quantity</label><input type="number" id="adj-qty" min="1" value="1"></div>
+        <div class="form-group"><label>Note (Optional)</label><input type="text" id="adj-note" placeholder="e.g., Received from supplier"></div>
+        <button class="btn" id="btn-save-adj" onclick="saveStockAdjustment('${productId}')">Update Stock</button>
+    `;
+    document.getElementById('modal-overlay').classList.remove('hidden');
+};
+
+window.saveStockAdjustment = async (productId) => {
+    const type = document.getElementById('adj-type').value;
+    const qty = parseInt(document.getElementById('adj-qty').value);
+    const note = document.getElementById('adj-note').value.trim();
+
+    if (!qty || qty <= 0) return alert("Please enter a valid quantity.");
+    
+    const p = data.products.find(x => x.id === productId);
+    if (type === 'remove' && p.stock - qty < 0) return alert("Cannot reduce stock below zero.");
+
+    showLoading('btn-save-adj', "Updating...");
+    try {
+        const newStock = type === 'add' ? p.stock + qty : p.stock - qty;
+        await updateDoc(doc(db, "products", productId), { stock: newStock });
+        
+        await addDoc(collection(db, "stockAdjustments"), {
+            ownerId: currentUserId, productId, type, quantity: qty,
+            date: new Date().toISOString(), note: note || `${type === 'add' ? 'Added' : 'Removed'} stock`
+        });
+        alert("Stock updated successfully!");
+        closeModal();
+    } catch (error) {
+        console.error(error);
+        alert("Failed to update stock.");
+    } finally {
+        hideLoading('btn-save-adj');
+    }
+};
+
+// --- CUSTOMERS ---
 function renderCustomers(container) {
     container.innerHTML = `
         <button class="btn" style="margin-bottom:20px;" onclick="openCustomerModal()">+ Add Customer</button>
         <div class="card" id="customer-list">
-            ${data.customers.map(c => `
+            ${data.customers.length === 0 ? '<p style="color:var(--gray); text-align:center; padding:10px;">No customers found.</p>' : 
+              data.customers.map(c => `
                 <div class="list-item">
                     <div class="list-item-info">
                         <h4>${c.name}</h4>
-                        <p>${c.phone || 'No phone'}</p>
+                        <p>${c.phone || 'No phone'} | Debt: <span style="color:var(--danger); font-weight:bold;">${formatCurrency(c.balance || 0)}</span></p>
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:8px; align-items:flex-end;">
+                        <button class="btn btn-sm" onclick="openCustomerLedger('${c.id}')">Ledger</button>
+                        <div style="display:flex; gap:5px;">
+                            <button class="btn btn-sm btn-secondary" onclick="openAddDebtModal('${c.id}')">+ Debt</button>
+                            <button class="btn btn-sm btn-secondary" onclick="openRecordPaymentModal('${c.id}')">Payment</button>
+                       0</div>
                     </div>
                 </div>
-            `).join('') || '<p style="color:var(--gray); text-align:center;">No customers found.</p>'}
+            `).join('')}
         </div>
     `;
 }
 
-function renderSaleForm(container) {
-    container.innerHTML = `
-        <div class="card">
-            <div class="form-group">
-                <label>Customer</label>
-                <select id="sale-customer">
-                    <option value="Walk-in">Walk-in Customer</option>
-                    ${data.customers.map(c => `<option value="${c.name}">${c.name}</option>`).join('')}
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Product</label>
-                <select id="sale-product">
-                    <option value="">Select Product</option>
-                    ${data.products.map(p => `<option value="${p.id}" data-price="${p.price}" data-cost="${p.cost}" data-stock="${p.stock}">${p.name} (Stock: ${p.stock})</option>`).join('')}
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Quantity</label>
-                <input type="number" id="sale-qty" value="1" min="1">
-            </div>
-            <button class="btn" onclick="addSaleItem()">Add to Cart</button>
+window.openCustomerModal = (customerId = null) => {
+    const c = customerId ? data.customers.find(x => x.id === customerId) : null;
+    const modal = document.getElementById('modal-body');
+    modal.innerHTML = `
+        <div class="modal-header"><h2>${c ? 'Edit' : 'Add'} Customer</h2><button class="close-btn" onclick="closeModal()">&times;</button></div>
+        <div class="form-group"><label>Customer Name *</label><input type="text" id="c-name" value="${c ? c.name : ''}"></div>
+        <div class="form-group"><label>Phone / Contact</label><input type="text" id="c-phone" value="${c ? (c.phone || '') : ''}"></div>
+        <div class="form-group"><label>Notes</label><textarea id="c-notes" rows="2" style="width:100%; padding:12px; border:1px solid #ddd; border-radius:8px;">${c ? (c.notes || '') : ''}</textarea></div>
+        <button class="btn" id="btn-save-customer" onclick="saveCustomer('${customerId || ''}')">${c ? 'Update' : 'Save'} Customer</button>
+    `;
+    document.getElementById('modal-overlay').classList.remove('hidden');
+};
+
+window.saveCustomer = async (customerId) => {
+    const name = document.getElementById('c-name').value.trim();
+    const phone = document.getElementById('c-phone').value.trim();
+    const notes = document.getElementById('c-notes').value.trim();
+
+    if (!name) return alert("Customer name is required.");
+
+    showLoading('btn-save-customer', "Saving...");
+    try {
+        const cData = { name, phone, notes, ownerId: currentUserId };
+        if (customerId) {
+            await updateDoc(doc(db, "customers", customerId), cData);
+        } else {
+            cData.balance = 0;
+            await addDoc(collection(db, "customers"), cData);
+        }
+        alert(customerId ? "Customer updated!" : "Customer added!");
+        closeModal();
+    } catch (error) {
+        console.error(error);
+        alert("Unable to save customer.");
+    } finally {
+        hideLoading('btn-save-customer');
+    }
+};
+
+window.openCustomerLedger = (customerId) => {
+    const c = data.customers.find(x => x.id === customerId);
+    const txns = data.customerTransactions.filter(t => t.customerId === customerId).sort((a,b) => new Date(b.date) - new Date(a.date));
+    
+    const modal = document.getElementById('modal-body');
+    modal.innerHTML = `
+        <div class="modal-header"><h2>Ledger: ${c.name}</h2><button class="close-btn" onclick="closeModal()">&times;</button></div>
+        <div style="background:#f8f9fa; padding:15px; border-radius:8px; margin-bottom:15px; text-align:center;">
+            <div style="font-size:14px; color:var(--gray);">Current Balance</div>
+            <div style="font-size:28px; font-weight:bold; color:var(--danger);">${formatCurrency(c.balance || 0)}</div>
         </div>
-        <div class="card">
-            <h3>Cart</h3>
-            <div id="cart-items"></div>
-            <hr style="margin:15px 0;">
-            <div style="display:flex; justify-content:space-between; font-size:18px; font-weight:bold;">
-                <span>Total:</span>
-                <span id="cart-total">$0.00</span>
-            </div>
-            <button class="btn" style="margin-top:15px;" onclick="completeSale()">Complete Sale</button>
+        <div style="max-height:300px; overflow-y:auto;">
+            <table class="ledger-table">
+                <thead><tr><th>Date</th><th>Description</th><th class="text-right">Amount</th><th class="text-right">Balance</th></tr></thead>
+                <tbody>
+                    ${txns.length === 0 ? '<tr><td colspan="4" style="text-align:center; color:var(--gray);">No transactions</td></tr>' : 
+                      txns.map(t => `
+                        <tr>
+                            <td>${new Date(t.date).toLocaleDateString()}</td>
+                            <td>${t.note || t.type}<br><small style="color:var(--gray);">${t.type === 'payment' ? 'Payment Received' : 'Debt Added'}</small></td>
+                            <td class="text-right ${t.type === 'payment' ? 'text-success' : 'text-danger'}">${t.type === 'payment' ? '-' : '+'}${formatCurrency(t.amount)}</td>
+                            <td class="text-right">${formatCurrency(t.balanceAfter)}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
         </div>
     `;
-    window.cart = [];
-}
+    document.getElementById('modal-overlay').classList.remove('hidden');
+};
 
-function renderSettings(container) {
+window.openAddDebtModal = (customerId) => {
+    const c = data.customers.find(x => x.id === customerId);
+    const modal = document.getElementById('modal-body');
+    modal.innerHTML = `
+        <div class="modal-header"><h2>Add Debt: ${c.name}</h2><button class="close-btn" onclick="closeModal()">&times;</button></div>
+        <p style="margin-bottom:15px;">Current Debt: <strong>${formatCurrency(c.balance || 0)}</strong></p>
+        <div class="form-group"><label>Amount to Add (Rs.) *</label><input type="number" id="debt-amount" min="1"></div>
+        <div class="form-group"><label>Reason / Note</label><input type="text" id="debt-note" placeholder="e.g., Borrowed cash"></div>
+        <button class="btn" id="btn-add-debt" onclick="addCustomerDebt('${customerId}')">Add Debt</button>
+    `;
+    document.getElementById('modal-overlay').classList.remove('hidden');
+};
+
+window.addCustomerDebt = async (customerId) => {
+    const amount = parseFloat(document.getElementById('debt-amount').value);
+    const note = document.getElementById('debt-note').value.trim();
+    if (!amount || amount <= 0) return alert("Please enter a valid amount.");
+
+    showLoading('btn-add-debt', "Processing...");
+    try {
+        const c = data.customers.find(x => x.id === customerId);
+        const newBalance = (c.balance || 0) + amount;
+        
+        await runTransaction(db, async (transaction) => {
+            transaction.update(doc(db, "customers", customerId), { balance: newBalance });
+            const txnRef = doc(collection(db, "customerTransactions"));
+            transaction.set(txnRef, {
+                ownerId: currentUserId, customerId, type: 'manual_debt',
+                amount, balanceAfter: newBalance, date: new Date().toISOString(), note: note || 'Manual debt addition'
+            });
+        });
+        alert("Debt added successfully!");
+        closeModal();
+    } catch (error) {
+        console.error(error);
+        alert("Failed to add debt.");
+    } finally {
+        hideLoading('btn-add-debt');
+    }
+};
+
+window.openRecordPaymentModal = (customerId) => {
+    const c = data.customers.find(x => x.id === customerId);
+    const modal = document.getElementById('modal-body');
+    modal.innerHTML = `
+        <div class="modal-header"><h2>Record Payment: ${c.name}</h2><button class="close-btn" onclick="closeModal()">&times;</button></div>
+        <p style="margin-bottom:15px;">Current Debt: <strong>${formatCurrency(c.balance || 0)}</strong></p>
+        <div class="form-group"><label>Amount Paid (Rs.) *</label><input type="number" id="pay-amount" min="1" max="${c.balance || 0}"></div>
+        <div class="form-group"><label>Note</label><input type="text" id="pay-note" placeholder="e.g., Cash payment"></div>
+        <button class="btn" id="btn-record-payment" onclick="recordCustomerPayment('${customerId}')">Record Payment</button>
+    `;
+    document.getElementById('modal-overlay').classList.remove('hidden');
+};
+
+window.recordCustomerPayment = async (customerId) => {
+    const amount = parseFloat(document.getElementById('pay-amount').value);
+    const note = document.getElementById('pay-note').value.trim();
+    const c = data.customers.find(x => x.id === customerId);
+    
+    if (!amount || amount <= 0) return alert("Please enter a valid amount.");
+    if (amount > (c.balance || 0)) return alert("Payment amount cannot exceed current debt.");
+
+    showLoading('btn-record-payment', "Processing...");
+    try {
+        const newBalance = Math.max(0, (c.balance || 0) - amount);
+        
+        await runTransaction(db, async (transaction) => {
+            transaction.update(doc(db, "customers", customerId), { balance: newBalance });
+            const txnRef = doc(collection(db, "customerTransactions"));
+            transaction.set(txnRef, {
+                ownerId: currentUserId, customerId, type: 'payment',
+                amount, balanceAfter: newBalance, date: new Date().toISOString(), note: note || 'Payment received'
+            });
+        });
+        alert("Payment recorded successfully!");
+        closeModal();
+    } catch (error) {
+        console.error(error);
+        alert("Failed to record payment.");
+    } finally {
+        hideLoading('btn-record-payment');
+    }
+};
+
+// --- MORE / SETTINGS / REPORTS ---
+function renderMore(container) {
+    const userEmail = auth.currentUser ? auth.currentUser.email : 'Not logged in';
+    const isEmailUser = auth.currentUser && auth.currentUser.providerData.some(p => p.providerId === 'password');
+    
     container.innerHTML = `
         <div class="card">
             <h3>Business Settings</h3>
             <div class="form-group"><label>Business Name</label><input type="text" id="set-name" value="${data.settings.name || ''}"></div>
-            <div class="form-group"><label>Currency Symbol</label><input type="text" id="set-currency" value="${data.settings.currency || '$'}"></div>
-            <button class="btn" onclick="saveSettings()">Save Settings</button>
+            <div class="form-group"><label>Currency Symbol</label><input type="text" id="set-currency" value="${data.settings.currency || 'Rs.'}"></div>
+            <button class="btn" id="btn-save-settings" onclick="saveSettings()">Save Settings</button>
         </div>
+        ${isEmailUser ? `
+        <div class="card">
+            <h3>Account Security</h3>
+            <p style="margin-bottom:10px; font-size:14px; color:var(--gray);">Logged in as: ${userEmail}</p>
+            <button class="btn" style="background:var(--dark); margin-bottom:10px;" onclick="openChangePasswordModal()">Change Password</button>
+        </div>
+        ` : `
         <div class="card">
             <h3>Account</h3>
-            <p style="margin-bottom:10px;">Logged in as: ${auth.currentUser ? auth.currentUser.email : 'Not logged in'}</p>
+            <p style="margin-bottom:10px; font-size:14px; color:var(--gray);">Logged in via Google as: ${userEmail}</p>
+            <p style="font-size:12px; color:var(--gray);">Password management is handled by your Google account.</p>
+        </div>
+        `}
+        <div class="card">
+            <h3>Reports</h3>
+            <p style="font-size:14px; color:var(--gray); margin-bottom:15px;">View detailed financial reports and filter by date.</p>
+            <button class="btn" onclick="navigate('dashboard')">View Dashboard Summary</button>
+        </div>
+        <div class="card">
             <button class="btn btn-danger" onclick="handleLogout()">Logout</button>
         </div>
     `;
 }
 
-// --- ACTIONS ---
-window.openProductModal = () => {
+window.saveSettings = async () => {
+    const name = document.getElementById('set-name').value.trim();
+    const currency = document.getElementById('set-currency').value.trim() || 'Rs.';
+    showLoading('btn-save-settings', "Saving...");
+    try {
+        await setDoc(doc(db, "settings", currentUserId), { name, currency, ownerId: currentUserId }, { merge: true });
+        data.settings = { name, currency };
+        alert("Settings saved!");
+    } catch (error) {
+        console.error(error);
+        alert("Failed to save settings.");
+    } finally {
+        hideLoading('btn-save-settings');
+    }
+};
+
+window.openChangePasswordModal = () => {
     const modal = document.getElementById('modal-body');
     modal.innerHTML = `
-        <div class="modal-header"><h2>Add Product</h2><button class="close-btn" onclick="closeModal()">&times;</button></div>
-        <div class="form-group"><label>Name</label><input type="text" id="p-name"></div>
-        <div class="form-group"><label>Cost Price</label><input type="number" id="p-cost" step="0.01"></div>
-        <div class="form-group"><label>Selling Price</label><input type="number" id="p-price" step="0.01"></div>
-        <div class="form-group"><label>Stock</label><input type="number" id="p-stock"></div>
-        <div class="form-group"><label>Min Stock Alert</label><input type="number" id="p-min" value="5"></div>
-        <button class="btn" onclick="saveProduct()">Save Product</button>
+        <div class="modal-header"><h2>Change Password</h2><button class="close-btn" onclick="closeModal()">&times;</button></div>
+        <div class="form-group"><label>Current Password</label><input type="password" id="cp-current"></div>
+        <div class="form-group"><label>New Password</label><input type="password" id="cp-new"></div>
+        <div class="form-group"><label>Confirm New Password</label><input type="password" id="cp-confirm"></div>
+        <button class="btn" id="btn-cp-submit" onclick="changePassword()">Update Password</button>
     `;
     document.getElementById('modal-overlay').classList.remove('hidden');
 };
 
-window.saveProduct = async () => {
-    const name = document.getElementById('p-name').value;
-    const cost = parseFloat(document.getElementById('p-cost').value);
-    const price = parseFloat(document.getElementById('p-price').value);
-    const stock = parseInt(document.getElementById('p-stock').value);
-    const minStock = parseInt(document.getElementById('p-min').value);
+window.changePassword = async () => {
+    const current = document.getElementById('cp-current').value;
+    const newPass = document.getElementById('cp-new').value;
+    const confirm = document.getElementById('cp-confirm').value;
 
-    if(!name || isNaN(cost) || isNaN(price) || isNaN(stock)) return alert("Please fill all fields.");
+    if (!current || !newPass || !confirm) return alert("All fields are required.");
+    if (newPass.length < 6) return alert("New password must be at least 6 characters.");
+    if (newPass !== confirm) return alert("New passwords do not match.");
 
-    await addDoc(collection(db, "products"), { name, cost, price, stock, minStock, ownerId: currentUserId });
-    closeModal();
-};
-
-window.addSaleItem = () => {
-    const select = document.getElementById('sale-product');
-    const qty = parseInt(document.getElementById('sale-qty').value);
-    const option = select.options[select.selectedIndex];
-    
-    if(!option.value || qty < 1) return alert("Invalid product or quantity.");
-    if(qty > parseInt(option.dataset.stock)) return alert("Not enough stock!");
-
-    const item = {
-        id: option.value,
-        name: option.text.split(' (')[0],
-        price: parseFloat(option.dataset.price),
-        cost: parseFloat(option.dataset.cost),
-        qty: qty
-    };
-    window.cart.push(item);
-    renderCart();
-};
-
-function renderCart() {
-    const container = document.getElementById('cart-items');
-    let total = 0;
-    container.innerHTML = window.cart.map((item, index) => {
-        const sub = item.price * item.qty;
-        total += sub;
-        return `<div class="list-item">
-            <div class="list-item-info"><h4>${item.name} x${item.qty}</h4></div>
-            <div>$${sub.toFixed(2)} <i class="fas fa-trash" style="color:var(--danger); margin-left:10px; cursor:pointer;" onclick="removeCartItem(${index})"></i></div>
-        </div>`;
-    }).join('');
-    document.getElementById('cart-total').innerText = `$${total.toFixed(2)}`;
-}
-
-window.removeCartItem = (index) => { window.cart.splice(index, 1); renderCart(); };
-
-window.completeSale = async () => {
-    if(window.cart.length === 0) return alert("Cart is empty!");
-    
-    const customer = document.getElementById('sale-customer').value;
-    let total = 0, profit = 0;
-    const stockUpdates = [];
-
-    window.cart.forEach(item => {
-        total += item.price * item.qty;
-        profit += (item.price - item.cost) * item.qty;
-        stockUpdates.push({ id: item.id, newStock: data.products.find(p => p.id === item.id).stock - item.qty });
-    });
-
-    await addDoc(collection(db, "sales"), {
-        date: new Date().toISOString(),
-        customer, items: window.cart, total, profit, ownerId: currentUserId
-    });
-
-    const updates = stockUpdates.map(u => updateDoc(doc(db, "products", u.id), { stock: u.newStock }));
-    await Promise.all(updates);
-
-    alert("Sale Completed!");
-    window.cart = [];
-    navigate('dashboard');
-};
-
-window.saveSettings = async () => {
-    const name = document.getElementById('set-name').value;
-    const currency = document.getElementById('set-currency').value;
-    await addDoc(collection(db, "settings"), { name, currency, ownerId: currentUserId });
-    alert("Settings Saved!");
+    showLoading('btn-cp-submit', "Updating...");
+    try {
+        const user = auth.currentUser;
+        const credential = EmailAuthProvider.credential(user.email, current);
+        await reauthenticateWithCredential(user, credential);
+        await updatePassword(user, newPass);
+        alert("Password updated successfully!");
+        closeModal();
+    } catch (error) {
+        console.error(error);
+        if (error.code === 'auth/wrong-password') alert("Current password is incorrect.");
+        else if (error.code === 'auth/requires-recent-login') alert("For security, please log out and log back in before changing your password.");
+        else alert("Failed to update password.");
+    } finally {
+        hideLoading('btn-cp-submit');
+    }
 };
 
 // --- MODAL UTILS ---
 window.closeModal = (e) => {
-    if(!e || e.target.id === 'modal-overlay' || e.target.classList.contains('close-btn')) {
+    if (!e || e.target.id === 'modal-overlay' || e.target.classList.contains('close-btn')) {
         document.getElementById('modal-overlay').classList.add('hidden');
     }
 };

@@ -3,75 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="google-site-verification" content="_c68rU0ZyyUzXpVN5IY_Ht4t4tnx1uWddtuzNv7SOo8" />    
-    <!-- SEO: Title & Description -->
     <title>Business Management System | Inventory, Sales & Shop Management</title>
-    <meta name="description" content="A professional business management system for shop owners. Securely track inventory, manage daily sales, monitor profits, and handle customer management in one easy-to-use platform.">
-    <meta name="robots" content="index, follow">
-    <meta name="theme-color" content="#2c3e50">
-    
-    <!-- SEO: Canonical URL -->
+    <meta name="description" content="Professional business management system for shop owners. Track inventory, manage daily sales, monitor profits, and handle customer debt securely.">
     <link rel="canonical" href="https://mybusiness-green.vercel.app/">
-    
-    <!-- SEO: Open Graph / Facebook -->
-    <meta property="og:type" content="website">
-    <meta property="og:url" content="https://mybusiness-green.vercel.app/">
-    <meta property="og:title" content="Business Management System | Inventory & Sales Management">
-    <meta property="og:description" content="Securely track inventory, manage daily sales, monitor profits, and handle customer management in one easy-to-use platform.">
-    <meta property="og:site_name" content="Business Management System">
-    <!-- NOTE: Replace 'og-image.jpg' with an actual 1200x630px screenshot of your app dashboard -->
-    <meta property="og:image" content="https://mybusiness-green.vercel.app/og-image.jpg">
-
-    <!-- SEO: Twitter / X Card -->
-    <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:url" content="https://mybusiness-green.vercel.app/">
-    <meta name="twitter:title" content="Business Management System | Inventory & Sales Management">
-    <meta name="twitter:description" content="Securely track inventory, manage daily sales, monitor profits, and handle customer management in one easy-to-use platform.">
-    <meta name="twitter:image" content="https://mybusiness-green.vercel.app/og-image.jpg">
-
-    <!-- SEO: Favicon (Ensure you upload favicon.ico or favicon.png to your root folder) -->
-    <link rel="icon" type="image/png" href="/favicon.png">
-    <link rel="icon" type="image/x-icon" href="/favicon.ico">
-
-    <!-- Styles -->
     <link rel="stylesheet" href="style.css">
-    <!-- Font Awesome for Icons (with integrity for security/performance) -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer">
-
-    <!-- SEO: Structured Data (JSON-LD) -->
-    <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "SoftwareApplication",
-      "name": "Business Management System",
-      "applicationCategory": "BusinessApplication",
-      "operatingSystem": "Web",
-      "description": "A professional business management system for shop owners to track inventory, manage sales, monitor daily profit, and handle customer management securely.",
-      "url": "https://mybusiness-green.vercel.app/"
-    }
-    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous">
+    <link rel="icon" type="image/png" href="/favicon.png">
 </head>
 <body>
 
-    <!-- PUBLIC LANDING & LOGIN SCREEN (Indexable by Search Engines) -->
-    <div id="login-screen">
+    <!-- AUTH SCREEN -->
+    <div id="auth-screen">
         <div class="landing-container">
-            <!-- SEO: Semantic Heading Structure for Public Content -->
             <div class="landing-text">
-                <h1>Professional Business & Shop Management System</h1>
-                <p>Streamline your operations with a secure, all-in-one platform designed for modern business owners.</p>
-                <ul class="feature-list">
-                    <li><i class="fas fa-boxes-stacked" aria-hidden="true"></i> Real-time Inventory & Stock Tracking</li>
-                    <li><i class="fas fa-chart-line" aria-hidden="true"></i> Daily Sales & Net Profit Reports</li>
-                    <li><i class="fas fa-users" aria-hidden="true"></i> Customer Directory & Debt Management</li>
-                </ul>
+                <h1>Professional Shop & Business Management</h1>
+                <p>Track inventory, manage sales, monitor daily profit, and handle customer debt (udhaar) securely in one easy-to-use platform.</p>
             </div>
-
-            <!-- Login / Auth Box -->
             <div class="login-box">
-                <h2>🔒 Access Your Dashboard</h2>
+                <h2>🔒 Access Dashboard</h2>
                 <div id="login-error" class="error-msg" role="alert"></div>
-                
                 <form id="auth-form" onsubmit="event.preventDefault(); handleAuth();">
                     <div class="form-group">
                         <label for="login-email" class="sr-only">Email Address</label>
@@ -83,64 +33,53 @@
                     </div>
                     <button type="submit" id="auth-button">Log In</button>
                 </form>
-                
+                <div style="text-align: right; margin-bottom: 15px;">
+                    <a href="#" onclick="forgotPassword(event)" style="font-size: 13px; color: var(--primary); text-decoration: none;">Forgot password?</a>
+                </div>
                 <div class="divider">OR</div>
-                
                 <button type="button" class="google-btn" onclick="signInWithGoogle()" aria-label="Sign in with Google">
-                    <i class="fab fa-google" aria-hidden="true"></i> Sign in with Google
+                    <i class="fab fa-google"></i> Sign in with Google
                 </button>
-
                 <div class="toggle-text" id="toggle-auth" onclick="toggleAuthMode()" role="button" tabindex="0">Don't have an account? Sign Up</div>
             </div>
         </div>
     </div>
 
-    <!-- MAIN APP (Hidden until logged in, protected by Firebase Auth) -->
+    <!-- MAIN APP -->
     <div id="main-app" class="hidden">
         <header class="app-header">
             <h1 id="header-title">Dashboard</h1>
-            <button class="btn-icon" onclick="handleLogout()" aria-label="Logout of application">
-                <i class="fas fa-sign-out-alt" aria-hidden="true"></i>
+            <button class="btn-icon" onclick="handleLogout()" aria-label="Logout">
+                <i class="fas fa-sign-out-alt"></i>
             </button>
         </header>
 
-        <main id="app-content" role="main">
-            <!-- Dynamic Content Loads Here -->
-        </main>
+        <main id="app-content" role="main"></main>
 
-        <!-- BOTTOM NAVIGATION -->
-        <nav class="bottom-nav" role="navigation" aria-label="Main application navigation">
-            <button class="nav-item active" onclick="navigate('dashboard')" aria-current="page">
-                <i class="fas fa-chart-line" aria-hidden="true"></i>
-                <span>Home</span>
+        <nav class="bottom-nav" role="navigation" aria-label="Main navigation">
+            <button class="nav-item active" data-page="dashboard" onclick="navigate('dashboard')" aria-current="page">
+                <i class="fas fa-chart-line"></i><span>Home</span>
             </button>
-            <button class="nav-item" onclick="navigate('sales')">
-                <i class="fas fa-cash-register" aria-hidden="true"></i>
-                <span>Sale</span>
+            <button class="nav-item" data-page="sales" onclick="navigate('sales')">
+                <i class="fas fa-cash-register"></i><span>Sale</span>
             </button>
-            <button class="nav-item" onclick="navigate('inventory')">
-                <i class="fas fa-boxes-stacked" aria-hidden="true"></i>
-                <span>Stock</span>
+            <button class="nav-item" data-page="inventory" onclick="navigate('inventory')">
+                <i class="fas fa-boxes-stacked"></i><span>Stock</span>
             </button>
-            <button class="nav-item" onclick="navigate('customers')">
-                <i class="fas fa-users" aria-hidden="true"></i>
-                <span>People</span>
+            <button class="nav-item" data-page="customers" onclick="navigate('customers')">
+                <i class="fas fa-users"></i><span>People</span>
             </button>
-            <button class="nav-item" onclick="navigate('settings')">
-                <i class="fas fa-cog" aria-hidden="true"></i>
-                <span>More</span>
+            <button class="nav-item" data-page="more" onclick="navigate('more')">
+                <i class="fas fa-ellipsis-h"></i><span>More</span>
             </button>
         </nav>
     </div>
 
     <!-- MODAL CONTAINER -->
-    <div id="modal-overlay" class="modal-overlay hidden" onclick="closeModal(event)" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-        <div class="modal-content" id="modal-body">
-            <!-- Modal content injected here -->
-        </div>
+    <div id="modal-overlay" class="modal-overlay hidden" onclick="closeModal(event)" role="dialog" aria-modal="true">
+        <div class="modal-content" id="modal-body"></div>
     </div>
 
-    <!-- FIREBASE SDK -->
     <script type="module" src="app.js"></script>
 </body>
 </html>
