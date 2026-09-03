@@ -7,7 +7,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
     getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, setDoc,
-    onSnapshot, query, where, runTransaction
+    onSnapshot, query, where, runTransaction, getDocs
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -236,10 +236,11 @@ function calculateReportData(startDate, endDate) {
 
 // --- RENDER FUNCTIONS ---
 function renderDashboard(container) {
-    const dayStartStr = data.settings.businessDayStart || getStartOfDay(new Date()).toISOString();
-    const stats = calculateReportData(new Date(dayStartStr), new Date());
+    // AUTOMATIC DAILY CALCULATION (Midnight to Midnight)
+    const startOfDay = getStartOfDay(new Date());
+    const endOfDay = getEndOfDay(new Date());
+    const stats = calculateReportData(startOfDay, endOfDay);
     
-    // FIX: Calculate TOTAL expenses and stock purchases so they always show on home page
     const totalExpensesAll = data.expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
     const totalStockPurchasesAll = data.stockPurchases.reduce((sum, p) => sum + (p.amount || 0), 0);
     const sortedSales = [...data.sales].sort((a,b) => new Date(a.date) - new Date(b.date)).reverse();
@@ -504,7 +505,6 @@ window.completeManualSale = async () => {
             total: amount, amountPaid: amount, amountDue: 0, totalProfit, profitKnown, note: "Manual entry"
         });
         alert("Manual sale recorded!");
-        cart = [];
         navigate('dashboard');
     } catch (error) {
         console.error(error);
@@ -557,7 +557,6 @@ window.completeBulkSale = async () => {
             }
         });
         alert("Bulk sale recorded!");
-        cart = [];
         navigate('dashboard');
     } catch (error) {
         console.error(error);
@@ -744,7 +743,6 @@ window.saveCustomer = async (customerId) => {
     } finally { hideLoading('btn-save-customer'); }
 };
 
-// FIXED: Removed spaces in arrow functions that were crashing the app
 window.openCustomerLedger = (customerId) => {
     const c = data.customers.find(x => x.id === customerId);
     const txns = data.customerTransactions.filter(t => t.customerId === customerId).sort((a,b) => new Date(b.date) - new Date(a.date));
@@ -991,9 +989,9 @@ window.deleteStockPurchase = async (id) => {
 function renderReports(container) {
     let startDate, endDate;
     if (activeReportTab === 'daily') {
-        const dayStartStr = data.settings.businessDayStart || getStartOfDay(new Date()).toISOString();
-        startDate = new Date(dayStartStr);
-        endDate = new Date();
+        // AUTOMATIC DAILY CALCULATION
+        startDate = getStartOfDay(new Date());
+        endDate = getEndOfDay(new Date());
     } else if (activeReportTab === 'monthly') {
         startDate = getStartOfMonth(currentReportMonth);
         endDate = getEndOfMonth(currentReportMonth);
@@ -1019,8 +1017,8 @@ function renderReports(container) {
         </div>
         ` : ''}
         ${activeReportTab === 'daily' ? `
-        <button class="btn btn-secondary" style="margin-bottom:15px;" id="btn-reset-day" onclick="resetDailyReport()">
-            <i class="fas fa-sync-alt"></i> Start New Business Day
+        <button class="btn btn-danger" style="margin-bottom:15px;" id="btn-delete-today" onclick="deleteTodaysRecords()">
+            <i class="fas fa-trash"></i> Delete Today's Records
         </button>
         ` : ''}
         <div class="dashboard-grid">
@@ -1044,18 +1042,38 @@ function renderReports(container) {
 window.setReportTab = (tab) => { activeReportTab = tab; renderReports(document.getElementById('app-content')); };
 window.changeReportMonth = (direction) => { currentReportMonth.setMonth(currentReportMonth.getMonth() + direction); renderReports(document.getElementById('app-content')); };
 
-window.resetDailyReport = async () => {
-    if (!confirm("Start a new business day?\n\nYour previous sales and records will NOT be deleted. They will remain available in Monthly and Total Reports.")) return;
-    showLoading('btn-reset-day', "Resetting...");
+// DELETE TODAY'S RECORDS
+window.deleteTodaysRecords = async () => {
+    if (!confirm("Are you sure you want to delete ALL sales and expenses for TODAY? This cannot be undone!")) return;
+    showLoading('btn-delete-today', "Deleting...");
     try {
-        await setDoc(doc(db, "settings", currentUserId), { businessDayStart: new Date().toISOString() }, { merge: true });
-        data.settings.businessDayStart = new Date().toISOString();
-        alert("New business day started!");
-        renderReports(document.getElementById('app-content'));
+        const startOfDay = getStartOfDay(new Date());
+        const endOfDay = getEndOfDay(new Date());
+
+        const deleteFiltered = async (colName) => {
+            const q = query(collection(db, colName), where("ownerId", "==", currentUserId));
+            const snapshot = await getDocs(q);
+            const promises = [];
+            snapshot.forEach(docSnap => {
+                const docDate = new Date(docSnap.data().date);
+                if (docDate >= startOfDay && docDate <= endOfDay) {
+                    promises.push(deleteDoc(docSnap.ref));
+                }
+            });
+            await Promise.all(promises);
+        };
+
+        await deleteFiltered('sales');
+        await deleteFiltered('expenses');
+        
+        alert("Today's sales and expenses have been deleted!");
+        navigate('dashboard');
     } catch (error) {
         console.error(error);
-        alert("Failed to reset daily report.");
-    } finally { hideLoading('btn-reset-day'); }
+        alert("Failed to delete records.");
+    } finally {
+        hideLoading('btn-delete-today');
+    }
 };
 
 // --- MORE / SETTINGS ---
@@ -1067,12 +1085,75 @@ function renderMore(container) {
             <div class="list-item" onclick="navigate('stockPurchases')"><div class="list-item-info"><h4><i class="fas fa-truck-loading"></i> Stock Purchases</h4></div><i class="fas fa-chevron-right"></i></div>
             <div class="list-item" onclick="navigate('reports')"><div class="list-item-info"><h4><i class="fas fa-chart-pie"></i> Reports</h4></div><i class="fas fa-chevron-right"></i></div>
             <div class="list-item" onclick="navigate('settings')"><div class="list-item-info"><h4><i class="fas fa-cog"></i> Settings</h4></div><i class="fas fa-chevron-right"></i></div>
+            <div class="list-item" onclick="openDeleteRecordsModal()" style="color: var(--danger);"><div class="list-item-info"><h4><i class="fas fa-trash-alt"></i> Delete Records</h4></div><i class="fas fa-chevron-right"></i></div>
             <div class="list-item" onclick="handleLogout()" style="color: var(--danger);"><div class="list-item-info"><h4><i class="fas fa-sign-out-alt"></i> Logout</h4></div></div>
         </div>
     `;
 }
 
-// FIXED: Removed broken "</ to the user." text
+// DELETE RECORDS MODAL
+window.openDeleteRecordsModal = () => {
+    const modal = document.getElementById('modal-body');
+    modal.innerHTML = `
+        <div class="modal-header">
+            <h2>Delete Records</h2>
+            <button class="close-btn" onclick="closeModal()">&times;</button>
+        </div>
+        <p style="color: var(--danger); font-weight: bold; margin-bottom: 15px; font-size: 14px;">Warning: These actions are permanent and cannot be undone!</p>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+            <button class="btn btn-danger" onclick="deleteCollectionData('sales')">Delete All Sales</button>
+            <button class="btn btn-danger" onclick="deleteCollectionData('products')">Delete All Products</button>
+            <button class="btn btn-danger" onclick="deleteCollectionData('customers')">Delete All Customers</button>
+            <button class="btn btn-danger" onclick="deleteCollectionData('customerTransactions')">Delete All Customer Transactions</button>
+            <button class="btn btn-danger" onclick="deleteCollectionData('expenses')">Delete All Expenses</button>
+            <button class="btn btn-danger" onclick="deleteCollectionData('stockPurchases')">Delete All Stock Purchases</button>
+            <hr style="margin: 10px 0; border: 0; border-top: 1px solid #eee;">
+            <button class="btn" style="background: #000; font-weight: bold;" onclick="deleteEverything()">⚠️ DELETE EVERYTHING</button>
+        </div>
+    `;
+    document.getElementById('modal-overlay').classList.remove('hidden');
+};
+
+window.deleteCollectionData = async (collectionName) => {
+    if (!confirm(`Are you sure you want to delete ALL ${collectionName}? This cannot be undone!`)) return;
+    try {
+        const q = query(collection(db, collectionName), where("ownerId", "==", currentUserId));
+        const snapshot = await getDocs(q);
+        if (snapshot.empty) { alert("No records found to delete."); return; }
+        const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
+        await Promise.all(deletePromises);
+        alert(`Successfully deleted all ${collectionName}!`);
+        closeModal();
+        navigate('dashboard');
+    } catch (error) {
+        console.error(error);
+        alert("Failed to delete records.");
+    }
+};
+
+window.deleteEverything = async () => {
+    if (!confirm("FINAL WARNING: This will delete ALL your business data. This CANNOT be undone. Do you want to proceed?")) return;
+    const collections = ['sales', 'products', 'customers', 'customerTransactions', 'expenses', 'stockPurchases', 'stockAdjustments'];
+    let totalDeleted = 0;
+    try {
+        for (const col of collections) {
+            const q = query(collection(db, col), where("ownerId", "==", currentUserId));
+            const snapshot = await getDocs(q);
+            if (!snapshot.empty) {
+                const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
+                await Promise.all(deletePromises);
+                totalDeleted += snapshot.size;
+            }
+        }
+        alert(`Successfully deleted all business data! (${totalDeleted} records removed)`);
+        closeModal();
+        navigate('dashboard');
+    } catch (error) {
+        console.error(error);
+        alert("Failed to delete some records.");
+    }
+};
+
 function renderSettings(container) {
     const userEmail = auth.currentUser ? auth.currentUser.email : 'Not logged in';
     const isEmailUser = auth.currentUser && auth.currentUser.providerData.some(p => p.providerId === 'password');
