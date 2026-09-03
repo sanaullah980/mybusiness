@@ -1384,4 +1384,4 @@ window.closeModal = (e) => {
     if (!e || e.target.id === 'modal-overlay' || e.target.classList.contains('close-btn')) {
         document.getElementById('modal-overlay').classList.add('hidden');
     }
-};
+}; 
