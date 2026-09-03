@@ -1,5 +1,16 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+// FIX 1: Added setPersistence and browserLocalPersistence to the imports
+import { 
+    getAuth, 
+    setPersistence, 
+    browserLocalPersistence, 
+    signInWithEmailAndPassword, 
+    createUserWithEmailAndPassword, 
+    signOut, 
+    onAuthStateChanged, 
+    GoogleAuthProvider, 
+    signInWithPopup 
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // --- FIREBASE CONFIG ---
@@ -17,6 +28,12 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
+
+// FIX 2: Set persistence to LOCAL immediately after auth initialization.
+// This ensures the token is saved in localStorage and survives browser restarts.
+setPersistence(auth, browserLocalPersistence).catch((error) => {
+    console.error("Failed to set auth persistence:", error);
+});
 
 // --- GLOBAL STATE ---
 let currentUserId = null;
@@ -215,7 +232,7 @@ function renderSettings(container) {
         </div>
         <div class="card">
             <h3>Account</h3>
-            <p style="margin-bottom:10px;">Logged in as: ${auth.currentUser.email}</p>
+            <p style="margin-bottom:10px;">Logged in as: ${auth.currentUser ? auth.currentUser.email : 'Not logged in'}</p>
             <button class="btn btn-danger" onclick="handleLogout()">Logout</button>
         </div>
     `;

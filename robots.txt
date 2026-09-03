@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+
+# Prevent crawling of any potential future admin paths (defense in depth)
+Disallow: /admin/
+Disallow: /api/
+
+Sitemap: https://mybusiness-green.vercel.app/sitemap.xml
