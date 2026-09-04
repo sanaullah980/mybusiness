@@ -579,7 +579,63 @@ window.completeBulkSale = async () => {
         hideLoading('btn-bulk-sale');
     }
 };
+// --- SALE DETAIL MODAL ---
+window.viewSaleDetail = (saleId) => {
+    const sale = data.sales.find(s => s.id === saleId);
+    if (!sale) return;
 
+    let debtHtml = '';
+    if (sale.customerId) {
+        const customer = data.customers.find(c => c.id === sale.customerId);
+        const currentDebt = customer ? (customer.balance || 0) : 0;
+        debtHtml = `
+        <div style="background:#fff3e0; border-left:4px solid var(--warning); padding:12px; border-radius:6px; margin:15px 0;">
+            <div style="font-size:14px; color:var(--gray);">Customer Debt Info</div>
+            <div style="font-size:16px; font-weight:bold; color:var(--danger);">Current Total Debt: ${formatCurrency(currentDebt)}</div>
+            <div style="font-size:13px; margin-top:5px;">Amount due from this specific sale: ${formatCurrency(sale.amountDue || 0)}</div>
+        </div>`;
+    }
+
+    const modal = document.getElementById('modal-body');
+    modal.innerHTML = `
+        <div class="modal-header">
+            <h2>Sale Details</h2>
+            <button class="close-btn" onclick="closeModal()">&times;</button>
+        </div>
+        <div style="background:#f8f9fa; padding:15px; border-radius:8px; margin-bottom:15px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                <div><div style="font-size:12px; color:var(--gray);">Date & Time</div><div style="font-size:16px; font-weight:bold;">${new Date(sale.date).toLocaleString()}</div></div>
+                <div style="text-align:right;"><div style="font-size:12px; color:var(--gray);">Customer</div><div style="font-size:16px; font-weight:bold;">${sale.customerName || 'Walk-in'}</div></div>
+            </div>
+            <div style="display:flex; justify-content:space-between;">
+                <div><div style="font-size:12px; color:var(--gray);">Sale Type</div><div style="font-size:16px; font-weight:bold;">${sale.saleType ? sale.saleType.charAt(0).toUpperCase() + sale.saleType.slice(1) : 'Normal'}</div></div>
+                <div style="text-align:right;"><div style="font-size:12px; color:var(--gray);">Profit Status</div><div style="font-size:16px; font-weight:bold; color:${sale.profitKnown ? 'var(--primary)' : 'var(--warning)'};">${sale.profitKnown ? 'Known' : 'Unknown'}</div></div>
+            </div>
+        </div>
+        ${debtHtml}
+        <h3 style="margin:15px 0 10px 0; font-size:16px;">Items Purchased</h3>
+        <div style="max-height:250px; overflow-y:auto;">
+            ${(sale.items || []).map(item => `
+                <div style="display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid #eee;">
+                    <div>
+                        <div style="font-weight:600;">${item.name} x${item.qty}</div>
+                        <div style="font-size:13px; color:var(--gray);">Cost: ${formatCurrency(item.cost)} | Price: ${formatCurrency(item.price)}</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-weight:bold; color:var(--primary);">${formatCurrency(item.price * item.qty)}</div>
+                        <div style="font-size:13px; color:var(--gray);">Profit: ${formatCurrency((item.price - item.cost) * item.qty)}</div>
+                    </div>
+                </div>
+            `).join('') || '<p style="color:var(--gray); text-align:center;">No item details (Bulk/Manual sale)</p>'}
+        </div>
+        <div style="background:#f8f9fa; padding:15px; border-radius:8px; margin-top:15px;">
+            <div style="display:flex; justify-content:space-between; padding:5px 0;"><span>Subtotal:</span><span style="font-weight:bold;">${formatCurrency(sale.total)}</span></div>
+            <div style="display:flex; justify-content:space-between; padding:5px 0;"><span>Amount Paid:</span><span style="font-weight:bold; color:var(--primary);">${formatCurrency(sale.amountPaid || 0)}</span></div>
+            <div style="display:flex; justify-content:space-between; padding:5px 0; border-top:2px solid var(--dark); margin-top:5px; padding-top:10px;"><span style="font-weight:bold;">Total Profit:</span><span style="font-weight:bold; color:${sale.profitKnown ? 'var(--primary)' : 'var(--warning)'};">${sale.profitKnown ? formatCurrency(sale.totalProfit) : 'Unknown'}</span></div>
+        </div>
+    `;
+    document.getElementById('modal-overlay').classList.remove('hidden');
+};
 // --- INVENTORY ---
 function renderInventory(container) {
     container.innerHTML = `
