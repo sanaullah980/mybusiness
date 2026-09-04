@@ -1191,6 +1191,15 @@ function renderSettings(container) {
     const isEmailUser = auth.currentUser && auth.currentUser.providerData.some(p => p.providerId === 'password');
 
     container.innerHTML = `
+        <!-- NEW: Android App Download Card -->
+        <div class="card">
+            <h3>📱 Mobile App</h3>
+            <p style="margin-bottom:15px; font-size:14px; color:var(--gray);">Get the native Android app for a better mobile experience.</p>
+            <a href="/downloads/mybusiness.apk" download class="btn" style="background: var(--dark); text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                <i class="fab fa-android"></i> Download Android App
+            </a>
+        </div>
+
         <div class="card">
             <h3>Business Settings</h3>
             <div class="form-group"><label>Business Name</label><input type="text" id="set-name" value="${data.settings.name || ''}"></div>
@@ -1212,7 +1221,6 @@ function renderSettings(container) {
         `}
     `;
 }
-
 window.saveSettings = async () => {
     const name = document.getElementById('set-name').value.trim();
     const currency = document.getElementById('set-currency').value.trim() || 'Rs.';
