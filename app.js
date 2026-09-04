@@ -46,11 +46,6 @@ function getEndOfDay(date) { const d = new Date(date); d.setHours(23, 59, 59, 99
 function getStartOfMonth(date) { const d = new Date(date); d.setDate(1); d.setHours(0, 0, 0, 0); return d; }
 function getEndOfMonth(date) { const d = new Date(date); d.setMonth(d.getMonth() + 1); d.setDate(0); d.setHours(23, 59, 59, 999); return d; }
 
-function getLocalDateStr(dateInput) {
-    const d = new Date(dateInput);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 function showLoading(btnId, text) {
     const btn = document.getElementById(btnId);
     if (btn) { btn.disabled = true; btn.dataset.originalText = btn.innerText; btn.innerText = text || "Processing..."; }
@@ -58,6 +53,11 @@ function showLoading(btnId, text) {
 function hideLoading(btnId) {
     const btn = document.getElementById(btnId);
     if (btn) { btn.disabled = false; btn.innerText = btn.dataset.originalText || "Submit"; }
+}
+
+function getLocalDateStr(dateInput) {
+    const d = new Date(dateInput);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 // --- AUTHENTICATION ---
@@ -236,7 +236,6 @@ function calculateReportData(startDate, endDate) {
 
 // --- RENDER FUNCTIONS ---
 function renderDashboard(container) {
-    // AUTOMATIC DAILY CALCULATION
     const startOfDay = getStartOfDay(new Date());
     const endOfDay = getEndOfDay(new Date());
     const stats = calculateReportData(startOfDay, endOfDay);
@@ -258,9 +257,9 @@ function renderDashboard(container) {
         </div>
         <button class="btn" style="margin-bottom:20px;" onclick="navigate('reports')">View Detailed Reports</button>
         <div class="card">
-            <h3>Recent Sales</h3>
+            <h3>Recent Sales (Tap to view details)</h3>
             ${sortedSales.slice(0, 5).map(s => `
-                <div class="list-item" style="cursor:default;">
+                <div class="list-item" onclick="viewSaleDetail('${s.id}')">
                     <div class="list-item-info">
                         <h4>${s.customerName || 'Walk-in'} <span class="badge ${s.profitKnown ? 'badge-ok' : 'badge-unknown'}">${s.profitKnown ? 'Known' : 'Unknown'}</span></h4>
                         <p>${new Date(s.date).toLocaleString()}</p>
@@ -433,6 +432,7 @@ window.completeNormalSale = async () => {
         const amountPaid = parseFloat(document.getElementById('sale-amount-paid').value) || 0;
 
         await runTransaction(db, async (transaction) => {
+            // PHASE 1: READS ONLY
             const productSnapshots = [];
             for (const item of cart) {
                 const snap = await transaction.get(doc(db, "products", item.id));
@@ -441,6 +441,7 @@ window.completeNormalSale = async () => {
             let customerSnap = null;
             if (customerId) customerSnap = await transaction.get(doc(db, "customers", customerId));
 
+            // PHASE 2: VALIDATION & CALCULATION
             let total = 0, totalProfit = 0;
             for (const { item, snap } of productSnapshots) {
                 if (!snap.exists()) throw new Error(`Product ${item.name} not found.`);
@@ -459,6 +460,7 @@ window.completeNormalSale = async () => {
                 newCustomerBalance = customerSnap.data().balance || 0;
             }
 
+            // PHASE 3: WRITES ONLY
             const saleRef = doc(collection(db, "sales"));
             const customerName = (customerId && customerSnap && customerSnap.exists()) ? customerSnap.data().name : "Walk-in";
 
@@ -546,13 +548,16 @@ window.completeBulkSale = async () => {
         const amountDue = Math.max(0, total - amountPaid);
 
         await runTransaction(db, async (transaction) => {
+            // PHASE 1: READS ONLY
             let customerSnap = null;
             if (customerId) customerSnap = await transaction.get(doc(db, "customers", customerId));
 
+            // PHASE 2: VALIDATION & CALCULATION
             const newCustomerBalance = (customerId && amountDue > 0 && customerSnap && customerSnap.exists()) 
                 ? (customerSnap.data().balance || 0) + amountDue 
                 : (customerSnap && customerSnap.exists() ? customerSnap.data().balance || 0 : 0);
 
+            // PHASE 3: WRITES ONLY
             const saleRef = doc(collection(db, "sales"));
             const customerName = (customerId && customerSnap && customerSnap.exists()) ? customerSnap.data().name : "Walk-in";
 
@@ -579,63 +584,7 @@ window.completeBulkSale = async () => {
         hideLoading('btn-bulk-sale');
     }
 };
-// --- SALE DETAIL MODAL ---
-window.viewSaleDetail = (saleId) => {
-    const sale = data.sales.find(s => s.id === saleId);
-    if (!sale) return;
 
-    let debtHtml = '';
-    if (sale.customerId) {
-        const customer = data.customers.find(c => c.id === sale.customerId);
-        const currentDebt = customer ? (customer.balance || 0) : 0;
-        debtHtml = `
-        <div style="background:#fff3e0; border-left:4px solid var(--warning); padding:12px; border-radius:6px; margin:15px 0;">
-            <div style="font-size:14px; color:var(--gray);">Customer Debt Info</div>
-            <div style="font-size:16px; font-weight:bold; color:var(--danger);">Current Total Debt: ${formatCurrency(currentDebt)}</div>
-            <div style="font-size:13px; margin-top:5px;">Amount due from this specific sale: ${formatCurrency(sale.amountDue || 0)}</div>
-        </div>`;
-    }
-
-    const modal = document.getElementById('modal-body');
-    modal.innerHTML = `
-        <div class="modal-header">
-            <h2>Sale Details</h2>
-            <button class="close-btn" onclick="closeModal()">&times;</button>
-        </div>
-        <div style="background:#f8f9fa; padding:15px; border-radius:8px; margin-bottom:15px;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
-                <div><div style="font-size:12px; color:var(--gray);">Date & Time</div><div style="font-size:16px; font-weight:bold;">${new Date(sale.date).toLocaleString()}</div></div>
-                <div style="text-align:right;"><div style="font-size:12px; color:var(--gray);">Customer</div><div style="font-size:16px; font-weight:bold;">${sale.customerName || 'Walk-in'}</div></div>
-            </div>
-            <div style="display:flex; justify-content:space-between;">
-                <div><div style="font-size:12px; color:var(--gray);">Sale Type</div><div style="font-size:16px; font-weight:bold;">${sale.saleType ? sale.saleType.charAt(0).toUpperCase() + sale.saleType.slice(1) : 'Normal'}</div></div>
-                <div style="text-align:right;"><div style="font-size:12px; color:var(--gray);">Profit Status</div><div style="font-size:16px; font-weight:bold; color:${sale.profitKnown ? 'var(--primary)' : 'var(--warning)'};">${sale.profitKnown ? 'Known' : 'Unknown'}</div></div>
-            </div>
-        </div>
-        ${debtHtml}
-        <h3 style="margin:15px 0 10px 0; font-size:16px;">Items Purchased</h3>
-        <div style="max-height:250px; overflow-y:auto;">
-            ${(sale.items || []).map(item => `
-                <div style="display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid #eee;">
-                    <div>
-                        <div style="font-weight:600;">${item.name} x${item.qty}</div>
-                        <div style="font-size:13px; color:var(--gray);">Cost: ${formatCurrency(item.cost)} | Price: ${formatCurrency(item.price)}</div>
-                    </div>
-                    <div style="text-align:right;">
-                        <div style="font-weight:bold; color:var(--primary);">${formatCurrency(item.price * item.qty)}</div>
-                        <div style="font-size:13px; color:var(--gray);">Profit: ${formatCurrency((item.price - item.cost) * item.qty)}</div>
-                    </div>
-                </div>
-            `).join('') || '<p style="color:var(--gray); text-align:center;">No item details (Bulk/Manual sale)</p>'}
-        </div>
-        <div style="background:#f8f9fa; padding:15px; border-radius:8px; margin-top:15px;">
-            <div style="display:flex; justify-content:space-between; padding:5px 0;"><span>Subtotal:</span><span style="font-weight:bold;">${formatCurrency(sale.total)}</span></div>
-            <div style="display:flex; justify-content:space-between; padding:5px 0;"><span>Amount Paid:</span><span style="font-weight:bold; color:var(--primary);">${formatCurrency(sale.amountPaid || 0)}</span></div>
-            <div style="display:flex; justify-content:space-between; padding:5px 0; border-top:2px solid var(--dark); margin-top:5px; padding-top:10px;"><span style="font-weight:bold;">Total Profit:</span><span style="font-weight:bold; color:${sale.profitKnown ? 'var(--primary)' : 'var(--warning)'};">${sale.profitKnown ? formatCurrency(sale.totalProfit) : 'Unknown'}</span></div>
-        </div>
-    `;
-    document.getElementById('modal-overlay').classList.remove('hidden');
-};
 // --- INVENTORY ---
 function renderInventory(container) {
     container.innerHTML = `
@@ -813,9 +762,11 @@ window.saveCustomer = async (customerId) => {
     } finally { hideLoading('btn-save-customer'); }
 };
 
-// FIXED: Corrected arrow function syntax
+// FIXED: Corrected arrow function syntax (removed spaces)
 window.openCustomerLedger = (customerId) => {
     const c = data.customers.find(x => x.id === customerId);
+    if (!c) return alert("Customer not found.");
+    
     const txns = data.customerTransactions.filter(t => t.customerId === customerId).sort((a,b) => new Date(b.date) - new Date(a.date));
     const modal = document.getElementById('modal-body');
     
@@ -1060,7 +1011,6 @@ window.deleteStockPurchase = async (id) => {
 function renderReports(container) {
     let startDate, endDate;
     if (activeReportTab === 'daily') {
-        // AUTOMATIC DAILY CALCULATION
         startDate = getStartOfDay(new Date());
         endDate = getEndOfDay(new Date());
     } else if (activeReportTab === 'monthly') {
@@ -1108,9 +1058,41 @@ function renderReports(container) {
 window.setReportTab = (tab) => { activeReportTab = tab; renderReports(document.getElementById('app-content')); };
 window.changeReportMonth = (direction) => { currentReportMonth.setMonth(currentReportMonth.getMonth() + direction); renderReports(document.getElementById('app-content')); };
 
+window.deleteTodaysRecords = async () => {
+    if (!confirm("Are you sure you want to delete ALL sales and expenses for TODAY? This cannot be undone!")) return;
+    showLoading('btn-delete-today', "Deleting...");
+    try {
+        const startOfDay = getStartOfDay(new Date());
+        const endOfDay = getEndOfDay(new Date());
+
+        const deleteFiltered = async (colName) => {
+            const q = query(collection(db, colName), where("ownerId", "==", currentUserId));
+            const snapshot = await getDocs(q);
+            const promises = [];
+            snapshot.forEach(docSnap => {
+                const docDate = new Date(docSnap.data().date);
+                if (docDate >= startOfDay && docDate <= endOfDay) {
+                    promises.push(deleteDoc(docSnap.ref));
+                }
+            });
+            await Promise.all(promises);
+        };
+
+        await deleteFiltered('sales');
+        await deleteFiltered('expenses');
+        
+        alert("Today's sales and expenses have been deleted!");
+        navigate('dashboard');
+    } catch (error) {
+        console.error(error);
+        alert("Failed to delete records.");
+    } finally {
+        hideLoading('btn-delete-today');
+    }
+};
+
 // --- MORE / SETTINGS ---
 function renderMore(container) {
-    // Sale History (Last 7 Days)
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     const recentSales = [...data.sales].filter(s => new Date(s.date) >= sevenDaysAgo).sort((a,b) => new Date(a.date) - new Date(b.date)).reverse();
@@ -1129,7 +1111,7 @@ function renderMore(container) {
             <h3>Sale History (Last 7 Days)</h3>
             ${recentSales.length === 0 ? '<p style="color:var(--gray); text-align:center; padding:10px;">No sales in the last 7 days.</p>' :
               recentSales.map(s => `
-                <div class="list-item" style="cursor:default;">
+                <div class="list-item" onclick="viewSaleDetail('${s.id}')">
                     <div class="list-item-info">
                         <h4>${s.customerName || 'Walk-in'} <span class="badge ${s.profitKnown ? 'badge-ok' : 'badge-unknown'}">${s.profitKnown ? 'Known' : 'Unknown'}</span></h4>
                         <p>${new Date(s.date).toLocaleString()}</p>
@@ -1280,6 +1262,64 @@ window.changePassword = async () => {
         else if (error.code === 'auth/requires-recent-login') alert("For security, please log out and log back in before changing your password.");
         else alert("Failed to update password.");
     } finally { hideLoading('btn-cp-submit'); }
+};
+
+// --- SALE DETAIL MODAL ---
+window.viewSaleDetail = (saleId) => {
+    const sale = data.sales.find(s => s.id === saleId);
+    if (!sale) return;
+
+    let debtHtml = '';
+    if (sale.customerId) {
+        const customer = data.customers.find(c => c.id === sale.customerId);
+        const currentDebt = customer ? (customer.balance || 0) : 0;
+        debtHtml = `
+        <div style="background:#fff3e0; border-left:4px solid var(--warning); padding:12px; border-radius:6px; margin:15px 0;">
+            <div style="font-size:14px; color:var(--gray);">Customer Debt Info</div>
+            <div style="font-size:16px; font-weight:bold; color:var(--danger);">Current Total Debt: ${formatCurrency(currentDebt)}</div>
+            <div style="font-size:13px; margin-top:5px;">Amount due from this specific sale: ${formatCurrency(sale.amountDue || 0)}</div>
+        </div>`;
+    }
+
+    const modal = document.getElementById('modal-body');
+    modal.innerHTML = `
+        <div class="modal-header">
+            <h2>Sale Details</h2>
+            <button class="close-btn" onclick="closeModal()">&times;</button>
+        </div>
+        <div style="background:#f8f9fa; padding:15px; border-radius:8px; margin-bottom:15px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                <div><div style="font-size:12px; color:var(--gray);">Date & Time</div><div style="font-size:16px; font-weight:bold;">${new Date(sale.date).toLocaleString()}</div></div>
+                <div style="text-align:right;"><div style="font-size:12px; color:var(--gray);">Customer</div><div style="font-size:16px; font-weight:bold;">${sale.customerName || 'Walk-in'}</div></div>
+            </div>
+            <div style="display:flex; justify-content:space-between;">
+                <div><div style="font-size:12px; color:var(--gray);">Sale Type</div><div style="font-size:16px; font-weight:bold;">${sale.saleType ? sale.saleType.charAt(0).toUpperCase() + sale.saleType.slice(1) : 'Normal'}</div></div>
+                <div style="text-align:right;"><div style="font-size:12px; color:var(--gray);">Profit Status</div><div style="font-size:16px; font-weight:bold; color:${sale.profitKnown ? 'var(--primary)' : 'var(--warning)'};">${sale.profitKnown ? 'Known' : 'Unknown'}</div></div>
+            </div>
+        </div>
+        ${debtHtml}
+        <h3 style="margin:15px 0 10px 0; font-size:16px;">Items Purchased</h3>
+        <div style="max-height:250px; overflow-y:auto;">
+            ${(sale.items || []).map(item => `
+                <div style="display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid #eee;">
+                    <div>
+                        <div style="font-weight:600;">${item.name} x${item.qty}</div>
+                        <div style="font-size:13px; color:var(--gray);">Cost: ${formatCurrency(item.cost)} | Price: ${formatCurrency(item.price)}</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-weight:bold; color:var(--primary);">${formatCurrency(item.price * item.qty)}</div>
+                        <div style="font-size:13px; color:var(--gray);">Profit: ${formatCurrency((item.price - item.cost) * item.qty)}</div>
+                    </div>
+                </div>
+            `).join('') || '<p style="color:var(--gray); text-align:center;">No item details (Bulk/Manual sale)</p>'}
+        </div>
+        <div style="background:#f8f9fa; padding:15px; border-radius:8px; margin-top:15px;">
+            <div style="display:flex; justify-content:space-between; padding:5px 0;"><span>Subtotal:</span><span style="font-weight:bold;">${formatCurrency(sale.total)}</span></div>
+            <div style="display:flex; justify-content:space-between; padding:5px 0;"><span>Amount Paid:</span><span style="font-weight:bold; color:var(--primary);">${formatCurrency(sale.amountPaid || 0)}</span></div>
+            <div style="display:flex; justify-content:space-between; padding:5px 0; border-top:2px solid var(--dark); margin-top:5px; padding-top:10px;"><span style="font-weight:bold;">Total Profit:</span><span style="font-weight:bold; color:${sale.profitKnown ? 'var(--primary)' : 'var(--warning)'};">${sale.profitKnown ? formatCurrency(sale.totalProfit) : 'Unknown'}</span></div>
+        </div>
+    `;
+    document.getElementById('modal-overlay').classList.remove('hidden');
 };
 
 // --- MODAL UTILS ---
