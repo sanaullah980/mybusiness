@@ -1,4 +1,4 @@
-// Firebase imports (ensure these are available in index.html via script tags)
+// Firebase imports
 import { 
     initializeApp 
 } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
@@ -10,7 +10,9 @@ import {
     GoogleAuthProvider, 
     sendPasswordResetEmail,
     onAuthStateChanged,
-    signOut
+    signOut,
+    setPersistence,
+    browserLocalPersistence
 } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
 import { 
     getFirestore, 
@@ -19,41 +21,84 @@ import {
     setDoc 
 } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 
-// Firebase configuration - Update these with your actual Firebase config
+// Firebase configuration - IMPORTANT: Update these with your actual Firebase project settings
+// Get these from: https://console.firebase.google.com/ > Project Settings > Web App Config
 const firebaseConfig = {
-    apiKey: "AIzaSyDGr1v7kK5lH7P6sZaQ8nM9oP0qR1sT2uV", // Replace with your API key
-    authDomain: "mybusiness-app.firebaseapp.com", // Replace with your auth domain
-    projectId: "mybusiness-app-project", // Replace with your project ID
-    storageBucket: "mybusiness-app.appspot.com", // Replace with your storage bucket
-    messagingSenderId: "123456789012", // Replace with your sender ID
-    appId: "1:123456789012:web:abcdef1234567890" // Replace with your app ID
+    apiKey: "AIzaSyDGr1v7kK5lH7P6sZaQ8nM9oP0qR1sT2uV",
+    authDomain: "mybusiness-app.firebaseapp.com",
+    projectId: "mybusiness-app-project",
+    storageBucket: "mybusiness-app.appspot.com",
+    messagingSenderId: "123456789012",
+    appId: "1:123456789012:web:abcdef1234567890"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const db = getFirestore(app);
-const googleProvider = new GoogleAuthProvider();
+let app, auth, db;
 
-// Store auth state globally
+try {
+    // Initialize Firebase
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    db = getFirestore(app);
+    
+    // Enable persistence
+    setPersistence(auth, browserLocalPersistence).catch(err => {
+        console.warn('[auth] Persistence error (non-critical):', err);
+    });
+    
+    // Configure Google Auth Provider
+    const googleProvider = new GoogleAuthProvider();
+    googleProvider.addScope('profile');
+    googleProvider.addScope('email');
+    googleProvider.setCustomParameters({
+        'prompt': 'select_account'
+    });
+    
+    window.googleProvider = googleProvider;
+    
+    console.log('[auth] Firebase initialized successfully');
+} catch (error) {
+    console.error('[auth] Firebase initialization failed:', error);
+    alert('Firebase initialization error. Check console. Ensure Firebase config is correct.');
+}
+
+// Store auth and db globally
 window.auth = auth;
 window.db = db;
 window.currentUserId = null;
 
 // Auth state monitoring
 export function initializeAuthListener(onAuthReady) {
+    if (!auth) {
+        console.error('[auth] Auth not initialized');
+        document.getElementById('auth-loading').classList.add('hidden');
+        document.getElementById('auth-screen').classList.remove('hidden');
+        alert('Authentication system failed to initialize. Check Firebase config.');
+        return;
+    }
+
     onAuthStateChanged(auth, async (user) => {
         try {
             if (user) {
+                console.log('[auth] User authenticated:', user.email);
                 window.currentUserId = user.uid;
+                window.auth = auth;
+                window.db = db;
+                
                 // Hide auth screen, show main app
                 document.getElementById('auth-loading').classList.add('hidden');
                 document.getElementById('auth-screen').classList.add('hidden');
                 document.getElementById('main-app').classList.remove('hidden');
                 
                 // Load user data and initialize app
-                if (onAuthReady) onAuthReady(user);
+                if (onAuthReady) {
+                    try {
+                        await onAuthReady(user);
+                    } catch (err) {
+                        console.error('[auth] onAuthReady error:', err);
+                    }
+                }
             } else {
+                console.log('[auth] User logged out');
                 window.currentUserId = null;
                 // Show auth screen, hide main app
                 document.getElementById('auth-loading').classList.add('hidden');
@@ -61,7 +106,7 @@ export function initializeAuthListener(onAuthReady) {
                 document.getElementById('main-app').classList.add('hidden');
             }
         } catch (error) {
-            console.error('Auth state change error:', error);
+            console.error('[auth] Auth state change error:', error);
             document.getElementById('auth-loading').classList.add('hidden');
             document.getElementById('auth-screen').classList.remove('hidden');
         }
@@ -77,6 +122,13 @@ export async function handleAuth() {
     
     if (!email || !password) {
         errorDiv.textContent = 'Please enter email and password.';
+        errorDiv.style.color = 'var(--danger)';
+        return;
+    }
+
+    if (!auth || !db) {
+        errorDiv.textContent = 'Authentication system not initialized. Refresh and try again.';
+        errorDiv.style.color = 'var(--danger)';
         return;
     }
     
@@ -88,14 +140,21 @@ export async function handleAuth() {
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
             
+            console.log('[auth] New user created:', user.uid);
+            
             // Create user document in Firestore
-            await setDoc(doc(db, 'users', user.uid), {
-                email: user.email,
-                createdAt: new Date().toISOString(),
-                businessName: '',
-                currency: 'Rs.',
-                theme: 'light'
-            });
+            try {
+                await setDoc(doc(db, 'users', user.uid), {
+                    email: user.email,
+                    createdAt: new Date().toISOString(),
+                    businessName: '',
+                    currency: 'Rs.',
+                    theme: 'light'
+                });
+                console.log('[auth] User profile created in Firestore');
+            } catch (firestoreErr) {
+                console.error('[auth] Firestore error (non-critical):', firestoreErr);
+            }
             
             errorDiv.textContent = 'Account created! Logging in...';
             errorDiv.style.color = 'var(--primary)';
@@ -109,10 +168,11 @@ export async function handleAuth() {
         } else {
             // Sign in with email and password
             await signInWithEmailAndPassword(auth, email, password);
+            console.log('[auth] User signed in with email/password');
             errorDiv.textContent = '';
         }
     } catch (error) {
-        console.error('Auth error:', error);
+        console.error('[auth] Auth error:', error);
         errorDiv.textContent = getAuthErrorMessage(error.code);
         errorDiv.style.color = 'var(--danger)';
     } finally {
@@ -123,36 +183,73 @@ export async function handleAuth() {
 // Google Sign-In
 export async function signInWithGoogle() {
     const errorDiv = document.getElementById('login-error');
+    const googleBtn = document.getElementById('google-btn');
+    
+    if (!auth || !db) {
+        errorDiv.textContent = 'Authentication system not initialized. Refresh and try again.';
+        errorDiv.style.color = 'var(--danger)';
+        return;
+    }
+
+    if (!window.googleProvider) {
+        errorDiv.textContent = 'Google authentication not configured. Check console.';
+        errorDiv.style.color = 'var(--danger)';
+        console.error('[auth] Google provider not initialized');
+        return;
+    }
     
     try {
         window.showLoading('google-btn', 'Signing in...');
+        errorDiv.textContent = '';
         
-        const result = await signInWithPopup(auth, googleProvider);
+        console.log('[auth] Attempting Google sign-in...');
+        
+        const result = await signInWithPopup(auth, window.googleProvider);
         const user = result.user;
         
-        // Check if user exists in Firestore, if not create profile
-        const userDocRef = doc(db, 'users', user.uid);
-        const userDocSnap = await getDoc(userDocRef);
+        console.log('[auth] Google sign-in successful:', user.email);
         
-        if (!userDocSnap.exists()) {
-            await setDoc(userDocRef, {
-                email: user.email,
-                displayName: user.displayName,
-                photoURL: user.photoURL,
-                createdAt: new Date().toISOString(),
-                businessName: '',
-                currency: 'Rs.',
-                theme: 'light'
-            });
+        // Check if user exists in Firestore, if not create profile
+        try {
+            const userDocRef = doc(db, 'users', user.uid);
+            const userDocSnap = await getDoc(userDocRef);
+            
+            if (!userDocSnap.exists()) {
+                console.log('[auth] Creating new user profile...');
+                await setDoc(userDocRef, {
+                    email: user.email,
+                    displayName: user.displayName,
+                    photoURL: user.photoURL,
+                    createdAt: new Date().toISOString(),
+                    businessName: '',
+                    currency: 'Rs.',
+                    theme: 'light'
+                });
+                console.log('[auth] User profile created');
+            } else {
+                console.log('[auth] User profile already exists');
+            }
+        } catch (firestoreErr) {
+            console.error('[auth] Firestore error during Google sign-in:', firestoreErr);
+            // Don't fail the sign-in, user is already authenticated
         }
         
         errorDiv.textContent = '';
     } catch (error) {
-        console.error('Google sign-in error:', error);
-        if (error.code !== 'auth/popup-closed-by-user') {
-            errorDiv.textContent = 'Google sign-in failed. Please try again.';
-            errorDiv.style.color = 'var(--danger)';
+        console.error('[auth] Google sign-in error:', error);
+        
+        if (error.code === 'auth/popup-closed-by-user') {
+            errorDiv.textContent = 'Sign-in cancelled.';
+        } else if (error.code === 'auth/popup-blocked') {
+            errorDiv.textContent = 'Pop-up blocked. Enable pop-ups and try again.';
+        } else if (error.code === 'auth/operation-not-allowed') {
+            errorDiv.textContent = 'Google sign-in is not enabled. Check Firebase console.';
+        } else if (error.code === 'auth/unauthorized-domain') {
+            errorDiv.textContent = 'This domain is not authorized. Check Firebase console > Authentication > Authorized domains.';
+        } else {
+            errorDiv.textContent = 'Google sign-in failed: ' + (error.message || 'Unknown error');
         }
+        errorDiv.style.color = 'var(--danger)';
     } finally {
         window.hideLoading('google-btn');
     }
@@ -169,6 +266,12 @@ export async function forgotPassword(event) {
         errorDiv.style.color = 'var(--danger)';
         return;
     }
+
+    if (!auth) {
+        errorDiv.textContent = 'Auth not initialized.';
+        errorDiv.style.color = 'var(--danger)';
+        return;
+    }
     
     try {
         await sendPasswordResetEmail(auth, email);
@@ -179,7 +282,7 @@ export async function forgotPassword(event) {
             errorDiv.textContent = '';
         }, 5000);
     } catch (error) {
-        console.error('Password reset error:', error);
+        console.error('[auth] Password reset error:', error);
         errorDiv.textContent = 'Could not send reset email. Check if email exists.';
         errorDiv.style.color = 'var(--danger)';
     }
@@ -209,11 +312,17 @@ export function toggleAuthMode() {
 
 // Logout
 export async function handleLogout() {
+    if (!auth) {
+        console.error('[auth] Auth not initialized');
+        return;
+    }
+
     try {
         await signOut(auth);
         window.currentUserId = null;
+        console.log('[auth] User logged out');
     } catch (error) {
-        console.error('Logout error:', error);
+        console.error('[auth] Logout error:', error);
         alert('Logout failed. Please try again.');
     }
 }
@@ -223,16 +332,20 @@ function getAuthErrorMessage(errorCode) {
     const errorMessages = {
         'auth/email-already-in-use': 'This email is already registered. Try logging in.',
         'auth/invalid-email': 'Invalid email address.',
-        'auth/operation-not-allowed': 'Email/password sign-up is not enabled.',
+        'auth/operation-not-allowed': 'Email/password sign-up is not enabled in Firebase Console.',
         'auth/weak-password': 'Password should be at least 6 characters.',
         'auth/user-not-found': 'No account found with this email.',
         'auth/wrong-password': 'Incorrect password.',
         'auth/too-many-requests': 'Too many failed attempts. Try again later.',
         'auth/account-exists-with-different-credential': 'Account exists with different sign-in method.',
-        'auth/invalid-credential': 'Invalid credentials. Please check and try again.'
+        'auth/invalid-credential': 'Invalid credentials. Please check and try again.',
+        'auth/network-request-failed': 'Network error. Check your connection.',
+        'auth/user-disabled': 'This account has been disabled.',
+        'auth/invalid-api-key': 'Invalid API key. Check Firebase config.',
+        'auth/app-not-authorized': 'App not authorized. Check Firebase config.',
     };
     
-    return errorMessages[errorCode] || 'Authentication failed. Please try again.';
+    return errorMessages[errorCode] || 'Authentication failed: ' + errorCode;
 }
 
 // Utility: Show loading state on button
@@ -260,3 +373,6 @@ window.signInWithGoogle = signInWithGoogle;
 window.forgotPassword = forgotPassword;
 window.toggleAuthMode = toggleAuthMode;
 window.handleLogout = handleLogout;
+window.initializeAuthListener = initializeAuthListener;
+
+console.log('[auth.js] Module loaded');
