@@ -122,7 +122,117 @@ window.navigate = (page) => {
     else if (page === 'reports') { title.innerText = 'Reports'; renderReports(content); }
     else if (page === 'settings') { title.innerText = 'Settings'; renderSettings(content); }
 };
+// --- NEW PRODUCT SELECTION MODAL FUNCTIONS ---
+window.openProductSelectionModal = () => {
+    const modal = document.getElementById('modal-body');
+    const productsListHtml = data.products.map(p => `
+        <div class="product-select-item-wrapper" data-name="${p.name.toLowerCase()}" style="border-bottom:1px solid #eee;">
+            <div class="product-select-item" onclick="toggleProductRow('${p.id}')" style="display:flex; align-items:center; padding:15px 10px; cursor:pointer;">
+                <input type="checkbox" id="chk-${p.id}" style="margin-right:15px; transform: scale(1.5); pointer-events: none;">
+                <div style="flex:1;">
+                    <div style="font-weight:bold; font-size:16px;">${p.name}</div>
+                    <div style="font-size:13px; color:var(--gray);">Stock: ${p.stock} | Price: ${formatCurrency(p.price)}</div>
+                </div>
+                <i class="fas fa-chevron-right" style="color:var(--gray);"></i>
+            </div>
+            <div id="qty-container-${p.id}" class="hidden" style="padding:10px 15px 15px 45px; background:#f8f9fa;">
+                <label style="font-size:14px; font-weight:bold; color:var(--dark);">Quantity:</label>
+                <input type="number" id="qty-${p.id}" value="1" min="1" max="${p.stock}" style="width:100px; padding:8px; margin-left:10px; border:1px solid #ddd; border-radius:4px; font-size:16px;">
+            </div>
+        </div>
+    `).join('');
 
+    modal.innerHTML = `
+        <div class="modal-header">
+            <h2>Select Products</h2>
+            <button class="close-btn" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="form-group" style="position:sticky; top:0; background:white; padding-bottom:10px; z-index:10;">
+            <input type="text" id="product-search" placeholder="Search products..." style="width:100%; padding:12px; border:1px solid #ddd; border-radius:8px; font-size:16px;" oninput="filterProductSelectionList()">
+        </div>
+        <div id="product-selection-list" style="max-height: 50vh; overflow-y: auto;">
+            ${productsListHtml.length > 0 ? productsListHtml : '<p style="text-align:center; padding:20px; color:var(--gray);">No products found. Add products in Inventory first.</p>'}
+        </div>
+        <div style="margin-top: 15px;">
+            <button class="btn" onclick="addSelectedProductsToCart()">Add Selected to Cart</button>
+        </div>
+    `;
+    document.getElementById('modal-overlay').classList.remove('hidden');
+};
+
+window.toggleProductRow = (id) => {
+    const checkbox = document.getElementById(`chk-${id}`);
+    checkbox.checked = !checkbox.checked;
+    const qtyContainer = document.getElementById(`qty-container-${id}`);
+    if (checkbox.checked) {
+        qtyContainer.classList.remove('hidden');
+        setTimeout(() => document.getElementById(`qty-${id}`).focus(), 10);
+    } else {
+        qtyContainer.classList.add('hidden');
+    }
+};
+
+window.filterProductSelectionList = () => {
+    const searchTerm = document.getElementById('product-search').value.toLowerCase();
+    const items = document.querySelectorAll('.product-select-item-wrapper');
+    items.forEach(wrapper => {
+        const name = wrapper.dataset.name;
+        if (name.includes(searchTerm)) {
+            wrapper.classList.remove('hidden');
+        } else {
+            wrapper.classList.add('hidden');
+        }
+    });
+};
+
+window.addSelectedProductsToCart = () => {
+    let addedCount = 0;
+    let errorMessage = "";
+
+    data.products.forEach(p => {
+        const checkbox = document.getElementById(`chk-${p.id}`);
+        if (checkbox && checkbox.checked) {
+            const qtyInput = document.getElementById(`qty-${p.id}`);
+            const qty = parseInt(qtyInput.value);
+            
+            if (!qty || qty < 1) {
+                errorMessage += `Please enter a valid quantity for ${p.name}.\n`;
+                return;
+            }
+            if (qty > p.stock) {
+                errorMessage += `Not enough stock for ${p.name}! Available: ${p.stock}\n`;
+                return;
+            }
+
+            const existing = cart.find(i => i.id === p.id);
+            if (existing) {
+                if (existing.qty + qty > p.stock) {
+                    errorMessage += `Not enough stock for ${p.name}! Cart already has ${existing.qty}, available: ${p.stock}\n`;
+                    return;
+                }
+                existing.qty += qty;
+            } else {
+                const item = { id: p.id, name: p.name, price: p.price, cost: p.cost, qty: qty };
+                cart.push(item);
+            }
+            addedCount++;
+            
+            // Reset the selection UI
+            checkbox.checked = false;
+            document.getElementById(`qty-container-${p.id}`).classList.add('hidden');
+            qtyInput.value = 1;
+        }
+    });
+
+    if (errorMessage) {
+        alert(errorMessage);
+    } else if (addedCount > 0) {
+        renderCart();
+        closeModal();
+    } else {
+        alert("Please select at least one product.");
+    }
+};
 // 7. ATTACH MODULE FUNCTIONS TO WINDOW (So HTML onclick works)
 window.renderDashboard = renderDashboard;
 window.renderSales = renderSales; window.showSaleTab = showSaleTab; window.renderCart = renderCart; window.updateSaleDue = updateSaleDue; window.addSaleItem = addSaleItem; window.removeCartItem = removeCartItem; window.completeNormalSale = completeNormalSale; window.completeManualSale = completeManualSale; window.completeBulkSale = completeBulkSale;
