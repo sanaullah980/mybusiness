@@ -65,6 +65,10 @@ window.getEndOfMonth = getEndOfMonth;
 window.getLocalDateStr = getLocalDateStr;
 window.showLoading = showLoading;
 window.hideLoading = hideLoading;
+window.doc = doc;
+window.collection = collection;
+window.updateDoc = updateDoc;
+window.addDoc = addDoc;
 window.calculateReportData = calculateReportData;
 
 // Auth Functions

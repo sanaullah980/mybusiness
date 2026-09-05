@@ -37,15 +37,15 @@ export async function saveCustomer(customerId) {
     window.showLoading('btn-save-customer', "Saving..."); 
     try { 
         const cData = { name, phone, notes, ownerId: window.currentUserId }; 
-        if (customerId) await updateDoc(doc(window.db, "customers", customerId), cData); 
-        else { cData.balance = 0; await addDoc(collection(window.db, "customers"), cData); } 
+        if (customerId) await window.updateDoc(window.doc(window.db, "customers", customerId), cData); 
+        else { cData.balance = 0; await window.addDoc(window.collection(window.db, "customers"), cData); } 
         alert(customerId ? "Updated!" : "Added!"); 
         closeModal(); 
     } catch (error) { alert("Failed."); } 
     finally { window.hideLoading('btn-save-customer'); } 
 }
 
-// --- NEW PROFILE & REPORT MODAL ---
+// --- PROFILE & REPORT MODAL ---
 export function openCustomerProfileModal(customerId) {
     const c = window.data.customers.find(x => x.id === customerId);
     if (!c) return;
@@ -57,23 +57,19 @@ export function openCustomerProfileModal(customerId) {
     const formatCurrency = window.formatCurrency;
     const modal = document.getElementById('modal-body');
 
-    let historyHtml = '<div style="overflow-x:auto; margin-bottom: 20px;"><table class="ledger-table" style="min-width: 450px;">';
-    historyHtml += '<thead><tr><th>Date</th><th>Type</th><th>Note</th><th style="text-align:right;">Amount</th><th style="text-align:right;">Balance</th></tr></thead><tbody>';
+    // 3 Columns: Date, Give (Red), Receive (Green)
+    let historyHtml = '<div style="overflow-x:auto; margin-bottom: 20px;"><table class="ledger-table" style="min-width: 300px;">';
+    historyHtml += '<thead><tr><th>Date</th><th style="text-align:right; color:var(--danger);">Give</th><th style="text-align:right; color:var(--primary);">Receive</th></tr></thead><tbody>';
 
     if (txns.length === 0) {
-        historyHtml += '<tr><td colspan="5" style="text-align:center; color:var(--gray); padding: 20px;">No transactions yet</td></tr>';
+        historyHtml += '<tr><td colspan="3" style="text-align:center; color:var(--gray); padding: 20px;">No transactions yet</td></tr>';
     } else {
         txns.forEach(t => {
             const isPayment = t.type === 'payment';
-            const typeText = isPayment ? 'Received' : 'Gave';
-            const colorClass = isPayment ? 'text-success' : 'text-danger';
-            const sign = isPayment ? '-' : '+';
             historyHtml += `<tr>
                 <td>${new Date(t.date).toLocaleDateString()}</td>
-                <td class="${colorClass}" style="font-weight:bold;">${typeText}</td>
-                <td>${t.note || '-'}</td>
-                <td style="text-align:right;" class="${colorClass}">${sign}${formatCurrency(t.amount)}</td>
-                <td style="text-align:right; font-weight:bold;">${formatCurrency(t.balanceAfter)}</td>
+                <td style="text-align:right; color:var(--danger); font-weight:bold;">${isPayment ? '' : formatCurrency(t.amount)}</td>
+                <td style="text-align:right; color:var(--primary); font-weight:bold;">${isPayment ? formatCurrency(t.amount) : ''}</td>
             </tr>`;
         });
     }
@@ -90,12 +86,12 @@ export function openCustomerProfileModal(customerId) {
             <div style="font-size:32px; font-weight:bold; color:var(--danger);">${formatCurrency(c.balance || 0)}</div>
         </div>
 
-        <h3 style="font-size:16px; margin-bottom:10px; color:var(--dark);">Transaction History</h3>
+        <h3 style="font-size:16px; margin-bottom:10px; color:var(--dark);">Report</h3>
         ${historyHtml}
 
         <div style="display:flex; gap:10px; margin-top:10px;">
-            <button class="btn" style="background:var(--warning); flex:1;" onclick="openGaveModal('${c.id}')">
-                <i class="fas fa-arrow-up"></i> Gave
+            <button class="btn" style="background:var(--warning); flex:1;" onclick="openGiveModal('${c.id}')">
+                <i class="fas fa-arrow-up"></i> Give
             </button>
             <button class="btn" style="background:var(--primary); flex:1;" onclick="openReceiveModal('${c.id}')">
                 <i class="fas fa-arrow-down"></i> Receive
@@ -105,47 +101,44 @@ export function openCustomerProfileModal(customerId) {
     document.getElementById('modal-overlay').classList.remove('hidden');
 }
 
-// --- GAVE (INCREASE DEBT) ---
-export function openGaveModal(customerId) {
+// --- GIVE (INCREASE DEBT) ---
+export function openGiveModal(customerId) {
     const c = window.data.customers.find(x => x.id === customerId);
     const modal = document.getElementById('modal-body');
     modal.innerHTML = `
         <div class="modal-header">
-            <h2>Gave to ${c.name}</h2>
+            <h2>Give to ${c.name}</h2>
             <button class="close-btn" onclick="openCustomerProfileModal('${c.id}')">&times;</button>
         </div>
         <p style="margin-bottom:15px;">Current Debt: <strong>${window.formatCurrency(c.balance || 0)}</strong></p>
-        <div class="form-group"><label>Amount (Rs.) *</label><input type="number" id="gave-amount" min="1"></div>
-        <div class="form-group"><label>Note (Optional)</label><input type="text" id="gave-note" placeholder="e.g., Cash given"></div>
-        <button class="btn" id="btn-gave" style="background:var(--warning);" onclick="processGave('${c.id}')">Confirm Gave</button>
+        <div class="form-group"><label>Amount (Rs.) *</label><input type="number" id="give-amount" min="1"></div>
+        <div class="form-group"><label>Note (Optional)</label><input type="text" id="give-note" placeholder="e.g., Cash given"></div>
+        <button class="btn" id="btn-give" style="background:var(--warning);" onclick="processGive('${c.id}')">Confirm Give</button>
     `;
     document.getElementById('modal-overlay').classList.remove('hidden');
 }
 
-export async function processGave(customerId) {
-    const amount = parseFloat(document.getElementById('gave-amount').value);
-    const note = document.getElementById('gave-note').value.trim();
+export async function processGive(customerId) {
+    const amount = parseFloat(document.getElementById('give-amount').value);
+    const note = document.getElementById('give-note').value.trim();
     if (!amount || amount <= 0) return alert("Please enter a valid amount.");
 
-    window.showLoading('btn-gave', "Processing...");
+    window.showLoading('btn-give', "Processing...");
     try {
-        await runTransaction(window.db, async (transaction) => {
-            const cRef = doc(window.db, "customers", customerId);
-            const cSnap = await transaction.get(cRef);
-            const newBalance = (cSnap.data().balance || 0) + amount;
-            transaction.update(cRef, { balance: newBalance });
-            const txnRef = doc(collection(window.db, "customerTransactions"));
-            transaction.set(txnRef, {
-                ownerId: window.currentUserId, customerId, type: 'manual_debt', amount, balanceAfter: newBalance,
-                date: new Date().toISOString(), note: note || 'Debt increased'
-            });
+        const c = window.data.customers.find(x => x.id === customerId);
+        const newBalance = (c.balance || 0) + amount;
+        
+        await window.updateDoc(window.doc(window.db, "customers", customerId), { balance: newBalance });
+        await window.addDoc(window.doc(window.collection(window.db, "customerTransactions")), {
+            ownerId: window.currentUserId, customerId, type: 'manual_debt', amount, balanceAfter: newBalance,
+            date: new Date().toISOString(), note: note || 'Debt increased'
         });
         alert("Debt increased successfully!");
         openCustomerProfileModal(customerId);
     } catch (error) {
         console.error(error);
         alert("Failed to update debt.");
-    } finally { window.hideLoading('btn-gave'); }
+    } finally { window.hideLoading('btn-give'); }
 }
 
 // --- RECEIVE (DECREASE DEBT) ---
@@ -175,16 +168,12 @@ export async function processReceive(customerId) {
 
     window.showLoading('btn-receive', "Processing...");
     try {
-        await runTransaction(window.db, async (transaction) => {
-            const cRef = doc(window.db, "customers", customerId);
-            const cSnap = await transaction.get(cRef);
-            const newBalance = Math.max(0, (cSnap.data().balance || 0) - amount);
-            transaction.update(cRef, { balance: newBalance });
-            const txnRef = doc(collection(window.db, "customerTransactions"));
-            transaction.set(txnRef, {
-                ownerId: window.currentUserId, customerId, type: 'payment', amount, balanceAfter: newBalance,
-                date: new Date().toISOString(), note: note || 'Payment received'
-            });
+        const newBalance = Math.max(0, (c.balance || 0) - amount);
+        
+        await window.updateDoc(window.doc(window.db, "customers", customerId), { balance: newBalance });
+        await window.addDoc(window.doc(window.collection(window.db, "customerTransactions")), {
+            ownerId: window.currentUserId, customerId, type: 'payment', amount, balanceAfter: newBalance,
+            date: new Date().toISOString(), note: note || 'Payment received'
         });
         alert("Payment recorded successfully!");
         openCustomerProfileModal(customerId);
@@ -194,23 +183,11 @@ export async function processReceive(customerId) {
     } finally { window.hideLoading('btn-receive'); }
 }
 
-// --- KEEP OLD EXPORTS TO PREVENT APP.JS IMPORT CRASH ---
-export function openCustomerLedger(customerId) { openCustomerProfileModal(customerId); }
-export function openAddDebtModal(customerId) { openGaveModal(customerId); }
-export async function addCustomerDebt(customerId) {}
-export function openRecordPaymentModal(customerId) { openReceiveModal(customerId); }
-export async function recordCustomerPayment(customerId) {}
-
 // --- EXPOSE TO WINDOW ---
 window.openCustomerModal = openCustomerModal;
 window.saveCustomer = saveCustomer;
 window.openCustomerProfileModal = openCustomerProfileModal;
-window.openGaveModal = openGaveModal;
-window.processGave = processGave;
+window.openGiveModal = openGiveModal;
+window.processGive = processGive;
 window.openReceiveModal = openReceiveModal;
 window.processReceive = processReceive;
-window.openCustomerLedger = openCustomerLedger;
-window.openAddDebtModal = openAddDebtModal;
-window.addCustomerDebt = addCustomerDebt;
-window.openRecordPaymentModal = openRecordPaymentModal;
-window.recordCustomerPayment = recordCustomerPayment;
