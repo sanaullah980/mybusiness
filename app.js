@@ -94,12 +94,12 @@ onAuthStateChanged(auth, (user) => {
 function startListeners() {
     clearListeners();
     const q = (col) => query(collection(db, col), where("ownerId", "==", window.currentUserId));
-    listeners.push(onSnapshot(q("products"), s => { window.data.products = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); }));
-    listeners.push(onSnapshot(q("customers"), s => { window.data.customers = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); }));
-    listeners.push(onSnapshot(q("sales"), s => { window.data.sales = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); }));
-    listeners.push(onSnapshot(q("expenses"), s => { window.data.expenses = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); }));
-    listeners.push(onSnapshot(q("stockPurchases"), s => { window.data.stockPurchases = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); }));
-    listeners.push(onSnapshot(q("customerTransactions"), s => { window.data.customerTransactions = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); }));
+    listeners.push(onSnapshot(q("products"), s => { window.data.products = s.docs.map(d => ({ id: d.id, ...d.data() })); refreshCurrentView(); }));
+    listeners.push(onSnapshot(q("customers"), s => { window.data.customers = s.docs.map(d => ({ id: d.id, ...d.data() })); refreshCurrentView(); }));
+    listeners.push(onSnapshot(q("sales"), s => { window.data.sales = s.docs.map(d => ({ id: d.id, ...d.data() })); refreshCurrentView(); }));
+    listeners.push(onSnapshot(q("expenses"), s => { window.data.expenses = s.docs.map(d => ({ id: d.id, ...d.data() })); refreshCurrentView(); }));
+    listeners.push(onSnapshot(q("stockPurchases"), s => { window.data.stockPurchases = s.docs.map(d => ({ id: d.id, ...d.data() })); refreshCurrentView(); }));
+    listeners.push(onSnapshot(q("customerTransactions"), s => { window.data.customerTransactions = s.docs.map(d => ({ id: d.id, ...d.data() })); refreshCurrentView(); }));
     listeners.push(onSnapshot(doc(db, "settings", window.currentUserId), (snap) => { window.data.settings = snap.exists() ? snap.data() : {}; refreshCurrentView(); }));
 }
 function clearListeners() { listeners.forEach(unsub => unsub()); listeners = []; }
@@ -109,7 +109,7 @@ function refreshCurrentView() { const activeNav = document.querySelector('.nav-i
 window.navigate = (page) => {
     document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
     const btn = document.querySelector(`.nav-item[data-page="${page}"]`);
-    if(btn) btn.classList.add('active');
+    if (btn) btn.classList.add('active');
     const content = document.getElementById('app-content');
     const title = document.getElementById('header-title');
     if (page === 'dashboard') { title.innerText = 'Dashboard'; renderDashboard(content); }
@@ -194,7 +194,7 @@ window.addSelectedProductsToCart = () => {
         if (checkbox && checkbox.checked) {
             const qtyInput = document.getElementById(`qty-${p.id}`);
             const qty = parseInt(qtyInput.value);
-            
+
             if (!qty || qty < 1) {
                 errorMessage += `Please enter a valid quantity for ${p.name}.\n`;
                 return;
@@ -216,7 +216,7 @@ window.addSelectedProductsToCart = () => {
                 cart.push(item);
             }
             addedCount++;
-            
+
             // Reset the selection UI
             checkbox.checked = false;
             document.getElementById(`qty-container-${p.id}`).classList.add('hidden');
