@@ -1,241 +1,64 @@
-// Firebase imports
-import { 
-    collection, 
-    query, 
-    where, 
-    onSnapshot,
-    doc,
-    updateDoc,
-    addDoc,
-    deleteDoc,
-    runTransaction
-} from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, setDoc, onSnapshot, query, where, runTransaction, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-// Import all modules
 import { renderDashboard } from './modules/dashboard.js';
-import { renderCustomers } from './modules/customers.js';
-import { renderSales } from './modules/sales.js';
-import { renderInventory } from './modules/inventory.js';
-import { renderMore } from './modules/more.js';
-import { renderSettings } from './modules/setting.js';
-import { renderExpenses } from './modules/expenses.js';
-import { renderReport } from './modules/report.js';
+import { renderSales, showSaleTab, renderCart, updateSaleDue, addSaleItem, removeCartItem, completeNormalSale, completeManualSale, completeBulkSale } from './modules/sales.js';
+import { renderInventory, openProductModal, saveProduct, deleteProduct, openStockAdjustModal, saveStockAdjustment } from './modules/inventory.js';
+import { renderCustomers, openCustomerModal, saveCustomer, openCustomerLedger, openAddDebtModal, addCustomerDebt, openRecordPaymentModal, recordCustomerPayment } from './modules/customers.js';
+import { renderExpenses, openExpenseModal, saveExpense, deleteExpense } from './modules/expenses.js';
+import { renderStockPurchases, openStockPurchaseModal, saveStockPurchase, deleteStockPurchase } from './modules/stockPurchases.js';
+import { renderReports, setReportTab, changeReportMonth, resetDailyReport, calculateReportData } from './modules/report.js';
+import { renderMore, openDeleteRecordsModal, deleteCollectionData, deleteEverything } from './modules/more.js';
+import { renderSettings, saveSettings, openChangePasswordModal, changePassword } from './modules/setting.js';
+import { closeModal, viewSaleDetail } from './modules/modals.js';
 
-// Initialize global data object
-window.data = {
-    sales: [],
-    products: [],
-    customers: [],
-    customerTransactions: [],
-    expenses: [],
-    stockPurchases: [],
-    userSettings: { businessName: '', currency: 'Rs.' }
-};
+const firebaseConfig = { apiKey: "AIzaSyBQqnIhMCGd4_FRApjkns3HjIrqw2V1qFc", authDomain: "mybusinessapp-4734c.firebaseapp.com", projectId: "mybusinessapp-4734c", storageBucket: "mybusinessapp-4734c.firebasestorage.app", messagingSenderId: "367002926256", appId: "1:367002926256:web:0b5139dab24d901d9c8f75", measurementId: "G-HBC31ZFKMG" };
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const googleProvider = new GoogleAuthProvider();
+setPersistence(auth, browserLocalPersistence).catch(console.error);
 
-// Utility functions
-window.formatCurrency = (amount) => {
-    const currency = window.data.userSettings?.currency || 'Rs.';
-    return `${currency} ${(amount || 0).toLocaleString('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-};
+let currentUserId = null;
+let isLoginMode = true;
+let data = { products: [], customers: [], sales: [], expenses: [], stockPurchases: [], customerTransactions: [], settings: {} };
+let listeners = [];
+let cart = [];
+let activeReportTab = 'daily';
+let currentReportMonth = new Date();
 
-window.getStartOfDay = (date) => {
-    const d = new Date(date);
-    d.setHours(0, 0, 0, 0);
-    return d;
-};
+window.data = data; window.cart = cart; window.db = db; window.auth = auth; window.activeReportTab = activeReportTab; window.currentReportMonth = currentReportMonth;
+window.doc = doc; window.collection = collection; window.updateDoc = updateDoc; window.addDoc = addDoc; window.runTransaction = runTransaction;
 
-window.getEndOfDay = (date) => {
-    const d = new Date(date);
-    d.setHours(23, 59, 59, 999);
-    return d;
-};
+function formatCurrency(amount) { if (amount === null || amount === undefined || isNaN(amount)) return "Unknown"; return "Rs. " + Number(amount).toLocaleString('en-PK', { minimumFractionDigits: 0, maximumFractionDigits: 2 }); }
+function getStartOfDay(date) { const d = new Date(date); d.setHours(0, 0, 0, 0); return d; }
+function getEndOfDay(date) { const d = new Date(date); d.setHours(23, 59, 59, 999); return d; }
+function getStartOfMonth(date) { const d = new Date(date); d.setDate(1); d.setHours(0, 0, 0, 0); return d; }
+function getEndOfMonth(date) { const d = new Date(date); d.setMonth(d.getMonth() + 1); d.setDate(0); d.setHours(23, 59, 59, 999); return d; }
+function getLocalDateStr(dateInput) { const d = new Date(dateInput); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+function showLoading(btnId, text) { const btn = document.getElementById(btnId); if (btn) { btn.disabled = true; btn.dataset.originalText = btn.innerText; btn.innerText = text || "Processing..."; } }
+function hideLoading(btnId) { const btn = document.getElementById(btnId); if (btn) { btn.disabled = false; btn.innerText = btn.dataset.originalText || "Submit"; } }
 
-window.calculateReportData = (startDate, endDate) => {
-    const salesInRange = window.data.sales.filter(s => {
-        const saleDate = new Date(s.date);
-        return saleDate >= startDate && saleDate <= endDate;
-    });
+window.formatCurrency = formatCurrency; window.getStartOfDay = getStartOfDay; window.getEndOfDay = getEndOfDay; window.getStartOfMonth = getStartOfMonth; window.getEndOfMonth = getEndOfMonth; window.getLocalDateStr = getLocalDateStr; window.showLoading = showLoading; window.hideLoading = hideLoading; window.calculateReportData = calculateReportData;
 
-    const totalSales = salesInRange.reduce((sum, s) => sum + (s.total || 0), 0);
-    const knownProfit = salesInRange
-        .filter(s => s.profitKnown)
-        .reduce((sum, s) => sum + ((s.total || 0) - (s.cost || 0)), 0);
-    
-    const totalExpenses = window.data.expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
-    const netProfit = totalSales - totalExpenses;
-    
-    const outstandingDebt = window.data.customers.reduce((sum, c) => sum + (c.balance || 0), 0);
+window.toggleAuthMode = () => { isLoginMode = !isLoginMode; document.getElementById('auth-button').innerText = isLoginMode ? 'Log In' : 'Sign Up'; document.getElementById('toggle-auth').innerText = isLoginMode ? "Don't have an account? Sign Up" : "Already have an account? Log In"; document.getElementById('login-error').innerText = ''; };
+window.handleAuth = async (e) => { if (e) e.preventDefault(); const email = document.getElementById('login-email').value.trim(); const pass = document.getElementById('login-password').value; const errorDiv = document.getElementById('login-error'); if (!email || !pass) { errorDiv.innerText = "Please enter both email and password."; return; } showLoading('auth-button', isLoginMode ? "Logging in..." : "Creating account..."); try { if (isLoginMode) await signInWithEmailAndPassword(auth, email, pass); else await createUserWithEmailAndPassword(auth, email, pass); } catch (error) { if (error.code === 'auth/email-already-in-use') errorDiv.innerText = "Email already registered."; else if (error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') errorDiv.innerText = "Invalid email or password."; else errorDiv.innerText = "Authentication failed."; } finally { hideLoading('auth-button'); } };
+window.forgotPassword = async (e) => { if (e) e.preventDefault(); const email = document.getElementById('login-email').value.trim(); if (!email) return alert("Enter email first."); try { await sendPasswordResetEmail(auth, email); alert("Reset link sent!"); } catch (error) { alert("If account exists, link sent."); } };
+window.signInWithGoogle = async () => { try { await signInWithPopup(auth, googleProvider); } catch (error) { alert("Google Sign-In failed."); } };
+window.handleLogout = async () => { if (!confirm("Log out?")) return; await signOut(auth); };
 
-    return { totalSales, knownProfit, netProfit, outstandingDebt };
-};
+onAuthStateChanged(auth, (user) => {
+    document.getElementById('auth-loading').classList.add('hidden');
+    window.currentUserId = user ? user.uid : null;
+    if (user) { document.getElementById('auth-screen').classList.add('hidden'); document.getElementById('main-app').classList.remove('hidden'); startListeners(); navigate('dashboard'); }
+    else { document.getElementById('auth-screen').classList.remove('hidden'); document.getElementById('main-app').classList.add('hidden'); clearListeners(); window.data = { products: [], customers: [], sales: [], expenses: [], stockPurchases: [], customerTransactions: [], settings: {} }; }
+});
 
-// Navigation and page rendering
-window.currentPage = 'dashboard';
+function startListeners() { clearListeners(); const q = (col) => query(collection(db, col), where("ownerId", "==", window.currentUserId)); listeners.push(onSnapshot(q("products"), s => { window.data.products = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("customers"), s => { window.data.customers = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("sales"), s => { window.data.sales = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("expenses"), s => { window.data.expenses = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("stockPurchases"), s => { window.data.stockPurchases = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("customerTransactions"), s => { window.data.customerTransactions = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(doc(db, "settings", window.currentUserId), (snap) => { window.data.settings = snap.exists() ? snap.data() : {}; refreshCurrentView(); })); }
+function clearListeners() { listeners.forEach(unsub => unsub()); listeners = []; }
+function refreshCurrentView() { const activeNav = document.querySelector('.nav-item.active'); if (activeNav) navigate(activeNav.dataset.page || 'dashboard'); }
 
-window.navigate = (page) => {
-    window.currentPage = page;
-    
-    // Update active nav item
-    document.querySelectorAll('.nav-item').forEach(item => {
-        item.classList.remove('active');
-        if (item.getAttribute('data-page') === page) {
-            item.classList.add('active');
-        }
-    });
+window.navigate = (page) => { document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active')); const btn = document.querySelector(`.nav-item[data-page="${page}"]`); if(btn) btn.classList.add('active'); const content = document.getElementById('app-content'); const title = document.getElementById('header-title'); if (page === 'dashboard') { title.innerText = 'Dashboard'; renderDashboard(content); } else if (page === 'sales') { title.innerText = 'New Sale'; renderSales(content); } else if (page === 'inventory') { title.innerText = 'Inventory'; renderInventory(content); } else if (page === 'customers') { title.innerText = 'Customers'; renderCustomers(content); } else if (page === 'more') { title.innerText = 'More'; renderMore(content); } else if (page === 'expenses') { title.innerText = 'Expenses'; renderExpenses(content); } else if (page === 'stockPurchases') { title.innerText = 'Stock Purchases'; renderStockPurchases(content); } else if (page === 'reports') { title.innerText = 'Reports'; renderReports(content); } else if (page === 'settings') { title.innerText = 'Settings'; renderSettings(content); } };
 
-    // Render page content
-    const container = document.getElementById('app-content');
-    container.innerHTML = '';
-
-    try {
-        switch (page) {
-            case 'dashboard':
-                document.getElementById('header-title').textContent = 'Dashboard';
-                renderDashboard(container);
-                break;
-            case 'customers':
-                document.getElementById('header-title').textContent = 'Customers';
-                renderCustomers(container);
-                break;
-            case 'sales':
-                document.getElementById('header-title').textContent = 'Sales';
-                renderSales(container);
-                break;
-            case 'inventory':
-                document.getElementById('header-title').textContent = 'Inventory';
-                renderInventory(container);
-                break;
-            case 'expenses':
-                document.getElementById('header-title').textContent = 'Expenses';
-                renderExpenses(container);
-                break;
-            case 'reports':
-                document.getElementById('header-title').textContent = 'Reports';
-                renderReport(container);
-                break;
-            case 'more':
-                document.getElementById('header-title').textContent = 'More';
-                renderMore(container);
-                break;
-            case 'settings':
-                document.getElementById('header-title').textContent = 'Settings';
-                renderSettings(container);
-                break;
-            default:
-                renderDashboard(container);
-        }
-    } catch (error) {
-        console.error('Error rendering page:', error);
-        container.innerHTML = '<div class="card"><p style="color: var(--danger);">Error loading page. Check console.</p></div>';
-    }
-};
-
-// Modal functions
-window.closeModal = (event) => {
-    if (event && event.target.id !== 'modal-overlay') return;
-    document.getElementById('modal-overlay').classList.add('hidden');
-    document.getElementById('modal-body').innerHTML = '';
-};
-
-// Real-time data listeners
-function setupDataListeners() {
-    if (!window.auth || !window.currentUserId) {
-        console.error('Auth not initialized');
-        return;
-    }
-
-    console.log('[app] Setting up real-time listeners for user:', window.currentUserId);
-
-    // Listen to sales
-    const salesQuery = query(collection(window.db, 'sales'), where('ownerId', '==', window.currentUserId));
-    onSnapshot(salesQuery, (snapshot) => {
-        window.data.sales = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        console.log('[app] Sales updated:', window.data.sales.length);
-        if (window.currentPage === 'dashboard' || window.currentPage === 'sales' || window.currentPage === 'reports') {
-            window.navigate(window.currentPage);
-        }
-    }, (error) => console.error('Sales listener error:', error));
-
-    // Listen to products
-    const productsQuery = query(collection(window.db, 'products'), where('ownerId', '==', window.currentUserId));
-    onSnapshot(productsQuery, (snapshot) => {
-        window.data.products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        console.log('[app] Products updated:', window.data.products.length);
-        if (window.currentPage === 'inventory') {
-            window.navigate(window.currentPage);
-        }
-    }, (error) => console.error('Products listener error:', error));
-
-    // Listen to customers
-    const customersQuery = query(collection(window.db, 'customers'), where('ownerId', '==', window.currentUserId));
-    onSnapshot(customersQuery, (snapshot) => {
-        window.data.customers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        console.log('[app] Customers updated:', window.data.customers.length);
-        if (window.currentPage === 'customers' || window.currentPage === 'dashboard') {
-            window.navigate(window.currentPage);
-        }
-    }, (error) => console.error('Customers listener error:', error));
-
-    // Listen to customer transactions
-    const txnsQuery = query(collection(window.db, 'customerTransactions'), where('ownerId', '==', window.currentUserId));
-    onSnapshot(txnsQuery, (snapshot) => {
-        window.data.customerTransactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        console.log('[app] Transactions updated:', window.data.customerTransactions.length);
-    }, (error) => console.error('Transactions listener error:', error));
-
-    // Listen to expenses
-    const expensesQuery = query(collection(window.db, 'expenses'), where('ownerId', '==', window.currentUserId));
-    onSnapshot(expensesQuery, (snapshot) => {
-        window.data.expenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        console.log('[app] Expenses updated:', window.data.expenses.length);
-        if (window.currentPage === 'expenses' || window.currentPage === 'dashboard' || window.currentPage === 'reports') {
-            window.navigate(window.currentPage);
-        }
-    }, (error) => console.error('Expenses listener error:', error));
-
-    // Listen to stock purchases
-    const stockQuery = query(collection(window.db, 'stockPurchases'), where('ownerId', '==', window.currentUserId));
-    onSnapshot(stockQuery, (snapshot) => {
-        window.data.stockPurchases = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        console.log('[app] Stock purchases updated:', window.data.stockPurchases.length);
-    }, (error) => console.error('Stock purchases listener error:', error));
-
-    // Listen to user settings
-    const userSettingsRef = doc(window.db, 'users', window.currentUserId);
-    onSnapshot(userSettingsRef, (doc) => {
-        if (doc.exists()) {
-            window.data.userSettings = doc.data();
-            console.log('[app] Settings updated');
-        }
-    }, (error) => console.error('Settings listener error:', error));
-}
-
-// Main initialization function
-export function initializeApp() {
-    console.log('[app] Initializing application for user:', window.currentUserId);
-    
-    if (!window.currentUserId) {
-        console.error('[app] No user ID available');
-        return;
-    }
-
-    try {
-        // Setup real-time data listeners
-        setupDataListeners();
-
-        // Load initial page
-        window.navigate('dashboard');
-
-        console.log('[app] Application initialized successfully');
-    } catch (error) {
-        console.error('[app] Initialization error:', error);
-        alert('Error initializing app. Check console.');
-    }
-}
-
-// Make functions globally available
-window.initializeApp = initializeApp;
-window.navigate = window.navigate;
-window.closeModal = window.closeModal;
-
-console.log('[app.js] Module loaded and ready');
+window.renderDashboard = renderDashboard; window.renderSales = renderSales; window.showSaleTab = showSaleTab; window.renderCart = renderCart; window.updateSaleDue = updateSaleDue; window.addSaleItem = addSaleItem; window.removeCartItem = removeCartItem; window.completeNormalSale = completeNormalSale; window.completeManualSale = completeManualSale; window.completeBulkSale = completeBulkSale; window.renderInventory = renderInventory; window.openProductModal = openProductModal; window.saveProduct = saveProduct; window.deleteProduct = deleteProduct; window.openStockAdjustModal = openStockAdjustModal; window.saveStockAdjustment = saveStockAdjustment; window.renderCustomers = renderCustomers; window.openCustomerModal = openCustomerModal; window.saveCustomer = saveCustomer; window.openCustomerLedger = openCustomerLedger; window.openAddDebtModal = openAddDebtModal; window.addCustomerDebt = addCustomerDebt; window.openRecordPaymentModal = openRecordPaymentModal; window.recordCustomerPayment = recordCustomerPayment; window.renderExpenses = renderExpenses; window.openExpenseModal = openExpenseModal; window.saveExpense = saveExpense; window.deleteExpense = deleteExpense; window.renderStockPurchases = renderStockPurchases; window.openStockPurchaseModal = openStockPurchaseModal; window.saveStockPurchase = saveStockPurchase; window.deleteStockPurchase = deleteStockPurchase; window.renderReports = renderReports; window.setReportTab = setReportTab; window.changeReportMonth = changeReportMonth; window.resetDailyReport = resetDailyReport; window.renderMore = renderMore; window.openDeleteRecordsModal = openDeleteRecordsModal; window.deleteCollectionData = deleteCollectionData; window.deleteEverything = deleteEverything; window.renderSettings = renderSettings; window.saveSettings = saveSettings; window.openChangePasswordModal = openChangePasswordModal; window.changePassword = changePassword; window.closeModal = closeModal; window.viewSaleDetail = viewSaleDetail;
