@@ -5,7 +5,6 @@
     --shadow: 0 2px 10px rgba(0,0,0,0.1);
 }
 
-/* FIXED: Added the missing asterisk (*) */
 * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
 body { background: var(--light); color: var(--text); padding-bottom: 70px; }
 
