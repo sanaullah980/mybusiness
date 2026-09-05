@@ -5,14 +5,12 @@ export function renderDashboard(container) {
     const getEndOfDay = window.getEndOfDay;
     const calculateReportData = window.calculateReportData;
     const navigate = window.navigate;
-
     const startOfDay = getStartOfDay(new Date());
     const endOfDay = getEndOfDay(new Date());
     const stats = calculateReportData(startOfDay, endOfDay);
     const totalExpensesAll = data.expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
     const totalStockPurchasesAll = data.stockPurchases.reduce((sum, p) => sum + (p.amount || 0), 0);
-    const sortedSales = [...data.sales].sort((a,b) => new Date(a.date) - new Date(b.date)).reverse();
-
+    const sortedSales = [...data.sales].sort((a, b) => new Date(a.date) - new Date(b.date)).reverse();
     container.innerHTML = `
         <div class="dashboard-grid">
             <div class="card profit"><h3>Today's Sales</h3><div class="value">${formatCurrency(stats.totalSales)}</div></div>

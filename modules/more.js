@@ -1,9 +1,114 @@
 export function renderMore(container) {
-    const data = window.data; const formatCurrency = window.formatCurrency;
-    const sevenDaysAgo = new Date(); sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    const recentSales = [...data.sales].filter(s => new Date(s.date) >= sevenDaysAgo).sort((a,b) => new Date(a.date) - new Date(b.date)).reverse();
-    container.innerHTML = `<div class="card"><div class="list-item" onclick="navigate('customers')"><div class="list-item-info"><h4><i class="fas fa-users"></i> Customers</h4></div><i class="fas fa-chevron-right"></i></div><div class="list-item" onclick="navigate('expenses')"><div class="list-item-info"><h4><i class="fas fa-receipt"></i> Expenses</h4></div><i class="fas fa-chevron-right"></i></div><div class="list-item" onclick="navigate('stockPurchases')"><div class="list-item-info"><h4><i class="fas fa-truck-loading"></i> Stock Purchases</h4></div><i class="fas fa-chevron-right"></i></div><div class="list-item" onclick="navigate('reports')"><div class="list-item-info"><h4><i class="fas fa-chart-pie"></i> Reports</h4></div><i class="fas fa-chevron-right"></i></div><div class="list-item" onclick="navigate('settings')"><div class="list-item-info"><h4><i class="fas fa-cog"></i> Settings</h4></div><i class="fas fa-chevron-right"></i></div><div class="list-item" onclick="openDeleteRecordsModal()" style="color: var(--danger);"><div class="list-item-info"><h4><i class="fas fa-trash-alt"></i> Delete Records</h4></div><i class="fas fa-chevron-right"></i></div><div class="list-item" onclick="handleLogout()" style="color: var(--danger);"><div class="list-item-info"><h4><i class="fas fa-sign-out-alt"></i> Logout</h4></div></div></div><div class="card"><h3>Sale History (Last 7 Days)</h3>${recentSales.length === 0 ? '<p style="color:var(--gray); text-align:center; padding:10px;">No sales in the last 7 days.</p>' : recentSales.map(s => `<div class="list-item" onclick="viewSaleDetail('${s.id}')"><div class="list-item-info"><h4>${s.customerName || 'Walk-in'} <span class="badge ${s.profitKnown ? 'badge-ok' : 'badge-unknown'}">${s.profitKnown ? 'Known' : 'Unknown'}</span></h4><p>${new Date(s.date).toLocaleString()}</p></div><div style="font-weight:bold; color:var(--primary);">${formatCurrency(s.total)}</div></div>`).join('')}</div>`;
+    const data = window.data;
+    const formatCurrency = window.formatCurrency;
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const recentSales = [...data.sales].filter(s => new Date(s.date) >= sevenDaysAgo).sort((a, b) => new Date(a.date) - new Date(b.date)).reverse();
+    container.innerHTML = `
+        <div class="card">
+            <div class="list-item" onclick="navigate('customers')">
+                <div class="list-item-info"><h4><i class="fas fa-users"></i> Customers</h4></div>
+                <i class="fas fa-chevron-right"></i>
+            </div>
+            <div class="list-item" onclick="navigate('expenses')">
+                <div class="list-item-info"><h4><i class="fas fa-receipt"></i> Expenses</h4></div>
+                <i class="fas fa-chevron-right"></i>
+            </div>
+            <div class="list-item" onclick="navigate('stockPurchases')">
+                <div class="list-item-info"><h4><i class="fas fa-truck-loading"></i> Stock Purchases</h4></div>
+                <i class="fas fa-chevron-right"></i>
+            </div>
+            <div class="list-item" onclick="navigate('reports')">
+                <div class="list-item-info"><h4><i class="fas fa-chart-pie"></i> Reports</h4></div>
+                <i class="fas fa-chevron-right"></i>
+            </div>
+            <div class="list-item" onclick="navigate('settings')">
+                <div class="list-item-info"><h4><i class="fas fa-cog"></i> Settings</h4></div>
+                <i class="fas fa-chevron-right"></i>
+            </div>
+            <div class="list-item" onclick="openDeleteRecordsModal()" style="color: var(--danger);">
+                <div class="list-item-info"><h4><i class="fas fa-trash-alt"></i> Delete Records</h4></div>
+                <i class="fas fa-chevron-right"></i>
+            </div>
+            <div class="list-item" onclick="handleLogout()" style="color: var(--danger);">
+                <div class="list-item-info"><h4><i class="fas fa-sign-out-alt"></i> Logout</h4></div>
+            </div>
+        </div>
+        <div class="card">
+            <h3>Sale History (Last 7 Days)</h3>
+            ${recentSales.length === 0 ? '<p style="color:var(--gray); text-align:center; padding:10px;">No sales in the last 7 days.</p>' :
+                recentSales.map(s => `
+                    <div class="list-item" onclick="viewSaleDetail('${s.id}')">
+                        <div class="list-item-info">
+                            <h4>${s.customerName || 'Walk-in'} <span class="badge ${s.profitKnown ? 'badge-ok' : 'badge-unknown'}">${s.profitKnown ? 'Known' : 'Unknown'}</span></h4>
+                            <p>${new Date(s.date).toLocaleString()}</p>
+                        </div>
+                        <div style="font-weight:bold; color:var(--primary);">${formatCurrency(s.total)}</div>
+                    </div>
+                `).join('')}
+        </div>
+    `;
 }
-export function openDeleteRecordsModal() { const modal = document.getElementById('modal-body'); modal.innerHTML = `<div class="modal-header"><h2>Delete Records</h2><button class="close-btn" onclick="closeModal()">&times;</button></div><p style="color: var(--danger); font-weight: bold; margin-bottom: 15px; font-size: 14px;">Warning: Permanent!</p><div style="display: flex; flex-direction: column; gap: 10px;"><button class="btn btn-danger" onclick="deleteCollectionData('sales')">Delete All Sales</button><button class="btn btn-danger" onclick="deleteCollectionData('products')">Delete All Products</button><button class="btn btn-danger" onclick="deleteCollectionData('customers')">Delete All Customers</button><button class="btn btn-danger" onclick="deleteCollectionData('customerTransactions')">Delete All Transactions</button><button class="btn btn-danger" onclick="deleteCollectionData('expenses')">Delete All Expenses</button><button class="btn btn-danger" onclick="deleteCollectionData('stockPurchases')">Delete All Stock Purchases</button><hr style="margin: 10px 0; border: 0; border-top: 1px solid #eee;"><button class="btn" style="background: #000; font-weight: bold;" onclick="deleteEverything()">⚠️ DELETE EVERYTHING</button></div>`; document.getElementById('modal-overlay').classList.remove('hidden'); }
-export async function deleteCollectionData(collectionName) { if (!confirm(`Delete ALL ${collectionName}?`)) return; try { const q = query(collection(window.db, collectionName), where("ownerId", "==", window.currentUserId)); const snapshot = await getDocs(q); if (snapshot.empty) { alert("No records."); return; } const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref)); await Promise.all(deletePromises); alert(`Deleted ${collectionName}!`); closeModal(); navigate('dashboard'); } catch (error) { alert("Failed."); } }
-export async function deleteEverything() { if (!confirm("FINAL WARNING: Delete ALL business data?")) return; const collections = ['sales', 'products', 'customers', 'customerTransactions', 'expenses', 'stockPurchases', 'stockAdjustments']; let totalDeleted = 0; try { for (const col of collections) { const q = query(collection(window.db, col), where("ownerId", "==", window.currentUserId)); const snapshot = await getDocs(q); if (!snapshot.empty) { const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref)); await Promise.all(deletePromises); totalDeleted += snapshot.size; } } alert(`Deleted all data! (${totalDeleted} records)`); closeModal(); navigate('dashboard'); } catch (error) { alert("Failed."); } }
+
+export function openDeleteRecordsModal() {
+    const modal = document.getElementById('modal-body');
+    modal.innerHTML = `
+        <div class="modal-header">
+            <h2>Delete Records</h2>
+            <button class="close-btn" onclick="closeModal()">&times;</button>
+        </div>
+        <p style="color: var(--danger); font-weight: bold; margin-bottom: 15px; font-size: 14px;">Warning: Permanent!</p>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+            <button class="btn btn-danger" onclick="deleteCollectionData('sales')">Delete All Sales</button>
+            <button class="btn btn-danger" onclick="deleteCollectionData('products')">Delete All Products</button>
+            <button class="btn btn-danger" onclick="deleteCollectionData('customers')">Delete All Customers</button>
+            <button class="btn btn-danger" onclick="deleteCollectionData('customerTransactions')">Delete All Transactions</button>
+            <button class="btn btn-danger" onclick="deleteCollectionData('expenses')">Delete All Expenses</button>
+            <button class="btn btn-danger" onclick="deleteCollectionData('stockPurchases')">Delete All Stock Purchases</button>
+            <hr style="margin: 10px 0; border: 0; border-top: 1px solid #eee;">
+            <button class="btn" style="background: #000; font-weight: bold;" onclick="deleteEverything()">⚠️ DELETE EVERYTHING</button>
+        </div>
+    `;
+    document.getElementById('modal-overlay').classList.remove('hidden');
+}
+
+export async function deleteCollectionData(collectionName) {
+    if (!confirm(`Delete ALL ${collectionName}?`)) return;
+    try {
+        const q = query(collection(window.db, collectionName), where("ownerId", "==", window.currentUserId));
+        const snapshot = await getDocs(q);
+        if (snapshot.empty) {
+            alert("No records.");
+            return;
+        }
+        const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
+        await Promise.all(deletePromises);
+        alert(`Deleted ${collectionName}!`);
+        closeModal();
+        navigate('dashboard');
+    } catch (error) {
+        alert("Failed.");
+    }
+}
+
+export async function deleteEverything() {
+    if (!confirm("FINAL WARNING: Delete ALL business data?")) return;
+    const collections = ['sales', 'products', 'customers', 'customerTransactions', 'expenses', 'stockPurchases', 'stockAdjustments'];
+    let totalDeleted = 0;
+    try {
+        for (const col of collections) {
+            const q = query(collection(window.db, col), where("ownerId", "==", window.currentUserId));
+            const snapshot = await getDocs(q);
+            if (!snapshot.empty) {
+                const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
+                await Promise.all(deletePromises);
+                totalDeleted += snapshot.size;
+            }
+        }
+        alert(`Deleted all data! (${totalDeleted} records)`);
+        closeModal();
+        navigate('dashboard');
+    } catch (error) {
+        alert("Failed.");
+    }
+}

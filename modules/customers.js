@@ -1,66 +1,68 @@
 export function renderCustomers(container) {
     const data = window.data;
     const formatCurrency = window.formatCurrency;
-    
     container.innerHTML = `
         <button class="btn" style="margin-bottom:20px;" onclick="openCustomerModal()">+ Add Customer</button>
         <div class="card" id="customer-list">
-            ${data.customers.length === 0 ? '<p style="color:var(--gray); text-align:center; padding:10px;">No customers found.</p>' : 
-              data.customers.map(c => `
-                <div class="list-item" onclick="openCustomerProfileModal('${c.id}')" style="cursor:pointer;">
-                    <div class="list-item-info">
-                        <h4>${c.name}</h4>
-                        <p>${c.phone || 'No phone'}</p>
+            ${data.customers.length === 0 ? '<p style="color:var(--gray); text-align:center; padding:10px;">No customers found.</p>' :
+                data.customers.map(c => `
+                    <div class="list-item" onclick="openCustomerProfileModal('${c.id}')" style="cursor:pointer;">
+                        <div class="list-item-info">
+                            <h4>${c.name}</h4>
+                            <p>${c.phone || 'No phone'}</p>
+                        </div>
+                        <div style="text-align:right;">
+                            <div style="font-size:12px; color:var(--gray);">Balance</div>
+                            <div style="font-weight:bold; color:var(--danger);">${formatCurrency(c.balance || 0)}</div>
+                        </div>
                     </div>
-                    <div style="text-align:right;">
-                        <div style="font-size:12px; color:var(--gray);">Balance</div>
-                        <div style="font-weight:bold; color:var(--danger);">${formatCurrency(c.balance || 0)}</div>
-                    </div>
-                </div>
-            `).join('')}
+                `).join('')}
         </div>
     `;
 }
 
-export function openCustomerModal(customerId = null) { 
-    const c = customerId ? window.data.customers.find(x => x.id === customerId) : null; 
-    const modal = document.getElementById('modal-body'); 
-    modal.innerHTML = `<div class="modal-header"><h2>${c ? 'Edit' : 'Add'} Customer</h2><button class="close-btn" onclick="closeModal()">&times;</button></div><div class="form-group"><label>Customer Name *</label><input type="text" id="c-name" value="${c ? c.name : ''}"></div><div class="form-group"><label>Phone / Contact</label><input type="text" id="c-phone" value="${c ? (c.phone || '') : ''}"></div><div class="form-group"><label>Notes</label><textarea id="c-notes" rows="2" style="width:100%; padding:12px; border:1px solid #ddd; border-radius:8px;">${c ? (c.notes || '') : ''}</textarea></div><button class="btn" id="btn-save-customer" onclick="saveCustomer('${customerId || ''}')">${c ? 'Update' : 'Save'} Customer</button>`; 
-    document.getElementById('modal-overlay').classList.remove('hidden'); 
+export function openCustomerModal(customerId = null) {
+    const c = customerId ? window.data.customers.find(x => x.id === customerId) : null;
+    const modal = document.getElementById('modal-body');
+    modal.innerHTML = `
+        <div class="modal-header">
+            <h2>${c ? 'Edit' : 'Add'} Customer</h2>
+            <button class="close-btn" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="form-group"><label>Customer Name *</label><input type="text" id="c-name" value="${c ? c.name : ''}"></div>
+        <div class="form-group"><label>Phone / Contact</label><input type="text" id="c-phone" value="${c ? (c.phone || '') : ''}"></div>
+        <div class="form-group"><label>Notes</label><textarea id="c-notes" rows="2" style="width:100%; padding:12px; border:1px solid #ddd; border-radius:8px;">${c ? (c.notes || '') : ''}</textarea></div>
+        <button class="btn" id="btn-save-customer" onclick="saveCustomer('${customerId || ''}')">${c ? 'Update' : 'Save'} Customer</button>
+    `;
+    document.getElementById('modal-overlay').classList.remove('hidden');
 }
 
-export async function saveCustomer(customerId) { 
-    const name = document.getElementById('c-name').value.trim(); 
-    const phone = document.getElementById('c-phone').value.trim(); 
-    const notes = document.getElementById('c-notes').value.trim(); 
-    if (!name) return alert("Name required."); 
-    window.showLoading('btn-save-customer', "Saving..."); 
-    try { 
-        const cData = { name, phone, notes, ownerId: window.currentUserId }; 
-        if (customerId) await window.updateDoc(window.doc(window.db, "customers", customerId), cData); 
-        else { cData.balance = 0; await window.addDoc(window.collection(window.db, "customers"), cData); } 
-        alert(customerId ? "Updated!" : "Added!"); 
-        closeModal(); 
-    } catch (error) { alert("Failed."); } 
-    finally { window.hideLoading('btn-save-customer'); } 
+export async function saveCustomer(customerId) {
+    const name = document.getElementById('c-name').value.trim();
+    const phone = document.getElementById('c-phone').value.trim();
+    const notes = document.getElementById('c-notes').value.trim();
+    if (!name) return alert("Name required.");
+    window.showLoading('btn-save-customer', "Saving...");
+    try {
+        const cData = { name, phone, notes, ownerId: window.currentUserId };
+        if (customerId) await window.updateDoc(window.doc(window.db, "customers", customerId), cData);
+        else { cData.balance = 0; await window.addDoc(window.collection(window.db, "customers"), cData); }
+        alert(customerId ? "Updated!" : "Added!");
+        closeModal();
+    } catch (error) { alert("Failed."); }
+    finally { window.hideLoading('btn-save-customer'); }
 }
 
-// --- PROFILE & REPORT MODAL ---
 export function openCustomerProfileModal(customerId) {
     const c = window.data.customers.find(x => x.id === customerId);
     if (!c) return;
-    
     const txns = window.data.customerTransactions
         .filter(t => t.customerId === customerId)
         .sort((a, b) => new Date(a.date) - new Date(b.date));
-
     const formatCurrency = window.formatCurrency;
     const modal = document.getElementById('modal-body');
-
-    // 3 Columns: Date, Give (Red), Receive (Green)
     let historyHtml = '<div style="overflow-x:auto; margin-bottom: 20px;"><table class="ledger-table" style="min-width: 300px;">';
     historyHtml += '<thead><tr><th>Date</th><th style="text-align:right; color:var(--danger);">Give</th><th style="text-align:right; color:var(--primary);">Receive</th></tr></thead><tbody>';
-
     if (txns.length === 0) {
         historyHtml += '<tr><td colspan="3" style="text-align:center; color:var(--gray); padding: 20px;">No transactions yet</td></tr>';
     } else {
@@ -74,21 +76,17 @@ export function openCustomerProfileModal(customerId) {
         });
     }
     historyHtml += '</tbody></table></div>';
-
     modal.innerHTML = `
         <div class="modal-header">
             <h2>${c.name}</h2>
             <button class="close-btn" onclick="closeModal()">&times;</button>
         </div>
-        
         <div style="text-align:center; margin-bottom: 20px; background: #f8f9fa; padding: 15px; border-radius: 8px;">
             <div style="font-size:14px; color:var(--gray);">Current Balance</div>
             <div style="font-size:32px; font-weight:bold; color:var(--danger);">${formatCurrency(c.balance || 0)}</div>
         </div>
-
         <h3 style="font-size:16px; margin-bottom:10px; color:var(--dark);">Report</h3>
         ${historyHtml}
-
         <div style="display:flex; gap:10px; margin-top:10px;">
             <button class="btn" style="background:var(--warning); flex:1;" onclick="openGiveModal('${c.id}')">
                 <i class="fas fa-arrow-up"></i> Give
@@ -101,7 +99,6 @@ export function openCustomerProfileModal(customerId) {
     document.getElementById('modal-overlay').classList.remove('hidden');
 }
 
-// --- GIVE (INCREASE DEBT) ---
 export function openGiveModal(customerId) {
     const c = window.data.customers.find(x => x.id === customerId);
     const modal = document.getElementById('modal-body');
@@ -122,14 +119,12 @@ export async function processGive(customerId) {
     const amount = parseFloat(document.getElementById('give-amount').value);
     const note = document.getElementById('give-note').value.trim();
     if (!amount || amount <= 0) return alert("Please enter a valid amount.");
-
     window.showLoading('btn-give', "Processing...");
     try {
         const c = window.data.customers.find(x => x.id === customerId);
         const newBalance = (c.balance || 0) + amount;
-        
         await window.updateDoc(window.doc(window.db, "customers", customerId), { balance: newBalance });
-        await window.addDoc(window.doc(window.collection(window.db, "customerTransactions")), {
+        await window.addDoc(window.collection(window.db, "customerTransactions"), {
             ownerId: window.currentUserId, customerId, type: 'manual_debt', amount, balanceAfter: newBalance,
             date: new Date().toISOString(), note: note || 'Debt increased'
         });
@@ -141,7 +136,6 @@ export async function processGive(customerId) {
     } finally { window.hideLoading('btn-give'); }
 }
 
-// --- RECEIVE (DECREASE DEBT) ---
 export function openReceiveModal(customerId) {
     const c = window.data.customers.find(x => x.id === customerId);
     const modal = document.getElementById('modal-body');
@@ -162,16 +156,13 @@ export async function processReceive(customerId) {
     const amount = parseFloat(document.getElementById('receive-amount').value);
     const note = document.getElementById('receive-note').value.trim();
     const c = window.data.customers.find(x => x.id === customerId);
-    
     if (!amount || amount <= 0) return alert("Please enter a valid amount.");
     if (amount > (c.balance || 0)) return alert("Amount cannot exceed current debt.");
-
     window.showLoading('btn-receive', "Processing...");
     try {
         const newBalance = Math.max(0, (c.balance || 0) - amount);
-        
         await window.updateDoc(window.doc(window.db, "customers", customerId), { balance: newBalance });
-        await window.addDoc(window.doc(window.collection(window.db, "customerTransactions")), {
+        await window.addDoc(window.collection(window.db, "customerTransactions"), {
             ownerId: window.currentUserId, customerId, type: 'payment', amount, balanceAfter: newBalance,
             date: new Date().toISOString(), note: note || 'Payment received'
         });
@@ -183,7 +174,6 @@ export async function processReceive(customerId) {
     } finally { window.hideLoading('btn-receive'); }
 }
 
-// --- EXPOSE TO WINDOW ---
 window.openCustomerModal = openCustomerModal;
 window.saveCustomer = saveCustomer;
 window.openCustomerProfileModal = openCustomerProfileModal;
