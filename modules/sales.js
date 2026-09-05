@@ -2,8 +2,7 @@ export function renderSales(container) {
     container.innerHTML = `<div class="tabs"> <button class="tab-btn active" onclick="showSaleTab('normal', this)">Normal Sale</button> <button class="tab-btn" onclick="showSaleTab('manual', this)">Manual Item</button> <button class="tab-btn" onclick="showSaleTab('bulk', this)">Quick / Bulk</button> </div> <div id="sale-tab-normal" class="sale-tab"> <div class="card"> <div class="form-group"> <label>Customer (Optional)</label> <select id="sale-customer"> <option value="">Walk-in Customer</option> ${data.customers.map(c =>`<option value="${c.id}">${c.name} (Debt: ${formatCurrency(c.balance || 0)})</option>`).join('')}
     </select>
     </div>
-                <!-- NEW PRODUCT SELECTION BUTTON -->
-                 <div class="form-group">
+                <div class="form-group">
                      <label>Products</label>
                      <button class="btn btn-secondary" onclick="openProductSelectionModal()" style="text-align:left; display:flex; justify-content:space-between; align-items:center; background: var(--dark);">
                          <span><i class="fas fa-plus"></i> Select Products to Add</span>
@@ -55,9 +54,9 @@ export function renderSales(container) {
                  <button class="btn" id="btn-bulk-sale" onclick="completeBulkSale()">Record Bulk Sale</button>
              </div>
          </div>
-     `;
-     cart = [];
-     renderCart();
+    `;
+    cart = [];
+    renderCart();
     }
     export function showSaleTab(tab, btn) { document.querySelectorAll('.sale-tab').forEach(t => t.classList.add('hidden')); document.getElementById(`sale-tab-${tab}`).classList.remove('hidden'); document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); }
     export function renderCart() {
@@ -125,7 +124,6 @@ export function renderSales(container) {
     } catch (error) { console.error(error); alert("Failed to record bulk sale."); } finally { window.hideLoading('btn-bulk-sale'); }
     }
     
-    // --- NEW PRODUCT SELECTION MODAL FUNCTIONS ---
     export function openProductSelectionModal() {
     const modal = document.getElementById('modal-body');
     const productsListHtml = window.data.products.map(p => `<div class="product-select-item-wrapper" data-name="${p.name.toLowerCase()}" style="border-bottom:1px solid #eee;">
@@ -214,7 +212,6 @@ export function renderSales(container) {
     window.cart.push(item);
     }
     addedCount++;
-    // Reset the selection UI
     checkbox.checked = false;
     document.getElementById(`qty-container-${p.id}`).classList.add('hidden');
     qtyInput.value = 1;
