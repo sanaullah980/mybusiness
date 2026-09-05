@@ -1,93 +1,241 @@
-export function renderCustomers(container) {
-    const data = window.data;
-    const formatCurrency = window.formatCurrency;
-    container.innerHTML = `<button class="btn" style="margin-bottom:20px;" onclick="openCustomerModal()">+ Add Customer</button><div class="card" id="customer-list">${data.customers.length === 0 ? '<p style="color:var(--gray); text-align:center; padding:10px;">No customers found.</p>' : data.customers.map(c => `<div class="list-item" style="cursor:default;"> <div class="list-item-info"> <h4>${c.name}</h4> <p>${c.phone || 'No phone'} | Debt: <span style="color:var(--danger); font-weight:bold;">${formatCurrency(c.balance || 0)}</span></p> </div> <div style="display:flex; flex-direction:column; gap:8px; align-items:flex-end;"> <button class="btn btn-sm" onclick="openCustomerLedger('${c.id}')">Ledger</button> <div style="display:flex; gap:5px;"> <button class="btn btn-sm btn-secondary" onclick="openAddDebtModal('${c.id}')">+ Debt</button> <button class="btn btn-sm btn-secondary" onclick="openRecordPaymentModal('${c.id}')">Payment</button> </div> </div> </div>`).join('')}</div>`;
-}
+// Firebase imports
+import { 
+    collection, 
+    query, 
+    where, 
+    onSnapshot,
+    doc,
+    updateDoc,
+    addDoc,
+    deleteDoc,
+    runTransaction
+} from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 
-export function openCustomerModal(customerId = null) {
-    const c = customerId ? window.data.customers.find(x => x.id === customerId) : null;
-    const modal = document.getElementById('modal-body');
-    modal.innerHTML = `<div class="modal-header"><h2>${c ? 'Edit' : 'Add'} Customer</h2><button class="close-btn" onclick="closeModal()">&times;</button></div><div class="form-group"><label>Customer Name *</label><input type="text" id="c-name" value="${c ? c.name : ''}"></div><div class="form-group"><label>Phone / Contact</label><input type="text" id="c-phone" value="${c ? (c.phone || '') : ''}"></div><div class="form-group"><label>Notes</label><textarea id="c-notes" rows="2" style="width:100%; padding:12px; border:1px solid #ddd; border-radius:8px;">${c ? (c.notes || '') : ''}</textarea></div><button class="btn" id="btn-save-customer" onclick="saveCustomer('${customerId || ''}')">${c ? 'Update' : 'Save'} Customer</button>`;
-    document.getElementById('modal-overlay').classList.remove('hidden');
-}
+// Import all modules
+import { renderDashboard } from './modules/dashboard.js';
+import { renderCustomers } from './modules/customers.js';
+import { renderSales } from './modules/sales.js';
+import { renderInventory } from './modules/inventory.js';
+import { renderMore } from './modules/more.js';
+import { renderSettings } from './modules/setting.js';
+import { renderExpenses } from './modules/expenses.js';
+import { renderReport } from './modules/report.js';
 
-export async function saveCustomer(customerId) {
-    const name = document.getElementById('c-name').value.trim();
-    const phone = document.getElementById('c-phone').value.trim();
-    const notes = document.getElementById('c-notes').value.trim();
-    if (!name) return alert("Name required.");
-    window.showLoading('btn-save-customer', "Saving...");
+// Initialize global data object
+window.data = {
+    sales: [],
+    products: [],
+    customers: [],
+    customerTransactions: [],
+    expenses: [],
+    stockPurchases: [],
+    userSettings: { businessName: '', currency: 'Rs.' }
+};
+
+// Utility functions
+window.formatCurrency = (amount) => {
+    const currency = window.data.userSettings?.currency || 'Rs.';
+    return `${currency} ${(amount || 0).toLocaleString('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
+
+window.getStartOfDay = (date) => {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    return d;
+};
+
+window.getEndOfDay = (date) => {
+    const d = new Date(date);
+    d.setHours(23, 59, 59, 999);
+    return d;
+};
+
+window.calculateReportData = (startDate, endDate) => {
+    const salesInRange = window.data.sales.filter(s => {
+        const saleDate = new Date(s.date);
+        return saleDate >= startDate && saleDate <= endDate;
+    });
+
+    const totalSales = salesInRange.reduce((sum, s) => sum + (s.total || 0), 0);
+    const knownProfit = salesInRange
+        .filter(s => s.profitKnown)
+        .reduce((sum, s) => sum + ((s.total || 0) - (s.cost || 0)), 0);
+    
+    const totalExpenses = window.data.expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+    const netProfit = totalSales - totalExpenses;
+    
+    const outstandingDebt = window.data.customers.reduce((sum, c) => sum + (c.balance || 0), 0);
+
+    return { totalSales, knownProfit, netProfit, outstandingDebt };
+};
+
+// Navigation and page rendering
+window.currentPage = 'dashboard';
+
+window.navigate = (page) => {
+    window.currentPage = page;
+    
+    // Update active nav item
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.classList.remove('active');
+        if (item.getAttribute('data-page') === page) {
+            item.classList.add('active');
+        }
+    });
+
+    // Render page content
+    const container = document.getElementById('app-content');
+    container.innerHTML = '';
+
     try {
-        const cData = { name, phone, notes, ownerId: window.currentUserId };
-        if (customerId) await updateDoc(doc(window.db, "customers", customerId), cData);
-        else { cData.balance = 0; await addDoc(collection(window.db, "customers"), cData); }
-        alert(customerId ? "Updated!" : "Added!");
-        closeModal();
-    } catch (error) { alert("Failed."); }
-    finally { window.hideLoading('btn-save-customer'); }
+        switch (page) {
+            case 'dashboard':
+                document.getElementById('header-title').textContent = 'Dashboard';
+                renderDashboard(container);
+                break;
+            case 'customers':
+                document.getElementById('header-title').textContent = 'Customers';
+                renderCustomers(container);
+                break;
+            case 'sales':
+                document.getElementById('header-title').textContent = 'Sales';
+                renderSales(container);
+                break;
+            case 'inventory':
+                document.getElementById('header-title').textContent = 'Inventory';
+                renderInventory(container);
+                break;
+            case 'expenses':
+                document.getElementById('header-title').textContent = 'Expenses';
+                renderExpenses(container);
+                break;
+            case 'reports':
+                document.getElementById('header-title').textContent = 'Reports';
+                renderReport(container);
+                break;
+            case 'more':
+                document.getElementById('header-title').textContent = 'More';
+                renderMore(container);
+                break;
+            case 'settings':
+                document.getElementById('header-title').textContent = 'Settings';
+                renderSettings(container);
+                break;
+            default:
+                renderDashboard(container);
+        }
+    } catch (error) {
+        console.error('Error rendering page:', error);
+        container.innerHTML = '<div class="card"><p style="color: var(--danger);">Error loading page. Check console.</p></div>';
+    }
+};
+
+// Modal functions
+window.closeModal = (event) => {
+    if (event && event.target.id !== 'modal-overlay') return;
+    document.getElementById('modal-overlay').classList.add('hidden');
+    document.getElementById('modal-body').innerHTML = '';
+};
+
+// Real-time data listeners
+function setupDataListeners() {
+    if (!window.auth || !window.currentUserId) {
+        console.error('Auth not initialized');
+        return;
+    }
+
+    console.log('[app] Setting up real-time listeners for user:', window.currentUserId);
+
+    // Listen to sales
+    const salesQuery = query(collection(window.db, 'sales'), where('ownerId', '==', window.currentUserId));
+    onSnapshot(salesQuery, (snapshot) => {
+        window.data.sales = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        console.log('[app] Sales updated:', window.data.sales.length);
+        if (window.currentPage === 'dashboard' || window.currentPage === 'sales' || window.currentPage === 'reports') {
+            window.navigate(window.currentPage);
+        }
+    }, (error) => console.error('Sales listener error:', error));
+
+    // Listen to products
+    const productsQuery = query(collection(window.db, 'products'), where('ownerId', '==', window.currentUserId));
+    onSnapshot(productsQuery, (snapshot) => {
+        window.data.products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        console.log('[app] Products updated:', window.data.products.length);
+        if (window.currentPage === 'inventory') {
+            window.navigate(window.currentPage);
+        }
+    }, (error) => console.error('Products listener error:', error));
+
+    // Listen to customers
+    const customersQuery = query(collection(window.db, 'customers'), where('ownerId', '==', window.currentUserId));
+    onSnapshot(customersQuery, (snapshot) => {
+        window.data.customers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        console.log('[app] Customers updated:', window.data.customers.length);
+        if (window.currentPage === 'customers' || window.currentPage === 'dashboard') {
+            window.navigate(window.currentPage);
+        }
+    }, (error) => console.error('Customers listener error:', error));
+
+    // Listen to customer transactions
+    const txnsQuery = query(collection(window.db, 'customerTransactions'), where('ownerId', '==', window.currentUserId));
+    onSnapshot(txnsQuery, (snapshot) => {
+        window.data.customerTransactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        console.log('[app] Transactions updated:', window.data.customerTransactions.length);
+    }, (error) => console.error('Transactions listener error:', error));
+
+    // Listen to expenses
+    const expensesQuery = query(collection(window.db, 'expenses'), where('ownerId', '==', window.currentUserId));
+    onSnapshot(expensesQuery, (snapshot) => {
+        window.data.expenses = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        console.log('[app] Expenses updated:', window.data.expenses.length);
+        if (window.currentPage === 'expenses' || window.currentPage === 'dashboard' || window.currentPage === 'reports') {
+            window.navigate(window.currentPage);
+        }
+    }, (error) => console.error('Expenses listener error:', error));
+
+    // Listen to stock purchases
+    const stockQuery = query(collection(window.db, 'stockPurchases'), where('ownerId', '==', window.currentUserId));
+    onSnapshot(stockQuery, (snapshot) => {
+        window.data.stockPurchases = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        console.log('[app] Stock purchases updated:', window.data.stockPurchases.length);
+    }, (error) => console.error('Stock purchases listener error:', error));
+
+    // Listen to user settings
+    const userSettingsRef = doc(window.db, 'users', window.currentUserId);
+    onSnapshot(userSettingsRef, (doc) => {
+        if (doc.exists()) {
+            window.data.userSettings = doc.data();
+            console.log('[app] Settings updated');
+        }
+    }, (error) => console.error('Settings listener error:', error));
 }
 
-export function openCustomerLedger(customerId) {
-    const c = window.data.customers.find(x => x.id === customerId);
-    if (!c) return alert("Customer not found.");
-    const txns = window.data.customerTransactions.filter(t => t.customerId === customerId).sort((a,b) => new Date(b.date) - new Date(a.date));
-    const modal = document.getElementById('modal-body');
-    modal.innerHTML = `<div class="modal-header"><h2>Ledger: ${c.name}</h2><button class="close-btn" onclick="closeModal()">&times;</button></div><div style="background:#f8f9fa; padding:15px; border-radius:8px; margin-bottom:15px; text-align:center;"><div style="font-size:14px; color:var(--gray);">Current Balance</div><div style="font-size:28px; font-weight:bold; color:var(--danger);">${window.formatCurrency(c.balance || 0)}</div></div><div style="max-height:300px; overflow-y:auto;"><table class="ledger-table"><thead><tr><th>Date</th><th>Description</th><th style="text-align:right;">Amount</th><th style="text-align:right;">Balance</th></tr></thead><tbody>${txns.length === 0 ? '<tr><td colspan="4" style="text-align:center; color:var(--gray);">No transactions</td></tr>' : txns.map(t => `<tr> <td>${new Date(t.date).toLocaleDateString()}</td> <td>${t.note || t.type}<br><small style="color:var(--gray);">${t.type === 'payment' ? 'Payment Received' : 'Debt Added'}</small></td> <td style="text-align:right;" class="${t.type === 'payment' ? 'text-success' : 'text-danger'}">${t.type === 'payment' ? '-' : '+'}${window.formatCurrency(t.amount)}</td> <td style="text-align:right;">${window.formatCurrency(t.balanceAfter)}</td> </tr>`).join('')}</tbody></table></div>`;
-    document.getElementById('modal-overlay').classList.remove('hidden');
-}
+// Main initialization function
+export function initializeApp() {
+    console.log('[app] Initializing application for user:', window.currentUserId);
+    
+    if (!window.currentUserId) {
+        console.error('[app] No user ID available');
+        return;
+    }
 
-export function openAddDebtModal(customerId) {
-    const c = window.data.customers.find(x => x.id === customerId);
-    const modal = document.getElementById('modal-body');
-    modal.innerHTML = `<div class="modal-header"><h2>Add Debt: ${c.name}</h2><button class="close-btn" onclick="closeModal()">&times;</button></div><p style="margin-bottom:15px;">Current Debt: <strong>${window.formatCurrency(c.balance || 0)}</strong></p><div class="form-group"><label>Amount to Add (Rs.) *</label><input type="number" id="debt-amount" min="1"></div><div class="form-group"><label>Reason / Note</label><input type="text" id="debt-note"></div><button class="btn" id="btn-add-debt" onclick="addCustomerDebt('${customerId}')">Add Debt</button>`;
-    document.getElementById('modal-overlay').classList.remove('hidden');
-}
-
-export async function addCustomerDebt(customerId) {
-    const amount = parseFloat(document.getElementById('debt-amount').value);
-    const note = document.getElementById('debt-note').value.trim();
-    if (!amount || amount <= 0) return alert("Valid amount.");
-    window.showLoading('btn-add-debt', "Processing...");
     try {
-        await runTransaction(window.db, async (transaction) => {
-            const cRef = doc(window.db, "customers", customerId);
-            const cSnap = await transaction.get(cRef);
-            const newBalance = (cSnap.data().balance || 0) + amount;
-            transaction.update(cRef, { balance: newBalance });
-            const txnRef = doc(collection(window.db, "customerTransactions"));
-            transaction.set(txnRef, { ownerId: window.currentUserId, customerId, type: 'manual_debt', amount, balanceAfter: newBalance, date: new Date().toISOString(), note: note || 'Manual debt addition' });
-        });
-        alert("Debt added!");
-        closeModal();
-    } catch (error) { alert("Failed."); }
-    finally { window.hideLoading('btn-add-debt'); }
+        // Setup real-time data listeners
+        setupDataListeners();
+
+        // Load initial page
+        window.navigate('dashboard');
+
+        console.log('[app] Application initialized successfully');
+    } catch (error) {
+        console.error('[app] Initialization error:', error);
+        alert('Error initializing app. Check console.');
+    }
 }
 
-export function openRecordPaymentModal(customerId) {
-    const c = window.data.customers.find(x => x.id === customerId);
-    const modal = document.getElementById('modal-body');
-    modal.innerHTML = `<div class="modal-header"><h2>Record Payment: ${c.name}</h2><button class="close-btn" onclick="closeModal()">&times;</button></div><p style="margin-bottom:15px;">Current Debt: <strong>${window.formatCurrency(c.balance || 0)}</strong></p><div class="form-group"><label>Amount Paid (Rs.) *</label><input type="number" id="pay-amount" min="1" max="${c.balance || 0}"></div><div class="form-group"><label>Note</label><input type="text" id="pay-note"></div><button class="btn" id="btn-record-payment" onclick="recordCustomerPayment('${customerId}')">Record Payment</button>`;
-    document.getElementById('modal-overlay').classList.remove('hidden');
-}
+// Make functions globally available
+window.initializeApp = initializeApp;
+window.navigate = window.navigate;
+window.closeModal = window.closeModal;
 
-export async function recordCustomerPayment(customerId) {
-    const amount = parseFloat(document.getElementById('pay-amount').value);
-    const note = document.getElementById('pay-note').value.trim();
-    const c = window.data.customers.find(x => x.id === customerId);
-    if (!amount || amount <= 0) return alert("Valid amount.");
-    if (amount > (c.balance || 0)) return alert("Cannot exceed debt.");
-    window.showLoading('btn-record-payment', "Processing...");
-    try {
-        await runTransaction(window.db, async (transaction) => {
-            const cRef = doc(window.db, "customers", customerId);
-            const cSnap = await transaction.get(cRef);
-            const newBalance = Math.max(0, (cSnap.data().balance || 0) - amount);
-            transaction.update(cRef, { balance: newBalance });
-            const txnRef = doc(collection(window.db, "customerTransactions"));
-            transaction.set(txnRef, { ownerId: window.currentUserId, customerId, type: 'payment', amount, balanceAfter: newBalance, date: new Date().toISOString(), note: note || 'Payment received' });
-        });
-        alert("Payment recorded!");
-        closeModal();
-    } catch (error) { alert("Failed."); }
-    finally { window.hideLoading('btn-record-payment'); }
-}
+console.log('[app.js] Module loaded and ready');
