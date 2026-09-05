@@ -13,7 +13,15 @@ import { renderMore, openDeleteRecordsModal, deleteCollectionData, deleteEveryth
 import { renderSettings, saveSettings, openChangePasswordModal, changePassword } from './modules/setting.js';
 import { closeModal, viewSaleDetail } from './modules/modals.js';
 
-const firebaseConfig = { apiKey: "AIzaSyBQqnIhMCGd4_FRApjkns3HjIrqw2V1qFc", authDomain: "mybusinessapp-4734c.firebaseapp.com", projectId: "mybusinessapp-4734c", storageBucket: "mybusinessapp-4734c.firebasestorage.app", messagingSenderId: "367002926256", appId: "1:367002926256:web:0b5139dab24d901d9c8f75", measurementId: "G-HBC31ZFKMG" };
+const firebaseConfig = {
+    apiKey: "AIzaSyBQqnIhMCGd4_FRApjkns3HjIrqw2V1qFc",
+    authDomain: "mybusinessapp-4734c.firebaseapp.com",
+    projectId: "mybusinessapp-4734c",
+    storageBucket: "mybusinessapp-4734c.firebasestorage.app",
+    messagingSenderId: "367002926256",
+    appId: "1:367002926256:web:0b5139dab24d901d9c8f75",
+    measurementId: "G-HBC31ZFKMG"
+};
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
