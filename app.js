@@ -6,7 +6,7 @@ import { getFirestore, collection, doc, onSnapshot, query, where } from "https:/
 import { renderDashboard } from './modules/dashboard.js';
 import { renderSales, showSaleTab, renderCart, updateSaleDue, addSaleItem, removeCartItem, completeNormalSale, completeManualSale, completeBulkSale, openProductSelectionModal, toggleProductRow, filterProductSelectionList, addSelectedProductsToCart } from './modules/sales.js';
 import { renderInventory, openProductModal, saveProduct, deleteProduct, openStockAdjustModal, saveStockAdjustment } from './modules/inventory.js';
-import { renderCustomers, openCustomerModal, saveCustomer, openCustomerLedger, openAddDebtModal, addCustomerDebt, openRecordPaymentModal, recordCustomerPayment } from './modules/customer.js';
+import { renderCustomers, openCustomerModal, saveCustomer, openCustomerLedger, openAddDebtModal, addCustomerDebt, openRecordPaymentModal, recordCustomerPayment } from './modules/customers.js';
 import { renderExpenses, openExpenseModal, saveExpense, deleteExpense } from './modules/expenses.js';
 import { renderReports, setReportTab, changeReportMonth, resetDailyReport, calculateReportData } from './modules/report.js';
 import { renderMore, openDeleteRecordsModal, deleteCollectionData, deleteEverything } from './modules/more.js';
