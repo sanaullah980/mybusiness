@@ -11,7 +11,7 @@ export function renderDashboard(container) {
     const totalStockPurchasesAll = data.stockPurchases.reduce((sum, p) => sum + (p.amount || 0), 0);
     const totalPayable = (data.suppliers || []).reduce((sum, s) => sum + (s.balance || 0), 0);
 
-    // Cash in hand: reuse the same running-balance logic as the Cash Book so
+    // Cash in hand: reusthe same running-balance logic as the Cash Book so
     // the two numbers can never disagree.
     let cashInHand = (data.settings && data.settings.cashOpeningBalance) || 0;
     if (window.buildCashBookEntries) {
@@ -27,7 +27,7 @@ export function renderDashboard(container) {
     data.sales.forEach(s => activity.push({ date: s.date, icon: 'fa-cash-register', text: `Sale to ${s.customerName || 'Walk-in'}`, amount: s.total, color: 'var(--primary)', onclick: `viewSaleDetail('${s.id}')` }));
     data.expenses.forEach(e => activity.push({ date: e.date, icon: 'fa-receipt', text: `Expense${e.category ? ' - ' + e.category : ''}`, amount: -(e.amount || 0), color: 'var(--danger)' }));
     (data.customerTransactions || []).forEach(t => { if (t.type === 'payment') activity.push({ date: t.date, icon: 'fa-hand-holding-usd', text: `Customer payment received`, amount: t.amount, color: 'var(--success)' }); });
-    (data.supplierTransactions || []).forEach(t => { if (t.type === 'payment') activity.push({ date: t.date, icon: 'fa-truck', text: `Paid supplier`, amount: -(t.amount || 0), color: 'var(--danger)' }); });
+    (data.supplierTra nsactions || []).forEach(t => { if (t.type === 'payment') activity.push({ date: t.date, icon: 'fa-truck', text: `Paid supplier`, amount: -(t.amount || 0), color: 'var(--danger)' }); });
     (data.salesReturns || []).forEach(r => activity.push({ date: r.date, icon: 'fa-undo', text: `Sales return`, amount: -(r.refundAmount || 0), color: 'var(--danger)' }));
     activity.sort((a, b) => new Date(b.date) - new Date(a.date));
     const recentActivity = activity.slice(0, 8);
