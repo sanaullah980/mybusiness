@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mybusiness-v7';
+const CACHE_NAME = 'mybusiness-v8';
 const APP_SHELL = [
   '/', '/index.html', '/style.css', '/app.js', '/manifest.json',
   '/icon-192.png', '/icon-512.png',

@@ -221,3 +221,16 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   .bottom-nav{z-index:40}
   .modal-content{max-height:90vh;overflow:auto}
 }
+
+/* Startup recovery */
+.auth-retry-btn {
+    margin-top: 10px;
+    padding: 9px 18px;
+    border: 0;
+    border-radius: 10px;
+    font-weight: 700;
+    cursor: pointer;
+    background: var(--primary, #0f766e);
+    color: #fff;
+}
+.auth-retry-btn:focus-visible { outline: 3px solid currentColor; outline-offset: 2px; }

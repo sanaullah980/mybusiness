@@ -7,6 +7,17 @@
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
     <link rel="manifest" href="manifest.json">
+    <script>
+        // Register the service worker before the module app starts so offline shell
+        // caching can begin even if a Firebase CDN module is temporarily unavailable.
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('service-worker.js', { scope: './' })
+                    .then(reg => console.info('MyBusiness offline service worker ready', reg.scope))
+                    .catch(err => console.warn('MyBusiness service worker registration failed', err));
+            });
+        }
+    </script>
 </head>
 <body>
 
@@ -83,16 +94,43 @@
     <script>
         // Prevent an older PWA cache from serving an old app.js after deployment.
         if ('caches' in window) {
-            caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith('mybusiness-') && k !== 'mybusiness-v7').map(k => caches.delete(k)))).catch(() => {});
+            caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith('mybusiness-') && k !== 'mybusiness-v8').map(k => caches.delete(k)))).catch(() => {});
         }
+
+        function showBootError(message) {
+            const loading = document.getElementById('auth-loading');
+            const screen = document.getElementById('auth-screen');
+            const error = document.getElementById('login-error');
+            if (loading) loading.classList.add('hidden');
+            if (screen) screen.classList.remove('hidden');
+            if (error) {
+                error.textContent = message;
+                if (!document.getElementById('boot-retry')) {
+                    const retry = document.createElement('button');
+                    retry.id = 'boot-retry';
+                    retry.type = 'button';
+                    retry.className = 'auth-retry-btn';
+                    retry.textContent = 'Retry';
+                    retry.onclick = () => location.reload();
+                    error.appendChild(document.createElement('br'));
+                    error.appendChild(retry);
+                }
+            }
+        }
+
+        // Module scripts do not reliably fire window.error when an import from a
+        // CDN fails. This timer prevents an infinite 'Checking authentication...'
+        // screen and gives the user a useful recovery action.
+        window.setTimeout(() => {
+            const loading = document.getElementById('auth-loading');
+            if (loading && !loading.classList.contains('hidden')) {
+                showBootError('The app could not start. Check your internet connection once, then tap Retry.');
+            }
+        }, 9000);
+
         window.addEventListener('error', function (event) {
             if (event.filename && (event.filename.includes('/app.js') || event.filename.includes('/modules/'))) {
-                const loading = document.getElementById('auth-loading');
-                const screen = document.getElementById('auth-screen');
-                const error = document.getElementById('login-error');
-                if (loading) loading.classList.add('hidden');
-                if (screen) screen.classList.remove('hidden');
-                if (error) error.textContent = 'The app could not load correctly. Please refresh the page.';
+                showBootError('The app could not load correctly. Please tap Retry.');
                 console.error(event.error || event.message);
             }
         });
