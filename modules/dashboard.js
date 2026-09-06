@@ -28,6 +28,7 @@ export function renderDashboard(container) {
     data.expenses.forEach(e => activity.push({ date: e.date, icon: 'fa-receipt', text: `Expense${e.category ? ' - ' + e.category : ''}`, amount: -(e.amount || 0), color: 'var(--danger)' }));
     (data.customerTransactions || []).forEach(t => { if (t.type === 'payment') activity.push({ date: t.date, icon: 'fa-hand-holding-usd', text: `Customer payment received`, amount: t.amount, color: 'var(--success)' }); });
     (data.supplierTransactions || []).forEach(t => { if (t.type === 'payment') activity.push({ date: t.date, icon: 'fa-truck', text: `Paid supplier`, amount: -(t.amount || 0), color: 'var(--danger)' }); });
+    (data.salesReturns || []).forEach(r => activity.push({ date: r.date, icon: 'fa-undo', text: `Sales return`, amount: -(r.refundAmount || 0), color: 'var(--danger)' }));
     activity.sort((a, b) => new Date(b.date) - new Date(a.date));
     const recentActivity = activity.slice(0, 8);
 

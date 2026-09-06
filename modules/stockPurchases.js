@@ -131,7 +131,7 @@ export async function saveStockPurchase() {
             }
         });
         alert("Recorded!");
-        closeModal();
+        window.closeModal();
     } catch (error) {
         console.error(error);
         alert(error.message || "Failed.");

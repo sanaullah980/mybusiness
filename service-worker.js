@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mybusiness-v2';
+const CACHE_NAME = 'mybusiness-v3';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -18,7 +18,10 @@ const STATIC_ASSETS = [
   '/modules/suppliers.js',
   '/modules/cashbook.js',
   '/modules/search.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css'
+  '/modules/invoices.js',
+  '/modules/returns.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
+  'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
 ];
 
 // Install event: Cache static assets

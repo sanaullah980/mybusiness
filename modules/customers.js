@@ -34,48 +34,135 @@ export async function saveCustomer(customerId) {
 }
 
 // Customer-details dialog: opens when a customer is tapped from the list.
-// Shows the running balance plus a simple 3-column date-wise report
-// (Date | Gave | Received) and two bottom actions to adjust the balance.
+// Shows the running balance, a date-filterable ledger (Date | Gave | Received)
+// with period totals, a PDF statement download, and a payment reminder action.
 export function openCustomerDetails(customerId) {
     const c = window.data.customers.find(x => x.id === customerId);
     if (!c) return alert("Customer not found.");
-    const txns = window.data.customerTransactions.filter(t => t.customerId === customerId).sort((a, b) => new Date(a.date) - new Date(b.date));
     const modal = document.getElementById('modal-body');
+    const giveIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>`;
+    const receiveIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>`;
 
+    modal.innerHTML = `
+        <div class="modal-header"><h2>${c.name}</h2><button class="close-btn" onclick="closeModal()">&times;</button></div>
+        <div style="text-align:center; margin-bottom: 15px; background: #f8f9fa; padding: 15px; border-radius: 8px;">
+            <div style="font-size:14px; color:var(--gray);">Current Balance</div>
+            <div style="font-size:32px; font-weight:bold; color:var(--danger);">${window.formatCurrency(c.balance || 0)}</div>
+        </div>
+        <div class="form-row" style="margin-bottom:5px;">
+            <div class="form-group"><label>From</label><input type="date" id="cust-ledger-from" onchange="renderCustomerLedgerTable('${c.id}')"></div>
+            <div class="form-group"><label>To</label><input type="date" id="cust-ledger-to" value="${window.getLocalDateStr(new Date())}" onchange="renderCustomerLedgerTable('${c.id}')"></div>
+        </div>
+        <h3 style="font-size:16px; margin-bottom:10px; color:var(--dark);">Report</h3>
+        <div id="cust-ledger-container"></div>
+        <div class="ledger-btn-row" style="margin-top:15px;">
+            <button class="btn ledger-btn give" onclick="openGiveModal('${c.id}')">${giveIcon} Gave</button>
+            <button class="btn ledger-btn receive" onclick="openReceiveModal('${c.id}')">${receiveIcon} Received</button>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:10px; margin-top:10px;">
+            <button class="btn btn-secondary" onclick="downloadCustomerStatementPdf('${c.id}')"><i class="fas fa-file-pdf"></i> Download Statement (PDF)</button>
+            ${(c.balance || 0) > 0 ? `<button class="btn" style="background:#25D366;" onclick="sendPaymentReminder('${c.id}')"><i class="fab fa-whatsapp"></i> Send Payment Reminder</button>` : ''}
+        </div>`;
+    document.getElementById('modal-overlay').classList.remove('hidden');
+    renderCustomerLedgerTable(customerId);
+}
+
+export function renderCustomerLedgerTable(customerId) {
+    const container = document.getElementById('cust-ledger-container');
+    if (!container) return;
+    const fromVal = document.getElementById('cust-ledger-from')?.value;
+    const toVal = document.getElementById('cust-ledger-to')?.value;
+    const fromDate = fromVal ? new Date(fromVal + 'T00:00:00') : null;
+    const toDate = toVal ? new Date(toVal + 'T23:59:59') : null;
+
+    const txns = window.data.customerTransactions
+        .filter(t => t.customerId === customerId)
+        .filter(t => (!fromDate || new Date(t.date) >= fromDate) && (!toDate || new Date(t.date) <= toDate))
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    let totalGave = 0, totalReceived = 0;
     let rowsHtml = '';
     if (txns.length === 0) {
-        rowsHtml = '<tr><td colspan="3" style="text-align:center; color:var(--gray); padding: 20px;">No transactions yet</td></tr>';
+        rowsHtml = '<tr><td colspan="3" style="text-align:center; color:var(--gray); padding: 20px;">No transactions in this period</td></tr>';
     } else {
         rowsHtml = txns.map(t => {
-            const isReceived = t.type === 'payment';
+            const isReceived = t.type === 'payment' || t.type === 'return_credit';
             const dateStr = new Date(t.date).toLocaleDateString();
+            if (isReceived) totalReceived += t.amount; else totalGave += t.amount;
             const gaveCell = isReceived ? '' : `<span class="text-danger" style="font-weight:bold;">${window.formatCurrency(t.amount)}</span>`;
             const receivedCell = isReceived ? `<span class="text-success" style="font-weight:bold;">${window.formatCurrency(t.amount)}</span>` : '';
             return `<tr><td>${dateStr}</td><td style="text-align:right;">${gaveCell}</td><td style="text-align:right;">${receivedCell}</td></tr>`;
         }).join('');
     }
 
-    const giveIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>`;
-    const receiveIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>`;
-
-    modal.innerHTML = `
-        <div class="modal-header"><h2>${c.name}</h2><button class="close-btn" onclick="closeModal()">&times;</button></div>
-        <div style="text-align:center; margin-bottom: 20px; background: #f8f9fa; padding: 15px; border-radius: 8px;">
-            <div style="font-size:14px; color:var(--gray);">Current Balance</div>
-            <div style="font-size:32px; font-weight:bold; color:var(--danger);">${window.formatCurrency(c.balance || 0)}</div>
-        </div>
-        <h3 style="font-size:16px; margin-bottom:10px; color:var(--dark);">Report</h3>
-        <div style="overflow-x:auto; margin-bottom: 15px;">
+    container.innerHTML = `
+        <div style="overflow-x:auto; margin-bottom: 10px;">
             <table class="ledger-table" style="min-width: 300px;">
                 <thead><tr><th>Date</th><th style="text-align:right; color:var(--danger);">Gave</th><th style="text-align:right; color:var(--success);">Received</th></tr></thead>
                 <tbody>${rowsHtml}</tbody>
+                <tfoot><tr style="font-weight:bold; border-top:2px solid var(--dark);"><td>Total</td><td style="text-align:right; color:var(--danger);">${window.formatCurrency(totalGave)}</td><td style="text-align:right; color:var(--success);">${window.formatCurrency(totalReceived)}</td></tr></tfoot>
             </table>
-        </div>
-        <div class="ledger-btn-row">
-            <button class="btn ledger-btn give" onclick="openGiveModal('${c.id}')">${giveIcon} Gave</button>
-            <button class="btn ledger-btn receive" onclick="openReceiveModal('${c.id}')">${receiveIcon} Received</button>
         </div>`;
-    document.getElementById('modal-overlay').classList.remove('hidden');
+}
+
+export function downloadCustomerStatementPdf(customerId) {
+    const c = window.data.customers.find(x => x.id === customerId);
+    if (!c) return alert("Customer not found.");
+    if (!window.jspdf) return alert("PDF library not loaded. Check your internet connection and try again.");
+    const fromVal = document.getElementById('cust-ledger-from')?.value;
+    const toVal = document.getElementById('cust-ledger-to')?.value;
+    const fromDate = fromVal ? new Date(fromVal + 'T00:00:00') : null;
+    const toDate = toVal ? new Date(toVal + 'T23:59:59') : null;
+    const txns = window.data.customerTransactions
+        .filter(t => t.customerId === customerId)
+        .filter(t => (!fromDate || new Date(t.date) >= fromDate) && (!toDate || new Date(t.date) <= toDate))
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const businessName = (window.data.settings && window.data.settings.name) || 'My Business';
+    let y = 50;
+    doc.setFontSize(16); doc.text(businessName, 40, y); y += 22;
+    doc.setFontSize(13); doc.text(`Statement - ${c.name}`, 40, y); y += 18;
+    doc.setFontSize(10); doc.text(`${c.phone || ''}`, 40, y); y += 16;
+    doc.text(`Period: ${fromVal || 'Start'} to ${toVal || 'Today'}`, 40, y); y += 20;
+    doc.setLineWidth(0.5); doc.line(40, y, 550, y); y += 16;
+    doc.setFontSize(10);
+    doc.text('Date', 40, y); doc.text('Gave', 300, y); doc.text('Received', 420, y); y += 8;
+    doc.line(40, y, 550, y); y += 14;
+    let totalGave = 0, totalReceived = 0;
+    txns.forEach(t => {
+        const isReceived = t.type === 'payment' || t.type === 'return_credit';
+        if (isReceived) totalReceived += t.amount; else totalGave += t.amount;
+        doc.text(new Date(t.date).toLocaleDateString(), 40, y);
+        if (!isReceived) doc.text(window.formatCurrency(t.amount), 300, y);
+        if (isReceived) doc.text(window.formatCurrency(t.amount), 420, y);
+        y += 16;
+        if (y > 760) { doc.addPage(); y = 50; }
+    });
+    y += 6; doc.line(40, y, 550, y); y += 16;
+    doc.setFontSize(11);
+    doc.text(`Total Gave: ${window.formatCurrency(totalGave)}`, 40, y);
+    doc.text(`Total Received: ${window.formatCurrency(totalReceived)}`, 300, y); y += 20;
+    doc.setFontSize(13);
+    doc.text(`Closing Balance: ${window.formatCurrency(c.balance || 0)}`, 40, y);
+    doc.save(`Statement-${c.name.replace(/\s+/g, '-')}.pdf`);
+}
+
+export function sendPaymentReminder(customerId) {
+    const c = window.data.customers.find(x => x.id === customerId);
+    if (!c) return alert("Customer not found.");
+    const businessName = (window.data.settings && window.data.settings.name) || 'My Business';
+    const text = `Hi ${c.name}, this is a friendly reminder from ${businessName} that you have an outstanding balance of ${window.formatCurrency(c.balance || 0)}. Please arrange payment at your convenience. Thank you!`;
+    const phone = c.phone ? c.phone.replace(/[^0-9]/g, '') : '';
+    const url = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(text)}` : `https://wa.me/?text=${encodeURIComponent(text)}`;
+    if (navigator.share) {
+        navigator.share({ title: 'Payment Reminder', text }).catch(() => window.open(url, '_blank'));
+    } else if (navigator.clipboard && !phone) {
+        navigator.clipboard.writeText(text).then(() => alert("No phone number on file — reminder text copied to clipboard instead."));
+    } else {
+        window.open(url, '_blank');
+    }
 }
 
 export function openGiveModal(customerId) {
@@ -136,6 +223,9 @@ export async function processReceive(customerId) {
 window.openCustomerModal = openCustomerModal;
 window.saveCustomer = saveCustomer;
 window.openCustomerDetails = openCustomerDetails;
+window.renderCustomerLedgerTable = renderCustomerLedgerTable;
+window.downloadCustomerStatementPdf = downloadCustomerStatementPdf;
+window.sendPaymentReminder = sendPaymentReminder;
 window.openGiveModal = openGiveModal;
 window.processGive = processGive;
 window.openReceiveModal = openReceiveModal;

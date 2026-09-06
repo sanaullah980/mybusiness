@@ -3,9 +3,9 @@ import { getAuth, setPersistence, browserLocalPersistence, signInWithEmailAndPas
 import { getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, setDoc, onSnapshot, query, where, runTransaction, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 import { renderDashboard } from './modules/dashboard.js';
-import { renderSales, showSaleTab, renderCart, updateSaleDue, addSaleItem, removeCartItem, completeNormalSale, completeManualSale, completeBulkSale, openProductSelectionModal, toggleProductRow, filterProductSelectionList, addSelectedProductsToCart } from './modules/sales.js';
+import { renderSales, showSaleTab, renderCart, updateSaleDue, addSaleItem, removeCartItem, completeNormalSale, completeManualSale, completeBulkSale, openProductSelectionModal, toggleProductRow, filterProductSelectionList, addSelectedProductsToCart, addProductByBarcode } from './modules/sales.js';
 import { renderInventory, openProductModal, saveProduct, deleteProduct, openStockAdjustModal, saveStockAdjustment } from './modules/inventory.js';
-import { renderCustomers, openCustomerModal, saveCustomer, openCustomerDetails } from './modules/customers.js';
+import { renderCustomers, openCustomerModal, saveCustomer, openCustomerDetails, renderCustomerLedgerTable, downloadCustomerStatementPdf, sendPaymentReminder, openGiveModal, processGive, openReceiveModal, processReceive } from './modules/customers.js';
 import { renderExpenses, openExpenseModal, saveExpense, deleteExpense } from './modules/expenses.js';
 import { renderStockPurchases, openStockPurchaseModal, showStockPurchaseTab, onStockPurchaseProductChange, saveStockPurchase, deleteStockPurchase } from './modules/stockPurchases.js';
 import { renderReports, setReportTab, changeReportMonth, resetDailyReport, calculateReportData } from './modules/report.js';
@@ -15,6 +15,8 @@ import { closeModal, viewSaleDetail } from './modules/modals.js';
 import { renderSuppliers, openSupplierModal, saveSupplier, deleteSupplier, openSupplierDetails, openSupplierPayModal, processSupplierPayment, openSupplierDebtModal, processSupplierDebt } from './modules/suppliers.js';
 import { renderCashBook, buildCashBookEntries, openSetOpeningBalanceModal, saveOpeningBalance, openCashEntryModal, saveCashEntry } from './modules/cashbook.js';
 import { openGlobalSearchModal, runGlobalSearch } from './modules/search.js';
+import { openInvoiceModal, downloadInvoicePdf, printInvoice, shareInvoiceWhatsApp } from './modules/invoices.js';
+import { openReturnModal, processReturn } from './modules/returns.js';
 
 const firebaseConfig = {
     apiKey: "AIzaSyBQqnIhMCGd4_FRApjkns3HjIrqw2V1qFc",
@@ -33,7 +35,7 @@ setPersistence(auth, browserLocalPersistence).catch(console.error);
 
 let currentUserId = null;
 let isLoginMode = true;
-let data = { products: [], customers: [], sales: [], expenses: [], stockPurchases: [], customerTransactions: [], settings: {}, suppliers: [], supplierTransactions: [], cashTransactions: [] };
+let data = { products: [], customers: [], sales: [], expenses: [], stockPurchases: [], customerTransactions: [], settings: {}, suppliers: [], supplierTransactions: [], cashTransactions: [], salesReturns: [] };
 let listeners = [];
 let cart = [];
 let activeReportTab = 'daily';
@@ -89,10 +91,10 @@ onAuthStateChanged(auth, (user) => {
     document.getElementById('auth-loading').classList.add('hidden');
     window.currentUserId = user ? user.uid : null;
     if (user) { document.getElementById('auth-screen').classList.add('hidden'); document.getElementById('main-app').classList.remove('hidden'); startListeners(); navigate('dashboard'); updateConnectionIndicator(); }
-    else { document.getElementById('auth-screen').classList.remove('hidden'); document.getElementById('main-app').classList.add('hidden'); clearListeners(); window.data = { products: [], customers: [], sales: [], expenses: [], stockPurchases: [], customerTransactions: [], settings: {}, suppliers: [], supplierTransactions: [], cashTransactions: [] }; }
+    else { document.getElementById('auth-screen').classList.remove('hidden'); document.getElementById('main-app').classList.add('hidden'); clearListeners(); window.data = { products: [], customers: [], sales: [], expenses: [], stockPurchases: [], customerTransactions: [], settings: {}, suppliers: [], supplierTransactions: [], cashTransactions: [], salesReturns: [] }; }
 });
 
-function startListeners() { clearListeners(); const q = (col) => query(collection(db, col), where("ownerId", "==", window.currentUserId)); listeners.push(onSnapshot(q("products"), s => { window.data.products = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("customers"), s => { window.data.customers = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("sales"), s => { window.data.sales = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("expenses"), s => { window.data.expenses = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("stockPurchases"), s => { window.data.stockPurchases = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("customerTransactions"), s => { window.data.customerTransactions = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("suppliers"), s => { window.data.suppliers = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("supplierTransactions"), s => { window.data.supplierTransactions = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("cashTransactions"), s => { window.data.cashTransactions = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(doc(db, "settings", window.currentUserId), (snap) => { window.data.settings = snap.exists() ? snap.data() : {}; refreshCurrentView(); })); }
+function startListeners() { clearListeners(); const q = (col) => query(collection(db, col), where("ownerId", "==", window.currentUserId)); listeners.push(onSnapshot(q("products"), s => { window.data.products = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("customers"), s => { window.data.customers = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("sales"), s => { window.data.sales = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("expenses"), s => { window.data.expenses = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("stockPurchases"), s => { window.data.stockPurchases = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("customerTransactions"), s => { window.data.customerTransactions = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("suppliers"), s => { window.data.suppliers = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("supplierTransactions"), s => { window.data.supplierTransactions = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("cashTransactions"), s => { window.data.cashTransactions = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("salesReturns"), s => { window.data.salesReturns = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(doc(db, "settings", window.currentUserId), (snap) => { window.data.settings = snap.exists() ? snap.data() : {}; refreshCurrentView(); })); }
 function clearListeners() { listeners.forEach(unsub => unsub()); listeners = []; }
 function refreshCurrentView() { const activeNav = document.querySelector('.nav-item.active'); if (activeNav) navigate(activeNav.dataset.page || 'dashboard'); }
 
@@ -102,3 +104,7 @@ window.renderDashboard = renderDashboard; window.renderSales = renderSales; wind
 window.renderSuppliers = renderSuppliers; window.openSupplierModal = openSupplierModal; window.saveSupplier = saveSupplier; window.deleteSupplier = deleteSupplier; window.openSupplierDetails = openSupplierDetails; window.openSupplierPayModal = openSupplierPayModal; window.processSupplierPayment = processSupplierPayment; window.openSupplierDebtModal = openSupplierDebtModal; window.processSupplierDebt = processSupplierDebt;
 window.renderCashBook = renderCashBook; window.buildCashBookEntries = buildCashBookEntries; window.openSetOpeningBalanceModal = openSetOpeningBalanceModal; window.saveOpeningBalance = saveOpeningBalance; window.openCashEntryModal = openCashEntryModal; window.saveCashEntry = saveCashEntry;
 window.openGlobalSearchModal = openGlobalSearchModal; window.runGlobalSearch = runGlobalSearch;
+window.addProductByBarcode = addProductByBarcode;
+window.renderCustomerLedgerTable = renderCustomerLedgerTable; window.downloadCustomerStatementPdf = downloadCustomerStatementPdf; window.sendPaymentReminder = sendPaymentReminder;
+window.openInvoiceModal = openInvoiceModal; window.downloadInvoicePdf = downloadInvoicePdf; window.printInvoice = printInvoice; window.shareInvoiceWhatsApp = shareInvoiceWhatsApp;
+window.openReturnModal = openReturnModal; window.processReturn = processReturn;

@@ -30,6 +30,9 @@ export function buildCashBookEntries() {
     (data.supplierTransactions || []).forEach(t => {
         if (t.type === 'payment') entries.push({ date: t.date, type: 'out', amount: t.amount, label: `Supplier payment${t.note ? ' - ' + t.note : ''}`, source: 'supplier_payment' });
     });
+    (data.salesReturns || []).forEach(r => {
+        if ((r.cashRefund || 0) > 0) entries.push({ date: r.date, type: 'out', amount: r.cashRefund, label: `Sales return refund${r.note ? ' - ' + r.note : ''}`, source: 'sales_return' });
+    });
     (data.cashTransactions || []).forEach(t => {
         entries.push({ date: t.date, type: t.type === 'income' ? 'in' : 'out', amount: t.amount, label: t.note || (t.type === 'income' ? 'Manual cash in' : 'Manual cash out'), source: 'manual' });
     });
@@ -92,7 +95,7 @@ export async function saveOpeningBalance() {
         await window.setDoc(window.doc(window.db, "settings", window.currentUserId), { cashOpeningBalance: amount }, { merge: true });
         window.data.settings.cashOpeningBalance = amount;
         alert("Saved!");
-        closeModal();
+        window.closeModal();
         window.navigate('cashbook');
     } catch (error) {
         console.error(error);
@@ -118,7 +121,7 @@ export async function saveCashEntry(type) {
     try {
         await window.addDoc(window.collection(window.db, "cashTransactions"), { ownerId: window.currentUserId, type, amount, date: new Date(date).toISOString(), note });
         alert("Saved!");
-        closeModal();
+        window.closeModal();
         window.navigate('cashbook');
     } catch (error) {
         console.error(error);

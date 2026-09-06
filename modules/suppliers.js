@@ -35,7 +35,7 @@ export async function saveSupplier(supplierId) {
         if (supplierId) await window.updateDoc(window.doc(window.db, "suppliers", supplierId), sData);
         else { sData.balance = 0; await window.addDoc(window.collection(window.db, "suppliers"), sData); }
         alert(supplierId ? "Updated!" : "Added!");
-        closeModal();
+        window.closeModal();
         window.navigate('suppliers');
     } catch (error) {
         console.error(error);
