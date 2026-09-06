@@ -56,7 +56,7 @@ export async function processReturn(saleId) {
 
     window.showLoading('btn-process-return', "Processing...");
     try {
-        await window.runTransaction(window.db, async (transaction) => {
+        await window.runAtomicOrOffline(async (transaction) => {
             const saleRef = window.doc(window.db, "sales", saleId);
             const saleSnap = await transaction.get(saleRef);
             if (!saleSnap.exists()) throw new Error("Sale not found.");

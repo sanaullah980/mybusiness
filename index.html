@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Business Management System</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
     <link rel="manifest" href="manifest.json">
 </head>
 <body>
@@ -44,9 +44,9 @@
     <!-- MAIN APP -->
     <div id="main-app" class="hidden">
         <header class="app-header">
-            <h1 id="header-title">Dashboard</h1>
-            <div style="display:flex; align-items:center; gap:5px;">
-                <span id="connection-indicator" class="connection-indicator online" title="Online"><i class="fas fa-wifi"></i></span>
+            <div class="header-brand"><div class="brand-mark"><i class="fas fa-store"></i></div><div><h1 id="header-title">Dashboard</h1><span class="header-subtitle" id="header-subtitle">Today at a glance</span></div></div>
+            <div class="header-actions">
+                <span id="connection-indicator" class="connection-indicator online" title="Online"><i class="fas fa-wifi"></i><span id="connection-text">Online</span></span>
                 <button class="btn-icon" onclick="openGlobalSearchModal()" title="Search">
                     <i class="fas fa-search"></i>
                 </button>
@@ -56,31 +56,18 @@
             </div>
         </header>
 
+        <div id="offline-banner" class="offline-banner hidden"><i class="fas fa-cloud"></i><span>Offline mode — your saved data is available and new changes will sync automatically.</span></div>
+
         <main id="app-content">
             <!-- Content injected by app.js -->
         </main>
 
-        <nav class="bottom-nav">
-            <button class="nav-item active" data-page="dashboard" onclick="navigate('dashboard')">
-                <i class="fas fa-home"></i>
-                <span>Home</span>
-            </button>
-            <button class="nav-item" data-page="sales" onclick="navigate('sales')">
-                <i class="fas fa-cash-register"></i>
-                <span>Sales</span>
-            </button>
-            <button class="nav-item" data-page="inventory" onclick="navigate('inventory')">
-                <i class="fas fa-boxes"></i>
-                <span>Inventory</span>
-            </button>
-            <button class="nav-item" data-page="customers" onclick="navigate('customers')">
-                <i class="fas fa-users"></i>
-                <span>Customers</span>
-            </button>
-            <button class="nav-item" data-page="more" onclick="navigate('more')">
-                <i class="fas fa-ellipsis-h"></i>
-                <span>More</span>
-            </button>
+        <nav class="bottom-nav" aria-label="Main navigation">
+            <button class="nav-item active" data-page="dashboard" onclick="navigate('dashboard')"><span class="nav-icon"><i class="fas fa-home"></i></span><span>Home</span></button>
+            <button class="nav-item" data-page="sales" onclick="navigate('sales')"><span class="nav-icon"><i class="fas fa-receipt"></i></span><span>Sales</span></button>
+            <button class="nav-item" data-page="inventory" onclick="navigate('inventory')"><span class="nav-icon"><i class="fas fa-box"></i></span><span>Stock</span></button>
+            <button class="nav-item" data-page="customers" onclick="navigate('customers')"><span class="nav-icon"><i class="fas fa-users"></i></span><span>Khata</span></button>
+            <button class="nav-item" data-page="more" onclick="navigate('more')"><span class="nav-icon"><i class="fas fa-th-large"></i></span><span>More</span></button>
         </nav>
     </div>
 
@@ -96,7 +83,7 @@
     <script>
         // Prevent an older PWA cache from serving an old app.js after deployment.
         if ('caches' in window) {
-            caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith('mybusiness-') && k !== 'mybusiness-v4').map(k => caches.delete(k)))).catch(() => {});
+            caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith('mybusiness-') && k !== 'mybusiness-v7').map(k => caches.delete(k)))).catch(() => {});
         }
         window.addEventListener('error', function (event) {
             if (event.filename && (event.filename.includes('/app.js') || event.filename.includes('/modules/'))) {

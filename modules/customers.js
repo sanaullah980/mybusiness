@@ -141,19 +141,35 @@ export function openGiveModal(customerId) {
 }
 
 export async function processGive(customerId) {
-    const amount = Number.parseFloat(document.getElementById('give-amount')?.value); const note = document.getElementById('give-note')?.value.trim();
+    const amount = Number.parseFloat(document.getElementById('give-amount')?.value);
+    const note = document.getElementById('give-note')?.value.trim();
     if (!Number.isFinite(amount) || amount <= 0) return alert('Enter a valid amount greater than zero.');
     if (!window.currentUserId) return alert('Please log in again.');
     window.showLoading('btn-give','Saving...');
     try {
-        await window.runTransaction(window.db, async transaction => {
-            const customerRef = window.doc(window.db,'customers',customerId); const snap = await transaction.get(customerRef);
-            if (!snap.exists()) throw new Error('Customer not found.'); if (snap.data().ownerId !== window.currentUserId) throw new Error('Unauthorized.');
-            const current = Math.max(0, Number(snap.data().balance)||0); const newBalance = current + amount;
-            transaction.update(customerRef,{balance:newBalance}); const txnRef=window.doc(window.collection(window.db,'customerTransactions'));
-            transaction.set(txnRef,{ownerId:window.currentUserId,customerId,type:'manual_debt',amount,balanceAfter:newBalance,date:new Date().toISOString(),note:note||'Debt increased'});
-        });
-        openCustomerDetails(customerId);
+        const customerRef = window.doc(window.db,'customers',customerId);
+        if (!navigator.onLine) {
+            const current = Math.max(0, Number(window.data.customers.find(c=>c.id===customerId)?.balance)||0);
+            const newBalance = current + amount;
+            const batch = window.writeBatch(window.db);
+            batch.update(customerRef,{balance:newBalance,updatedAt:new Date().toISOString()});
+            const txnRef = window.doc(window.collection(window.db,'customerTransactions'));
+            batch.set(txnRef,{ownerId:window.currentUserId,customerId,type:'manual_debt',amount,balanceAfter:newBalance,date:new Date().toISOString(),note:note||'Debt increased',offlineCreated:true});
+            await batch.commit();
+        } else {
+            await window.runAtomicOrOffline(async transaction => {
+                const snap = await transaction.get(customerRef);
+                if (!snap.exists()) throw new Error('Customer not found.');
+                if (snap.data().ownerId !== window.currentUserId) throw new Error('Unauthorized.');
+                const current = Math.max(0, Number(snap.data().balance)||0);
+                const newBalance = current + amount;
+                transaction.update(customerRef,{balance:newBalance,updatedAt:new Date().toISOString()});
+                const txnRef=window.doc(window.collection(window.db,'customerTransactions'));
+                transaction.set(txnRef,{ownerId:window.currentUserId,customerId,type:'manual_debt',amount,balanceAfter:newBalance,date:new Date().toISOString(),note:note||'Debt increased'});
+            });
+        }
+        window.navigate('customers');
+        setTimeout(()=>openCustomerDetails(customerId),50);
     } catch(error){ console.error(error); alert(error.message||'Failed to update debt.'); }
     finally{ window.hideLoading('btn-give'); }
 }
@@ -170,16 +186,39 @@ export function openReceiveModal(customerId) {
 }
 
 export async function processReceive(customerId) {
-    const amount=Number.parseFloat(document.getElementById('receive-amount')?.value); const note=document.getElementById('receive-note')?.value.trim();
-    if (!Number.isFinite(amount)||amount<=0) return alert('Enter a valid amount greater than zero.'); if(!window.currentUserId)return alert('Please log in again.');
+    const amount=Number.parseFloat(document.getElementById('receive-amount')?.value);
+    const note=document.getElementById('receive-note')?.value.trim();
+    if (!Number.isFinite(amount)||amount<=0) return alert('Enter a valid amount greater than zero.');
+    if(!window.currentUserId)return alert('Please log in again.');
     window.showLoading('btn-receive','Saving...');
-    try { await window.runTransaction(window.db,async transaction=>{
-        const customerRef=window.doc(window.db,'customers',customerId); const snap=await transaction.get(customerRef); if(!snap.exists())throw new Error('Customer not found.'); if(snap.data().ownerId!==window.currentUserId)throw new Error('Unauthorized.');
-        const current=Math.max(0,Number(snap.data().balance)||0); if(amount>current)throw new Error(`Received amount cannot exceed current due of ${window.formatCurrency(current)}.`);
-        const newBalance=current-amount; transaction.update(customerRef,{balance:newBalance}); const txnRef=window.doc(window.collection(window.db,'customerTransactions'));
-        transaction.set(txnRef,{ownerId:window.currentUserId,customerId,type:'payment',amount,balanceAfter:newBalance,date:new Date().toISOString(),note:note||'Payment received'});
-    }); openCustomerDetails(customerId);
-    } catch(error){console.error(error);alert(error.message||'Failed to record payment.');} finally{window.hideLoading('btn-receive');}
+    try {
+        const customerRef=window.doc(window.db,'customers',customerId);
+        if (!navigator.onLine) {
+            const current=Math.max(0,Number(window.data.customers.find(c=>c.id===customerId)?.balance)||0);
+            if(amount>current) throw new Error(`Received amount cannot exceed current due of ${window.formatCurrency(current)}.`);
+            const newBalance=current-amount;
+            const batch=window.writeBatch(window.db);
+            batch.update(customerRef,{balance:newBalance,updatedAt:new Date().toISOString()});
+            const txnRef=window.doc(window.collection(window.db,'customerTransactions'));
+            batch.set(txnRef,{ownerId:window.currentUserId,customerId,type:'payment',amount,balanceAfter:newBalance,date:new Date().toISOString(),note:note||'Payment received',offlineCreated:true});
+            await batch.commit();
+        } else {
+            await window.runAtomicOrOffline(async transaction=>{
+                const snap=await transaction.get(customerRef);
+                if(!snap.exists())throw new Error('Customer not found.');
+                if(snap.data().ownerId!==window.currentUserId)throw new Error('Unauthorized.');
+                const current=Math.max(0,Number(snap.data().balance)||0);
+                if(amount>current)throw new Error(`Received amount cannot exceed current due of ${window.formatCurrency(current)}.`);
+                const newBalance=current-amount;
+                transaction.update(customerRef,{balance:newBalance,updatedAt:new Date().toISOString()});
+                const txnRef=window.doc(window.collection(window.db,'customerTransactions'));
+                transaction.set(txnRef,{ownerId:window.currentUserId,customerId,type:'payment',amount,balanceAfter:newBalance,date:new Date().toISOString(),note:note||'Payment received'});
+            });
+        }
+        window.navigate('customers');
+        setTimeout(()=>openCustomerDetails(customerId),50);
+    } catch(error){console.error(error);alert(error.message||'Failed to record payment.');}
+    finally{window.hideLoading('btn-receive');}
 }
 
 window.openCustomerModal=openCustomerModal; window.saveCustomer=saveCustomer; window.openCustomerDetails=openCustomerDetails; window.renderCustomerLedgerTable=renderCustomerLedgerTable; window.downloadCustomerStatementPdf=downloadCustomerStatementPdf; window.sendPaymentReminder=sendPaymentReminder; window.openGiveModal=openGiveModal; window.processGive=processGive; window.openReceiveModal=openReceiveModal; window.processReceive=processReceive;

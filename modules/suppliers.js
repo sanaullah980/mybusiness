@@ -2,7 +2,7 @@
 // A supplier "balance" here means: amount WE OWE the supplier (payable).
 // "Gave" = we paid the supplier (reduces payable). "Received"/"Purchase" = we
 // bought stock on credit from them (increases payable). Stock-purchase-driven
-// debt is created from modules/stockPurchases.js via runTransaction so it
+// debt is created from modules/stockPurchases.js via the atomic write helper so it
 // stays consistent with inventory + cash book; the manual actions here are
 // for adjustments and for recording a payment against the supplier directly.
 
@@ -119,7 +119,7 @@ export async function processSupplierPayment(supplierId) {
     if (amount > (s.balance || 0)) return alert("Amount cannot exceed current payable.");
     window.showLoading('btn-sup-pay', "Processing...");
     try {
-        await window.runTransaction(window.db, async (transaction) => {
+        await window.runAtomicOrOffline(async (transaction) => {
             const supplierRef = window.doc(window.db, "suppliers", supplierId);
             const snap = await transaction.get(supplierRef);
             if (!snap.exists()) throw new Error("Supplier not found.");
@@ -151,7 +151,7 @@ export async function processSupplierDebt(supplierId) {
     if (!amount || amount <= 0) return alert("Please enter a valid amount.");
     window.showLoading('btn-sup-debt', "Processing...");
     try {
-        await window.runTransaction(window.db, async (transaction) => {
+        await window.runAtomicOrOffline(async (transaction) => {
             const supplierRef = window.doc(window.db, "suppliers", supplierId);
             const snap = await transaction.get(supplierRef);
             if (!snap.exists()) throw new Error("Supplier not found.");

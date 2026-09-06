@@ -14,7 +14,7 @@ async function ensureInvoiceNumber(saleId) {
     const sale = window.data.sales.find(s => s.id === saleId);
     if (sale && sale.invoiceNumber) return sale.invoiceNumber;
     let assignedNumber = null;
-    await window.runTransaction(window.db, async (transaction) => {
+    await window.runAtomicOrOffline(async (transaction) => {
         const settingsRef = window.doc(window.db, "settings", window.currentUserId);
         const saleRef = window.doc(window.db, "sales", saleId);
         const settingsSnap = await transaction.get(settingsRef);

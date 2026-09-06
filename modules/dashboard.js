@@ -32,7 +32,18 @@ export function renderDashboard(container) {
     activity.sort((a, b) => new Date(b.date) - new Date(a.date));
     const recentActivity = activity.slice(0, 8);
 
+    const businessName = data.settings?.name || 'MyBusiness';
     container.innerHTML = `
+        <div class="dashboard-welcome">
+            <div><span class="eyebrow">YOUR BUSINESS</span><h2>${businessName}</h2><p>${new Date().toLocaleDateString('en-PK',{weekday:'long',day:'numeric',month:'short'})}</p></div>
+            <button class="welcome-settings" onclick="navigate('settings')" title="Appearance"><i class="fas fa-palette"></i></button>
+        </div>
+        <div class="quick-actions">
+            <button class="quick-action primary" onclick="navigate('sales')"><span><i class="fas fa-plus"></i></span><strong>New Sale</strong><small>Record money in</small></button>
+            <button class="quick-action" onclick="navigate('customers')"><span><i class="fas fa-user-plus"></i></span><strong>Khata</strong><small>Customers & dues</small></button>
+            <button class="quick-action" onclick="navigate('inventory')"><span><i class="fas fa-box-open"></i></span><strong>Stock</strong><small>Products & stock</small></button>
+            <button class="quick-action" onclick="navigate('cashbook')"><span><i class="fas fa-wallet"></i></span><strong>Cash Book</strong><small>Money movement</small></button>
+        </div>
         <div class="dashboard-grid">
             <div class="card profit"><h3>Today's Sales</h3><div class="value">${formatCurrency(stats.totalSales)}</div></div>
             <div class="card profit"><h3>Net Profit (Today)</h3><div class="value">${formatCurrency(stats.netProfit)}</div></div>

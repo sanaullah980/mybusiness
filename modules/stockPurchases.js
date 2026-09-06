@@ -94,7 +94,7 @@ export async function saveStockPurchase() {
 
     window.showLoading('btn-save-sp', "Saving...");
     try {
-        await window.runTransaction(window.db, async (transaction) => {
+        await window.runAtomicOrOffline(async (transaction) => {
             let productSnap = null;
             if (productId) {
                 productSnap = await transaction.get(window.doc(window.db, "products", productId));
