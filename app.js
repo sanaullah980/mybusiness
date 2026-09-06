@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, setDoc, onSnapshot, query, where, runTransaction, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, setDoc, onSnapshot, query, where, runTransaction, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 import { renderDashboard } from './modules/dashboard.js';
 import { renderSales, showSaleTab, renderCart, updateSaleDue, addSaleItem, removeCartItem, completeNormalSale, completeManualSale, completeBulkSale, openProductSelectionModal, toggleProductRow, filterProductSelectionList, addSelectedProductsToCart, addProductByBarcode } from './modules/sales.js';
@@ -17,6 +17,11 @@ import { renderCashBook, buildCashBookEntries, openSetOpeningBalanceModal, saveO
 import { openGlobalSearchModal, runGlobalSearch } from './modules/search.js';
 import { openInvoiceModal, downloadInvoicePdf, printInvoice, shareInvoiceWhatsApp } from './modules/invoices.js';
 import { openReturnModal, processReturn } from './modules/returns.js';
+import { renderStaff, openStaffModal, saveStaff, deleteStaff, openAttendanceModal, saveAttendance } from './modules/staff.js';
+import { renderReminders, openReminderModal, saveReminder, completeReminder, deleteReminder } from './modules/reminders.js';
+import { renderBusinessCard, saveBusinessCard, shareBusinessCard } from './modules/business.js';
+import { renderBackup, exportBusinessBackup, importBusinessBackup } from './modules/backup.js';
+import { renderAppLock, saveAppLock, removeAppLock, checkAppLock } from './modules/appLock.js';
 
 const firebaseConfig = {
     apiKey: "AIzaSyBQqnIhMCGd4_FRApjkns3HjIrqw2V1qFc",
@@ -29,15 +34,17 @@ const firebaseConfig = {
 };
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
+let db;
+try { db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) }); } catch (_) { db = getFirestore(app); }
 const googleProvider = new GoogleAuthProvider();
 setPersistence(auth, browserLocalPersistence).catch(console.error);
 
 let currentUserId = null;
 let isLoginMode = true;
-let data = { products: [], customers: [], sales: [], expenses: [], stockPurchases: [], customerTransactions: [], settings: {}, suppliers: [], supplierTransactions: [], cashTransactions: [], salesReturns: [] };
+let data = { products: [], customers: [], sales: [], expenses: [], stockPurchases: [], customerTransactions: [], settings: {}, suppliers: [], supplierTransactions: [], cashTransactions: [], salesReturns: [], staff: [], attendance: [], reminders: [] };
 let listeners = [];
 let cart = [];
+let authResolved = false;
 let activeReportTab = 'daily';
 let currentReportMonth = new Date();
 
@@ -63,9 +70,9 @@ function hideLoading(btnId) { const btn = document.getElementById(btnId); if (bt
 window.formatCurrency = formatCurrency; window.getStartOfDay = getStartOfDay; window.getEndOfDay = getEndOfDay; window.getStartOfMonth = getStartOfMonth; window.getEndOfMonth = getEndOfMonth; window.getLocalDateStr = getLocalDateStr; window.showLoading = showLoading; window.hideLoading = hideLoading; window.calculateReportData = calculateReportData;
 
 window.toggleAuthMode = () => { isLoginMode = !isLoginMode; document.getElementById('auth-button').innerText = isLoginMode ? 'Log In' : 'Sign Up'; document.getElementById('toggle-auth').innerText = isLoginMode ? "Don't have an account? Sign Up" : "Already have an account? Log In"; document.getElementById('login-error').innerText = ''; };
-window.handleAuth = async (e) => { if (e) e.preventDefault(); const email = document.getElementById('login-email').value.trim(); const pass = document.getElementById('login-password').value; const errorDiv = document.getElementById('login-error'); if (!email || !pass) { errorDiv.innerText = "Please enter both email and password."; return; } showLoading('auth-button', isLoginMode ? "Logging in..." : "Creating account..."); try { if (isLoginMode) await signInWithEmailAndPassword(auth, email, pass); else await createUserWithEmailAndPassword(auth, email, pass); } catch (error) { if (error.code === 'auth/email-already-in-use') errorDiv.innerText = "Email already registered."; else if (error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') errorDiv.innerText = "Invalid email or password."; else errorDiv.innerText = "Authentication failed."; } finally { hideLoading('auth-button'); } };
+window.handleAuth = async (e) => { if (e) e.preventDefault(); const email = document.getElementById('login-email').value.trim(); const pass = document.getElementById('login-password').value; const errorDiv = document.getElementById('login-error'); if (!email || !pass) { errorDiv.innerText = "Please enter both email and password."; return; } showLoading('auth-button', isLoginMode ? "Logging in..." : "Creating account..."); try { if (isLoginMode) await signInWithEmailAndPassword(auth, email, pass); else await createUserWithEmailAndPassword(auth, email, pass); } catch (error) { if (error.code === 'auth/email-already-in-use') errorDiv.innerText = "Email already registered."; else if (error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') errorDiv.innerText = "Invalid email or password."; else if (error.code === 'auth/invalid-api-key' || error.code === 'auth/api-key-not-valid') errorDiv.innerText = 'Firebase configuration is invalid. Please contact the app administrator.'; else errorDiv.innerText = error.message || 'Authentication failed.'; } finally { hideLoading('auth-button'); } };
 window.forgotPassword = async (e) => { if (e) e.preventDefault(); const email = document.getElementById('login-email').value.trim(); if (!email) return alert("Enter email first."); try { await sendPasswordResetEmail(auth, email); alert("Reset link sent!"); } catch (error) { alert("If account exists, link sent."); } };
-window.signInWithGoogle = async () => { try { await signInWithPopup(auth, googleProvider); } catch (error) { alert("Google Sign-In failed."); } };
+window.signInWithGoogle = async () => { try { await signInWithPopup(auth, googleProvider); } catch (error) { console.error('Google Sign-In error:', error); if (error.code === 'auth/popup-closed-by-user') return; if (error.code === 'auth/unauthorized-domain') alert('This website domain is not authorized in Firebase Authentication.'); else if (error.code === 'auth/popup-blocked') alert('Your browser blocked the Google sign-in popup. Please allow popups and try again.'); else alert(error.message || 'Google Sign-In failed.'); } };
 window.handleLogout = async () => { if (!confirm("Log out?")) return; await signOut(auth); };
 
 // Simple, real online/offline indicator. This does NOT queue writes made
@@ -88,17 +95,57 @@ window.addEventListener('online', updateConnectionIndicator);
 window.addEventListener('offline', updateConnectionIndicator);
 
 onAuthStateChanged(auth, (user) => {
-    document.getElementById('auth-loading').classList.add('hidden');
-    window.currentUserId = user ? user.uid : null;
-    if (user) { document.getElementById('auth-screen').classList.add('hidden'); document.getElementById('main-app').classList.remove('hidden'); startListeners(); navigate('dashboard'); updateConnectionIndicator(); }
-    else { document.getElementById('auth-screen').classList.remove('hidden'); document.getElementById('main-app').classList.add('hidden'); clearListeners(); window.data = { products: [], customers: [], sales: [], expenses: [], stockPurchases: [], customerTransactions: [], settings: {}, suppliers: [], supplierTransactions: [], cashTransactions: [], salesReturns: [] }; }
+    try {
+        authResolved = true;
+        const loading = document.getElementById('auth-loading');
+        if (loading) loading.classList.add('hidden');
+        window.currentUserId = user ? user.uid : null;
+        if (user) {
+            document.getElementById('auth-screen').classList.add('hidden');
+            document.getElementById('main-app').classList.remove('hidden');
+            startListeners();
+            navigate('dashboard');
+            updateConnectionIndicator();
+        } else {
+            document.getElementById('auth-screen').classList.remove('hidden');
+            document.getElementById('main-app').classList.add('hidden');
+            clearListeners();
+            window.data = { products: [], customers: [], sales: [], expenses: [], stockPurchases: [], customerTransactions: [], settings: {}, suppliers: [], supplierTransactions: [], cashTransactions: [], salesReturns: [], staff: [], attendance: [], reminders: [] };
+        }
+    } catch (error) {
+        console.error('Auth state handler error:', error);
+        const loading = document.getElementById('auth-loading');
+        if (loading) loading.classList.add('hidden');
+        const authScreen = document.getElementById('auth-screen');
+        if (authScreen) authScreen.classList.remove('hidden');
+        const errorDiv = document.getElementById('login-error');
+        if (errorDiv) errorDiv.textContent = 'Unable to load the app. Please refresh the page.';
+    }
 });
 
-function startListeners() { clearListeners(); const q = (col) => query(collection(db, col), where("ownerId", "==", window.currentUserId)); listeners.push(onSnapshot(q("products"), s => { window.data.products = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("customers"), s => { window.data.customers = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("sales"), s => { window.data.sales = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("expenses"), s => { window.data.expenses = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("stockPurchases"), s => { window.data.stockPurchases = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("customerTransactions"), s => { window.data.customerTransactions = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("suppliers"), s => { window.data.suppliers = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("supplierTransactions"), s => { window.data.supplierTransactions = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("cashTransactions"), s => { window.data.cashTransactions = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("salesReturns"), s => { window.data.salesReturns = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(doc(db, "settings", window.currentUserId), (snap) => { window.data.settings = snap.exists() ? snap.data() : {}; refreshCurrentView(); })); }
-function clearListeners() { listeners.forEach(unsub => unsub()); listeners = []; }
-function refreshCurrentView() { const activeNav = document.querySelector('.nav-item.active'); if (activeNav) navigate(activeNav.dataset.page || 'dashboard'); }
+// Safety net: never leave the user on an infinite authentication spinner.
+setTimeout(() => {
+    if (!authResolved) {
+        const loading = document.getElementById('auth-loading');
+        if (loading) loading.classList.add('hidden');
+        const authScreen = document.getElementById('auth-screen');
+        if (authScreen) authScreen.classList.remove('hidden');
+        const errorDiv = document.getElementById('login-error');
+        if (errorDiv) errorDiv.textContent = 'Authentication is taking too long. Please refresh and try again.';
+    }
+}, 12000);
 
-window.navigate = (page) => { document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active')); const btn = document.querySelector(`.nav-item[data-page="${page}"]`); if(btn) btn.classList.add('active'); const content = document.getElementById('app-content'); const title = document.getElementById('header-title'); if (page === 'dashboard') { title.innerText = 'Dashboard'; renderDashboard(content); } else if (page === 'sales') { title.innerText = 'New Sale'; renderSales(content); } else if (page === 'inventory') { title.innerText = 'Inventory'; renderInventory(content); } else if (page === 'customers') { title.innerText = 'Customers'; renderCustomers(content); } else if (page === 'more') { title.innerText = 'More'; renderMore(content); } else if (page === 'expenses') { title.innerText = 'Expenses'; renderExpenses(content); } else if (page === 'stockPurchases') { title.innerText = 'Stock Purchases'; renderStockPurchases(content); } else if (page === 'reports') { title.innerText = 'Reports'; renderReports(content); } else if (page === 'settings') { title.innerText = 'Settings'; renderSettings(content); } else if (page === 'suppliers') { title.innerText = 'Suppliers'; renderSuppliers(content); } else if (page === 'cashbook') { title.innerText = 'Cash Book'; renderCashBook(content); } };
+function startListeners() { clearListeners(); const q = (col) => query(collection(db, col), where("ownerId", "==", window.currentUserId)); listeners.push(onSnapshot(q("products"), s => { window.data.products = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("customers"), s => { window.data.customers = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("sales"), s => { window.data.sales = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("expenses"), s => { window.data.expenses = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("stockPurchases"), s => { window.data.stockPurchases = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("customerTransactions"), s => { window.data.customerTransactions = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("suppliers"), s => { window.data.suppliers = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("supplierTransactions"), s => { window.data.supplierTransactions = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("cashTransactions"), s => { window.data.cashTransactions = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("salesReturns"), s => { window.data.salesReturns = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("staff"), s => { window.data.staff = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("attendance"), s => { window.data.attendance = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(q("reminders"), s => { window.data.reminders = s.docs.map(d => ({id: d.id, ...d.data()})); refreshCurrentView(); })); listeners.push(onSnapshot(doc(db, "settings", window.currentUserId), (snap) => { window.data.settings = snap.exists() ? snap.data() : {}; refreshCurrentView(); checkAppLock(); })); }
+function clearListeners() { listeners.forEach(unsub => unsub()); listeners = []; }
+function refreshCurrentView() {
+    // Live Firestore updates should not destroy an open dialog/form.
+    const overlay = document.getElementById('modal-overlay');
+    if (overlay && !overlay.classList.contains('hidden')) return;
+    const activeNav = document.querySelector('.nav-item.active');
+    if (activeNav) navigate(activeNav.dataset.page || 'dashboard');
+}
+
+window.navigate = (page) => { document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active')); const btn = document.querySelector(`.nav-item[data-page="${page}"]`); if(btn) btn.classList.add('active'); const content = document.getElementById('app-content'); const title = document.getElementById('header-title'); if (page === 'dashboard') { title.innerText = 'Dashboard'; renderDashboard(content); } else if (page === 'sales') { title.innerText = 'New Sale'; renderSales(content); } else if (page === 'inventory') { title.innerText = 'Inventory'; renderInventory(content); } else if (page === 'customers') { title.innerText = 'Customers'; renderCustomers(content); } else if (page === 'more') { title.innerText = 'More'; renderMore(content); } else if (page === 'expenses') { title.innerText = 'Expenses'; renderExpenses(content); } else if (page === 'stockPurchases') { title.innerText = 'Stock Purchases'; renderStockPurchases(content); } else if (page === 'reports') { title.innerText = 'Reports'; renderReports(content); } else if (page === 'settings') { title.innerText = 'Settings'; renderSettings(content); } else if (page === 'suppliers') { title.innerText = 'Suppliers'; renderSuppliers(content); } else if (page === 'cashbook') { title.innerText = 'Cash Book'; renderCashBook(content); } else if (page === 'staff') { title.innerText = 'Staff Book'; renderStaff(content); } else if (page === 'reminders') { title.innerText = 'Payment Reminders'; renderReminders(content); } else if (page === 'businessCard') { title.innerText = 'Business Card'; renderBusinessCard(content); } else if (page === 'backup') { title.innerText = 'Backup & Restore'; renderBackup(content); } else if (page === 'appLock') { title.innerText = 'App Lock'; renderAppLock(content); } };
 
 window.renderDashboard = renderDashboard; window.renderSales = renderSales; window.showSaleTab = showSaleTab; window.renderCart = renderCart; window.updateSaleDue = updateSaleDue; window.addSaleItem = addSaleItem; window.removeCartItem = removeCartItem; window.completeNormalSale = completeNormalSale; window.completeManualSale = completeManualSale; window.completeBulkSale = completeBulkSale; window.openProductSelectionModal = openProductSelectionModal; window.toggleProductRow = toggleProductRow; window.filterProductSelectionList = filterProductSelectionList; window.addSelectedProductsToCart = addSelectedProductsToCart; window.renderInventory = renderInventory; window.openProductModal = openProductModal; window.saveProduct = saveProduct; window.deleteProduct = deleteProduct; window.openStockAdjustModal = openStockAdjustModal; window.saveStockAdjustment = saveStockAdjustment; window.renderCustomers = renderCustomers; window.openCustomerModal = openCustomerModal; window.saveCustomer = saveCustomer; window.openCustomerDetails = openCustomerDetails; window.renderExpenses = renderExpenses; window.openExpenseModal = openExpenseModal; window.saveExpense = saveExpense; window.deleteExpense = deleteExpense; window.renderStockPurchases = renderStockPurchases; window.openStockPurchaseModal = openStockPurchaseModal; window.showStockPurchaseTab = showStockPurchaseTab; window.onStockPurchaseProductChange = onStockPurchaseProductChange; window.saveStockPurchase = saveStockPurchase; window.deleteStockPurchase = deleteStockPurchase; window.renderReports = renderReports; window.setReportTab = setReportTab; window.changeReportMonth = changeReportMonth; window.resetDailyReport = resetDailyReport; window.renderMore = renderMore; window.openDeleteRecordsModal = openDeleteRecordsModal; window.deleteCollectionData = deleteCollectionData; window.deleteEverything = deleteEverything; window.renderSettings = renderSettings; window.saveSettings = saveSettings; window.openChangePasswordModal = openChangePasswordModal; window.changePassword = changePassword; window.closeModal = closeModal; window.viewSaleDetail = viewSaleDetail;
 window.renderSuppliers = renderSuppliers; window.openSupplierModal = openSupplierModal; window.saveSupplier = saveSupplier; window.deleteSupplier = deleteSupplier; window.openSupplierDetails = openSupplierDetails; window.openSupplierPayModal = openSupplierPayModal; window.processSupplierPayment = processSupplierPayment; window.openSupplierDebtModal = openSupplierDebtModal; window.processSupplierDebt = processSupplierDebt;
@@ -108,3 +155,9 @@ window.addProductByBarcode = addProductByBarcode;
 window.renderCustomerLedgerTable = renderCustomerLedgerTable; window.downloadCustomerStatementPdf = downloadCustomerStatementPdf; window.sendPaymentReminder = sendPaymentReminder;
 window.openInvoiceModal = openInvoiceModal; window.downloadInvoicePdf = downloadInvoicePdf; window.printInvoice = printInvoice; window.shareInvoiceWhatsApp = shareInvoiceWhatsApp;
 window.openReturnModal = openReturnModal; window.processReturn = processReturn;
+
+window.renderStaff=renderStaff; window.openStaffModal=openStaffModal; window.saveStaff=saveStaff; window.deleteStaff=deleteStaff; window.openAttendanceModal=openAttendanceModal; window.saveAttendance=saveAttendance;
+window.renderReminders=renderReminders; window.openReminderModal=openReminderModal; window.saveReminder=saveReminder; window.completeReminder=completeReminder; window.deleteReminder=deleteReminder;
+window.renderBusinessCard=renderBusinessCard; window.saveBusinessCard=saveBusinessCard; window.shareBusinessCard=shareBusinessCard;
+window.renderBackup=renderBackup; window.exportBusinessBackup=exportBusinessBackup; window.importBusinessBackup=importBusinessBackup;
+window.renderAppLock=renderAppLock; window.saveAppLock=saveAppLock; window.removeAppLock=removeAppLock; window.checkAppLock=checkAppLock;

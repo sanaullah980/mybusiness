@@ -102,6 +102,25 @@ service cloud.firestore {
       allow update: if isOwner(resource.data.ownerId) && isOwner(request.resource.data.ownerId);
     }
 
+
+    match /staff/{docId} {
+      allow read, delete: if isOwner(resource.data.ownerId);
+      allow create: if isOwner(request.resource.data.ownerId);
+      allow update: if isOwner(resource.data.ownerId) && isOwner(request.resource.data.ownerId);
+    }
+
+    match /attendance/{docId} {
+      allow read, delete: if isOwner(resource.data.ownerId);
+      allow create: if isOwner(request.resource.data.ownerId);
+      allow update: if isOwner(resource.data.ownerId) && isOwner(request.resource.data.ownerId);
+    }
+
+    match /reminders/{docId} {
+      allow read, delete: if isOwner(resource.data.ownerId);
+      allow create: if isOwner(request.resource.data.ownerId);
+      allow update: if isOwner(resource.data.ownerId) && isOwner(request.resource.data.ownerId);
+    }
+
     // settings/{uid}: the doc ID itself IS the owner's uid, so this checks
     // the path segment rather than an ownerId field.
     match /settings/{uid} {

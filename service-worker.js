@@ -1,65 +1,36 @@
-const CACHE_NAME = 'mybusiness-v3';
-const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/style.css',
-  '/app.js',
-  '/manifest.json',
-  '/modules/dashboard.js',
-  '/modules/sales.js',
-  '/modules/inventory.js',
-  '/modules/customers.js',
-  '/modules/expenses.js',
-  '/modules/stockPurchases.js',
-  '/modules/report.js',
-  '/modules/more.js',
-  '/modules/setting.js',
-  '/modules/modals.js',
-  '/modules/suppliers.js',
-  '/modules/cashbook.js',
-  '/modules/search.js',
-  '/modules/invoices.js',
-  '/modules/returns.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
-  'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
+const CACHE_NAME = 'mybusiness-v4';
+const APP_SHELL = [
+  '/', '/index.html', '/style.css', '/app.js', '/manifest.json',
+  '/icon-192.png', '/icon-512.png',
+  '/modules/dashboard.js', '/modules/modals.js', '/modules/sales.js',
+  '/modules/invoices.js', '/modules/suppliers.js', '/modules/setting.js',
+  '/modules/inventory.js', '/modules/customers.js', '/modules/returns.js',
+  '/modules/cashbook.js', '/modules/stockPurchases.js', '/modules/expenses.js',
+  '/modules/search.js', '/modules/report.js', '/modules/more.js', '/modules/staff.js', '/modules/reminders.js', '/modules/business.js', '/modules/backup.js', '/modules/appLock.js'
 ];
 
-// Install event: Cache static assets
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
-    })
-  );
+self.addEventListener('install', event => {
+  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL)));
   self.skipWaiting();
 });
 
-// Activate event: Clean up old caches
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
-  );
+self.addEventListener('activate', event => {
+  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))));
   self.clients.claim();
 });
 
-// Fetch event: Network-first for API/Firebase, Cache-first for static assets
-self.addEventListener('fetch', (event) => {
-  if (event.request.url.includes('firestore') || event.request.url.includes('firebaseauth')) {
-    // Never cache sensitive Firebase API calls
-    return;
-  }
-  
+self.addEventListener('fetch', event => {
+  const url = new URL(event.request.url);
+  if (url.hostname.includes('googleapis.com') || url.hostname.includes('firebaseio.com') || url.hostname.includes('firebaseapp.com') || url.hostname.includes('gstatic.com')) return;
+  if (event.request.method !== 'GET') return;
   event.respondWith(
-    fetch(event.request).catch(() => {
-      return caches.match(event.request);
-    })
+    fetch(event.request)
+      .then(response => {
+        if (response.ok && url.origin === self.location.origin) {
+          const copy = response.clone(); caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
+        }
+        return response;
+      })
+      .catch(() => caches.match(event.request).then(cached => cached || caches.match('/index.html')))
   );
 });

@@ -1,0 +1,4 @@
+downloads/signing.keystore
+downloads/signing-key-info.txt
+.env
+.firebase/
