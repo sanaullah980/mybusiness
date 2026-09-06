@@ -45,9 +45,15 @@
     <div id="main-app" class="hidden">
         <header class="app-header">
             <h1 id="header-title">Dashboard</h1>
-            <button class="btn-icon" onclick="handleLogout()" title="Logout">
-                <i class="fas fa-sign-out-alt"></i>
-            </button>
+            <div style="display:flex; align-items:center; gap:5px;">
+                <span id="connection-indicator" class="connection-indicator online" title="Online"><i class="fas fa-wifi"></i></span>
+                <button class="btn-icon" onclick="openGlobalSearchModal()" title="Search">
+                    <i class="fas fa-search"></i>
+                </button>
+                <button class="btn-icon" onclick="handleLogout()" title="Logout">
+                    <i class="fas fa-sign-out-alt"></i>
+                </button>
+            </div>
         </header>
 
         <main id="app-content">

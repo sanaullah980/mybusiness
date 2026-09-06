@@ -1,10 +1,23 @@
-const CACHE_NAME = 'mybusiness-v1';
+const CACHE_NAME = 'mybusiness-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/style.css',
   '/app.js',
   '/manifest.json',
+  '/modules/dashboard.js',
+  '/modules/sales.js',
+  '/modules/inventory.js',
+  '/modules/customers.js',
+  '/modules/expenses.js',
+  '/modules/stockPurchases.js',
+  '/modules/report.js',
+  '/modules/more.js',
+  '/modules/setting.js',
+  '/modules/modals.js',
+  '/modules/suppliers.js',
+  '/modules/cashbook.js',
+  '/modules/search.js',
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css'
 ];
 

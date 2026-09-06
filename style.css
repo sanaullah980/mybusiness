@@ -91,3 +91,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .ledger-btn.give:hover { background: #c0392b; }
 .ledger-btn.receive { background: var(--success); }
 .ledger-btn.receive:hover { background: var(--success-dark); }
+.connection-indicator { font-size: 12px; padding: 4px 8px; border-radius: 12px; display: flex; align-items: center; gap: 4px; }
+.connection-indicator.online { color: #a5f3dc; }
+.connection-indicator.offline { color: #fff; background: var(--danger); font-weight: bold; }
+.text-danger { color: var(--danger); }
+.text-success { color: var(--success); }

@@ -1,0 +1,110 @@
+rules_version = '2';
+
+// SECURITY NOTE FOR THE OWNER OF THIS PROJECT:
+// Before this upgrade, the app had NO Firestore security rules on record in
+// this project folder, meaning either (a) the project is running on
+// insecure default/test-mode rules that let ANY authenticated (or even
+// anonymous) user read and write ALL data in the database, or (b) rules
+// exist only in the Firebase Console and were never version-controlled here.
+// Either way, the frontend's `where("ownerId", "==", uid)` query filters are
+// NOT security — they only affect what the app chooses to ask for. Anyone
+// with your Firebase config (which is public in app.js by necessity) could
+// call the Firestore SDK directly and read or write any user's data unless
+// rules like these are deployed.
+//
+// You MUST deploy this file for it to take effect:
+//   firebase deploy --only firestore:rules
+// (see the "Firebase/Firestore setup" section of the final summary for the
+// full one-time setup, including creating a firebase.json if you don't
+// already have one from the Firebase CLI.)
+
+function isSignedIn() {
+  return request.auth != null;
+}
+
+function isOwner(ownerId) {
+  return isSignedIn() && request.auth.uid == ownerId;
+}
+
+// Applies to every user-data collection: a doc may only be created with
+// ownerId == the caller's own uid, and only read/updated/deleted by that
+// same owner. Updates additionally may not change ownerId to someone else.
+function ownerRules() {
+  return true;
+}
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /products/{docId} {
+      allow read, delete: if isOwner(resource.data.ownerId);
+      allow create: if isOwner(request.resource.data.ownerId);
+      allow update: if isOwner(resource.data.ownerId) && isOwner(request.resource.data.ownerId);
+    }
+
+    match /customers/{docId} {
+      allow read, delete: if isOwner(resource.data.ownerId);
+      allow create: if isOwner(request.resource.data.ownerId);
+      allow update: if isOwner(resource.data.ownerId) && isOwner(request.resource.data.ownerId);
+    }
+
+    match /customerTransactions/{docId} {
+      allow read, delete: if isOwner(resource.data.ownerId);
+      allow create: if isOwner(request.resource.data.ownerId);
+      allow update: if isOwner(resource.data.ownerId) && isOwner(request.resource.data.ownerId);
+    }
+
+    match /suppliers/{docId} {
+      allow read, delete: if isOwner(resource.data.ownerId);
+      allow create: if isOwner(request.resource.data.ownerId);
+      allow update: if isOwner(resource.data.ownerId) && isOwner(request.resource.data.ownerId);
+    }
+
+    match /supplierTransactions/{docId} {
+      allow read, delete: if isOwner(resource.data.ownerId);
+      allow create: if isOwner(request.resource.data.ownerId);
+      allow update: if isOwner(resource.data.ownerId) && isOwner(request.resource.data.ownerId);
+    }
+
+    match /sales/{docId} {
+      allow read, delete: if isOwner(resource.data.ownerId);
+      allow create: if isOwner(request.resource.data.ownerId);
+      allow update: if isOwner(resource.data.ownerId) && isOwner(request.resource.data.ownerId);
+    }
+
+    match /expenses/{docId} {
+      allow read, delete: if isOwner(resource.data.ownerId);
+      allow create: if isOwner(request.resource.data.ownerId);
+      allow update: if isOwner(resource.data.ownerId) && isOwner(request.resource.data.ownerId);
+    }
+
+    match /stockPurchases/{docId} {
+      allow read, delete: if isOwner(resource.data.ownerId);
+      allow create: if isOwner(request.resource.data.ownerId);
+      allow update: if isOwner(resource.data.ownerId) && isOwner(request.resource.data.ownerId);
+    }
+
+    match /stockAdjustments/{docId} {
+      allow read, delete: if isOwner(resource.data.ownerId);
+      allow create: if isOwner(request.resource.data.ownerId);
+      allow update: if isOwner(resource.data.ownerId) && isOwner(request.resource.data.ownerId);
+    }
+
+    match /cashTransactions/{docId} {
+      allow read, delete: if isOwner(resource.data.ownerId);
+      allow create: if isOwner(request.resource.data.ownerId);
+      allow update: if isOwner(resource.data.ownerId) && isOwner(request.resource.data.ownerId);
+    }
+
+    // settings/{uid}: the doc ID itself IS the owner's uid, so this checks
+    // the path segment rather than an ownerId field.
+    match /settings/{uid} {
+      allow read, write: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Deny everything else by default.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
