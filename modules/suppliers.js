@@ -8,13 +8,13 @@
 
 export function renderSuppliers(container) {
     const data = window.data;
-    const formatCurrency = window.formatCurrency;
+    const formatCurrency = window.formatCurrency; const esc = window.esc;
     const chevronSvg = `<svg class="chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>`;
     const totalPayable = (data.suppliers || []).reduce((sum, s) => sum + (s.balance || 0), 0);
     container.innerHTML = `
         <div class="card debt"><h3>Total Payable to Suppliers</h3><div class="value">${formatCurrency(totalPayable)}</div></div>
         <button class="btn" style="margin-bottom:20px;" onclick="openSupplierModal()">+ Add Supplier</button>
-        <div class="card" id="supplier-list">${(data.suppliers || []).length === 0 ? '<p style="color:var(--gray); text-align:center; padding:10px;">No suppliers found.</p>' : data.suppliers.map(s => `<div class="list-item" onclick="openSupplierDetails('${s.id}')"><div class="list-item-info"><h4>${s.name}</h4><p>${s.phone || 'No phone'} | Payable: <span style="color:var(--danger); font-weight:bold;">${formatCurrency(s.balance || 0)}</span></p></div>${chevronSvg}</div>`).join('')}</div>`;
+        <div class="card" id="supplier-list">${(data.suppliers || []).length === 0 ? '<div class="empty-state"><i class="fas fa-truck"></i><h3>No suppliers yet</h3><p>Add suppliers to track purchases and outstanding payments.</p></div>' : data.suppliers.map(s => `<div class="list-item" onclick="openSupplierDetails('${s.id}')"><div class="list-item-info"><h4>${esc(s.name)}</h4><p>${esc(s.phone || 'No phone')} | Payable: <span style="color:var(--danger); font-weight:bold;">${formatCurrency(s.balance || 0)}</span></p></div>${chevronSvg}</div>`).join('')}</div>`;
 }
 
 export function openSupplierModal(supplierId = null) {
@@ -103,7 +103,7 @@ export function openSupplierDetails(supplierId) {
 export function openSupplierPayModal(supplierId) {
     const s = (window.data.suppliers || []).find(x => x.id === supplierId);
     const modal = document.getElementById('modal-body');
-    modal.innerHTML = `<div class="modal-header"><h2>Pay ${s.name}</h2><button class="close-btn" onclick="openSupplierDetails('${s.id}')">&times;</button></div><p style="margin-bottom:15px;">Current Payable: <strong>${window.formatCurrency(s.balance || 0)}</strong></p><div class="form-group"><label>Amount (Rs.) *</label><input type="number" id="sup-pay-amount" min="1" max="${s.balance || 0}"></div><div class="form-group"><label>Note (Optional)</label><input type="text" id="sup-pay-note" placeholder="e.g., Cash paid"></div><button class="btn" id="btn-sup-pay" style="background:var(--success);" onclick="processSupplierPayment('${s.id}')">Confirm Payment</button>`;
+    modal.innerHTML = `<div class="modal-header"><h2>Pay ${esc(s.name)}</h2><button class="close-btn" onclick="openSupplierDetails('${s.id}')">&times;</button></div><p style="margin-bottom:15px;">Current Payable: <strong>${window.formatCurrency(s.balance || 0)}</strong></p><div class="form-group"><label>Amount (Rs.) *</label><input type="number" id="sup-pay-amount" min="1" max="${s.balance || 0}"></div><div class="form-group"><label>Note (Optional)</label><input type="text" id="sup-pay-note" placeholder="e.g., Cash paid"></div><button class="btn" id="btn-sup-pay" style="background:var(--success);" onclick="processSupplierPayment('${s.id}')">Confirm Payment</button>`;
     document.getElementById('modal-overlay').classList.remove('hidden');
 }
 
@@ -141,7 +141,7 @@ export async function processSupplierPayment(supplierId) {
 export function openSupplierDebtModal(supplierId) {
     const s = (window.data.suppliers || []).find(x => x.id === supplierId);
     const modal = document.getElementById('modal-body');
-    modal.innerHTML = `<div class="modal-header"><h2>Credit Purchase from ${s.name}</h2><button class="close-btn" onclick="openSupplierDetails('${s.id}')">&times;</button></div><p style="margin-bottom:15px; font-size:13px; color:var(--gray);">Use this for a manual balance adjustment. For actual stock purchases, use Stock Purchases so inventory updates too.</p><div class="form-group"><label>Amount (Rs.) *</label><input type="number" id="sup-debt-amount" min="1"></div><div class="form-group"><label>Note (Optional)</label><input type="text" id="sup-debt-note"></div><button class="btn" id="btn-sup-debt" style="background:var(--danger);" onclick="processSupplierDebt('${s.id}')">Confirm</button>`;
+    modal.innerHTML = `<div class="modal-header"><h2>Credit Purchase from ${esc(s.name)}</h2><button class="close-btn" onclick="openSupplierDetails('${s.id}')">&times;</button></div><p style="margin-bottom:15px; font-size:13px; color:var(--gray);">Use this for a manual balance adjustment. For actual stock purchases, use Stock Purchases so inventory updates too.</p><div class="form-group"><label>Amount (Rs.) *</label><input type="number" id="sup-debt-amount" min="1"></div><div class="form-group"><label>Note (Optional)</label><input type="text" id="sup-debt-note"></div><button class="btn" id="btn-sup-debt" style="background:var(--danger);" onclick="processSupplierDebt('${s.id}')">Confirm</button>`;
     document.getElementById('modal-overlay').classList.remove('hidden');
 }
 

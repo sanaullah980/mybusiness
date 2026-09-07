@@ -11,7 +11,7 @@
 
 export function renderStockPurchases(container) {
     const data = window.data; const formatCurrency = window.formatCurrency;
-    container.innerHTML = `<button class="btn" style="margin-bottom:20px;" onclick="openStockPurchaseModal()">+ Record Stock Purchase</button><div class="card" id="purchase-list">${data.stockPurchases.length === 0 ? '<p style="color:var(--gray); text-align:center; padding:10px;">No stock purchases recorded.</p>' : data.stockPurchases.slice().reverse().map(p => {
+    container.innerHTML = `<button class="btn" style="margin-bottom:20px;" onclick="openStockPurchaseModal()">+ Record Stock Purchase</button><div class="card" id="purchase-list">${data.stockPurchases.length === 0 ? '<div class="empty-state"><i class="fas fa-truck-loading"></i><h3>No purchases yet</h3><p>Record your first stock purchase to update inventory.</p></div>' : data.stockPurchases.slice().reverse().map(p => {
         const amountPaid = p.amountPaid !== undefined ? p.amountPaid : p.amount;
         const amountDue = p.amountDue || 0;
         return `<div class="list-item" style="cursor:default;"><div class="list-item-info"><h4>${p.category || (p.productName ? p.productName : 'Stock Purchase')}</h4><p>${new Date(p.date).toLocaleDateString()} ${p.supplier ? '| ' + p.supplier : ''} ${p.note ? '| ' + p.note : ''}</p>${amountDue > 0 ? `<p><span class="badge badge-low">Due: ${formatCurrency(amountDue)}</span></p>` : ''}</div><div style="display:flex; align-items:center; gap:10px;"><span style="font-weight:bold;">${formatCurrency(p.amount)}</span><button class="btn btn-sm btn-danger" onclick="deleteStockPurchase('${p.id}')"><i class="fas fa-trash"></i></button></div></div>`;

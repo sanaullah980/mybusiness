@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mybusiness-v8';
+const CACHE_NAME = 'mybusiness-v12';
 const APP_SHELL = [
   '/', '/index.html', '/style.css', '/app.js', '/manifest.json',
   '/icon-192.png', '/icon-512.png',
@@ -61,5 +61,16 @@ self.addEventListener('fetch', event => {
       if (request.mode === 'navigate') return cache.match('/index.html');
       throw error;
     }
+  })());
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  event.waitUntil((async () => {
+    const clientsList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of clientsList) {
+      if ('focus' in client) return client.focus();
+    }
+    if (self.clients.openWindow) return self.clients.openWindow('/#reminders');
   })());
 });

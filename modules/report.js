@@ -144,8 +144,8 @@ export function renderReports(container) {
         </div>
 
         <h3 style="margin:20px 0 10px;">Best Sellers</h3>
-        <div class="card">
-            ${adv.bestSellers.length === 0 ? '<p style="color:var(--gray); text-align:center; padding:10px;">No itemized sales in this period</p>' : adv.bestSellers.map((p, i) => `<div class="list-item" style="cursor:default;"><div class="list-item-info"><h4>#${i + 1} ${p.name}</h4><p>Qty sold: ${p.qty}</p></div><span style="font-weight:bold; color:var(--primary);">${formatCurrency(p.revenue)}</span></div>`).join('')}
+        <div class="card report-ranking-card">
+            ${adv.bestSellers.length === 0 ? '<p style="color:var(--gray); text-align:center; padding:10px;">No itemized sales in this period</p>' : adv.bestSellers.map((p, i) => { const maxQty=Math.max(1,...adv.bestSellers.map(x=>x.qty)); const width=Math.max(8,Math.round((p.qty/maxQty)*100)); return `<div class="report-rank-row"><div class="report-rank-head"><strong>#${i + 1} ${window.esc?.(p.name) || p.name}</strong><span>${p.qty} sold</span></div><div class="report-rank-track"><span style="width:${width}%"></span></div><div class="report-rank-foot"><span>Revenue</span><strong>${formatCurrency(p.revenue)}</strong></div></div>`; }).join('')}
         </div>
 
         <div class="card debt"><h3>Outstanding Customer Debt (legacy)</h3><div class="value">${formatCurrency(stats.outstandingDebt)}</div><p style="font-size:13px; color:var(--gray); margin-top:5px;">Same figure as Total Receivable above</p></div>
