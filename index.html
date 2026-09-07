@@ -108,10 +108,12 @@
     <!-- MAIN JAVASCRIPT -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script>
-        // Prevent an older PWA cache from serving an old app.js after deployment.
-        if ('caches' in window) {
-            caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith('mybusiness-') && k !== 'mybusiness-v11').map(k => caches.delete(k)))).catch(() => {});
-        }
+        // Cache cleanup on version bumps is handled by service-worker.js's own
+        // 'activate' handler (which always compares against its real, single
+        // source of truth CACHE_NAME). A duplicate hardcoded version string
+        // here previously drifted out of sync on every release and ended up
+        // deleting the CURRENT cache instead of old ones — removed rather
+        // than fixed again, so it can't recur.
 
         function showBootError(message) {
             const loading = document.getElementById('auth-loading');
