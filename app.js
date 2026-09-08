@@ -345,8 +345,9 @@ function startDataListeners(ownerId){
     initialSnapshotSources.clear();
     initialDataReady=false;
     if(initialRevealTimer) clearTimeout(initialRevealTimer);
-    const adminOnlyCollections=['expenses','stockPurchases','stockAdjustments','cashTransactions','salesReturns','supplierTransactions','staff','attendance'];
-    const activeCollections=currentRole==='employee' ? COLLECTIONS.filter(name=>!adminOnlyCollections.includes(name)) : COLLECTIONS;
+    const adminOnlyCollections=['expenses','stockPurchases','stockAdjustments','cashTransactions','salesReturns','staff','attendance'];
+    const employeeExcluded=currentPermissions.suppliers ? adminOnlyCollections : [...adminOnlyCollections,'supplierTransactions'];
+    const activeCollections=currentRole==='employee' ? COLLECTIONS.filter(name=>!employeeExcluded.includes(name)) : COLLECTIONS;
     expectedInitialSources=activeCollections.length;
     for(const name of activeCollections){
         const q=(name==='sales' && currentRole==='employee') ? query(collection(db,name),where('ownerId','==',ownerId),where('createdBy','==',authUserId)) : query(collection(db,name),where('ownerId','==',ownerId));
@@ -375,6 +376,7 @@ window.navigate=(page, options={})=>{
     const {history=true, replace=false}=options||{};
     const restricted=['reports','expenses','stockPurchases','staff','backup','appLock','settings','businessCard','team'];
     if(currentRole==='employee' && restricted.includes(page)){ window.showToast?.('This area is available to the Admin only.','warning'); return; }
+    if(currentRole==='employee' && page==='suppliers' && !currentPermissions.suppliers){ window.showToast?.('Ask your Admin to grant Suppliers access.','warning'); return; }
     if (history && !handlingPopState && currentPage !== page) {
         const state={myBusiness:true,page};
         if (replace) window.history.replaceState(state,'',`#${page}`);

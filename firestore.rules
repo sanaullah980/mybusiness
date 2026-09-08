@@ -77,10 +77,11 @@ service cloud.firestore {
       allow create: if admin(request.resource.data.ownerId);
       allow update: if admin(resource.data.ownerId) && request.resource.data.ownerId == resource.data.ownerId;
     }
-    match /suppliers/{id} { allow read: if belongs(resource.data.ownerId); allow create: if admin(request.resource.data.ownerId); allow update: if admin(resource.data.ownerId) && request.resource.data.ownerId == resource.data.ownerId; allow delete: if admin(resource.data.ownerId); }
+    match /suppliers/{id} { allow read: if belongs(resource.data.ownerId); allow create: if belongs(request.resource.data.ownerId) && can('suppliers'); allow update: if belongs(resource.data.ownerId) && can('suppliers') && request.resource.data.ownerId == resource.data.ownerId; allow delete: if admin(resource.data.ownerId); }
     match /supplierTransactions/{id} {
-      allow read, delete: if admin(resource.data.ownerId);
-      allow create: if admin(request.resource.data.ownerId);
+      allow read: if belongs(resource.data.ownerId);
+      allow delete: if admin(resource.data.ownerId);
+      allow create: if belongs(request.resource.data.ownerId) && can('suppliers');
       allow update: if admin(resource.data.ownerId) && request.resource.data.ownerId == resource.data.ownerId;
     }
     match /staff/{id} {
