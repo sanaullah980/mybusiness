@@ -61,6 +61,9 @@ let authResolved = false;
 let syncPending = false;
 let pendingSources = new Set();
 let initialSnapshotSources = new Set();
+let initialDataReady = false;
+let initialRevealTimer = null;
+let scheduledPageRender = false;
 let navigationReady = false;
 let handlingPopState = false;
 let deferredInstallPrompt = null;
@@ -271,6 +274,25 @@ function setAuthVisibility(user){
     if(user){authScreen?.classList.add('hidden');main?.classList.remove('hidden');}
     else{main?.classList.add('hidden');authScreen?.classList.remove('hidden');}
 }
+function revealAppWhenReady(){
+    if(initialDataReady) return;
+    initialDataReady=true;
+    if(initialRevealTimer) clearTimeout(initialRevealTimer);
+    const user=auth.currentUser;
+    if(user) setAuthVisibility(user);
+}
+function scheduleCurrentPageRender(){
+    if(scheduledPageRender) return;
+    scheduledPageRender=true;
+    requestAnimationFrame(()=>{
+        scheduledPageRender=false;
+        const content=document.getElementById('app-content');
+        if(!content) return;
+        if(currentPage==='dashboard') renderDashboard(content);
+        else if(currentPage==='customers') renderCustomers(content);
+        else if(currentPage==='inventory') renderInventory(content);
+    });
+}
 function handleListenerSnapshot(name,snapshot){
     data[name]=snapshot.docs.map(d=>({id:d.id,...d.data()}));
     window.data=data;
@@ -281,15 +303,16 @@ function handleListenerSnapshot(name,snapshot){
     checkDueReminders();
     applyLanguageToShell();
     updateConnectionIndicator();
-    if(currentPage==='dashboard') renderDashboard(document.getElementById('app-content'));
-    if(currentPage==='customers') renderCustomers(document.getElementById('app-content'));
-    if(currentPage==='inventory') renderInventory(document.getElementById('app-content'));
+    if(initialSnapshotSources.size >= COLLECTIONS.length) revealAppWhenReady();
+    scheduleCurrentPageRender();
 }
 function startDataListeners(uid){
     clearListeners(); resetData(); currentUserId=uid; window.currentUserId=uid; window.data=data;
     syncPending=false;
     pendingSources.clear();
     initialSnapshotSources.clear();
+    initialDataReady=false;
+    if(initialRevealTimer) clearTimeout(initialRevealTimer);
     for(const name of COLLECTIONS){
         const q=query(collection(db,name),where('ownerId','==',uid));
         const unsub=onSnapshot(q,snapshot=>handleListenerSnapshot(name,snapshot),error=>{
@@ -303,6 +326,9 @@ function startDataListeners(uid){
         data.settings=snapshot.exists()?snapshot.data():{}; window.data=data; applyStoredOrCloudTheme();
         if(currentPage==='settings') renderSettings(document.getElementById('app-content'));
     },error=>console.warn('Settings listener failed:',error)));
+    // Keep the loading shell visible until the first data burst has settled.
+    // This prevents the dashboard from flashing empty and then repainting 2–3 times.
+    initialRevealTimer=setTimeout(()=>revealAppWhenReady(),2500);
     updateConnectionIndicator();
 }
 
@@ -439,7 +465,7 @@ onAuthStateChanged(auth, async user=>{
         clearListeners(); currentUserId=null; window.currentUserId=null; resetData(); setAuthVisibility(null); updateConnectionIndicator(); return;
     }
     currentUserId=user.uid; window.currentUserId=user.uid;
-    setAuthVisibility(user);
+    // Keep the stable loading shell on-screen until the first Firestore data burst settles.
     try{
         startDataListeners(user.uid);
         applyStoredOrCloudTheme();

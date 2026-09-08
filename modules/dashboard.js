@@ -39,10 +39,17 @@ export function renderDashboard(container) {
                 <div><span class="eyebrow">YOUR BUSINESS</span><h2>${businessName}</h2><p>${new Date().toLocaleDateString('en-PK',{weekday:'long',day:'numeric',month:'short'})}</p></div>
                 <button class="welcome-settings" onclick="navigate('settings')" title="Appearance"><i class="fas fa-palette"></i></button>
             </div>
-            <div class="home-hero-balance">
-                <span>Today's Sales</span>
-                <strong>${formatCurrency(stats.totalSales)}</strong>
-                <em>${lowStockProducts.length} low-stock item${lowStockProducts.length===1?'':'s'} to review</em>
+            <div class="home-hero-balance home-hero-split">
+                <div class="hero-visual-metric" aria-label="Today's business activity">
+                    <div class="hero-orbit"><i class="fas fa-chart-line"></i></div>
+                    <span>Business pulse</span>
+                    <small>${recentActivity.length} recent activity</small>
+                </div>
+                <div class="hero-sales-metric">
+                    <span>Today's Sales</span>
+                    <strong>${formatCurrency(stats.totalSales)}</strong>
+                    <em>${lowStockProducts.length} low-stock item${lowStockProducts.length===1?'':'s'} to review</em>
+                </div>
             </div>
         </div>
         <div class="home-stat-row">
