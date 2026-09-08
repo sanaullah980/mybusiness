@@ -151,21 +151,34 @@ function getEndOfDay(date) { const d = new Date(date); d.setHours(23,59,59,999);
 function getStartOfMonth(date) { const d = new Date(date); d.setDate(1); d.setHours(0,0,0,0); return d; }
 function getEndOfMonth(date) { const d = new Date(date); d.setMonth(d.getMonth()+1,0); d.setHours(23,59,59,999); return d; }
 function getLocalDateStr(dateInput) { const d = new Date(dateInput); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
-function showLoading(btnId, text='Processing...') { const btn=document.getElementById(btnId); if(btn){btn.disabled=true;btn.dataset.originalText=btn.dataset.originalText||btn.innerText;btn.innerText=text;} }
-function hideLoading(btnId) { const btn=document.getElementById(btnId); if(btn){btn.disabled=false;btn.innerText=btn.dataset.originalText||'Submit';} }
+function showLoading(btnId, text='Processing...') { const btn=document.getElementById(btnId); if(btn){btn.disabled=true;btn.setAttribute('aria-busy','true');btn.dataset.originalText=btn.dataset.originalText||btn.innerHTML;btn.innerHTML=`<span class="btn-loader" aria-hidden="true"></span><span>${text}</span>`;} }
+function hideLoading(btnId) { const btn=document.getElementById(btnId); if(btn){btn.disabled=false;btn.removeAttribute('aria-busy');btn.innerHTML=btn.dataset.originalText||'Submit';} }
 Object.assign(window,{formatCurrency,getStartOfDay,getEndOfDay,getStartOfMonth,getEndOfMonth,getLocalDateStr,showLoading,hideLoading,calculateReportData});
 
-// Lightweight in-app feedback and refresh helpers. These avoid forcing users to
-// leave the current page just to refresh cached data or see a success message.
-window.showToast=(message,type='success')=>{
-    let toast=document.getElementById('mybiz-toast');
-    if(!toast){toast=document.createElement('div');toast.id='mybiz-toast';toast.className='mybiz-toast';document.body.appendChild(toast);}
+// Global in-app notification center. Existing business logic remains unchanged;
+// this only replaces blocking alert feedback with accessible, queued UI messages.
+window.showToast=(message,type='info',options={})=>{
+    const duration=options.duration ?? (type==='error'?4200:2800);
+    let host=document.getElementById('mybiz-toast-region');
+    if(!host){host=document.createElement('div');host.id='mybiz-toast-region';host.className='mybiz-toast-region';host.setAttribute('aria-live','polite');host.setAttribute('aria-atomic','true');document.body.appendChild(host);}
+    const toast=document.createElement('div');
+    const icon=type==='error'?'fa-circle-exclamation':type==='warning'?'fa-triangle-exclamation':type==='success'?'fa-circle-check':'fa-circle-info';
     toast.className=`mybiz-toast ${type}`;
-    toast.innerHTML=`<i class="fas ${type==='error'?'fa-circle-exclamation':type==='info'?'fa-circle-info':'fa-circle-check'}"></i><span></span>`;
-    toast.querySelector('span').textContent=message;
+    toast.innerHTML=`<i class="fas ${icon}" aria-hidden="true"></i><span class="mybiz-toast-message"></span><button type="button" class="mybiz-toast-close" aria-label="Dismiss notification"><i class="fas fa-xmark"></i></button>`;
+    toast.querySelector('.mybiz-toast-message').textContent=String(message||'');
+    const dismiss=()=>{toast.classList.remove('show');setTimeout(()=>toast.remove(),220)};
+    toast.querySelector('.mybiz-toast-close').addEventListener('click',dismiss);
+    host.appendChild(toast);
     requestAnimationFrame(()=>toast.classList.add('show'));
-    clearTimeout(window.__toastTimer); window.__toastTimer=setTimeout(()=>toast.classList.remove('show'),2600);
+    if(duration>0) setTimeout(dismiss,duration);
+    return toast;
 };
+window.showSuccess=(message)=>window.showToast(message,'success');
+window.showError=(message)=>window.showToast(message,'error');
+window.showInfo=(message)=>window.showToast(message,'info');
+// Preserve confirm dialogs for destructive actions. Non-blocking alerts become toasts.
+if(!window.__mybizNativeAlert){window.__mybizNativeAlert=window.alert.bind(window);window.alert=(message)=>window.showToast(message,'info');}
+
 window.refreshCurrentPage=async()=>{
     const content=document.getElementById('app-content'); if(!content)return;
     const page=currentPage;
@@ -305,12 +318,14 @@ window.navigate=(page, options={})=>{
     currentPage=page;
     document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.page===page));
     const content=document.getElementById('app-content'); if(!content)return;
-    content.className = `page-shell page-${page}`;
+    content.className = `page-shell page-${page} page-loading`;
+    content.setAttribute('aria-busy','true');
     const title=document.getElementById('header-title'); const subtitle=document.getElementById('header-subtitle');
-    const meta={dashboard:['Dashboard','Today at a glance'],sales:['New Sale','Record a sale quickly'],inventory:['Inventory','Products & stock'],customers:['Khata','Customers & balances'],more:['More','Tools & business settings'],expenses:['Expenses','Track business spending'],stockPurchases:['Purchases','Stock coming in'],reports:['Reports','Understand your business'],settings:['Settings','Personalize MyBusiness'],suppliers:['Suppliers','Supplier balances'],cashbook:['Cash Book','Money in & out'],staff:['Staff Book','Team & attendance'],reminders:['Reminders','Follow up payments'],businessCard:['Business Card','Share your business'],backup:['Backup & Restore','Keep your data safe'],appLock:['App Lock','Protect the app']};
+    const meta={dashboard:[data.settings?.name||'MyBusiness',new Date().toLocaleDateString('en-PK',{weekday:'long',day:'numeric',month:'short'})],sales:['New Sale','Record a sale quickly'],inventory:['Inventory','Products & stock'],customers:['Khata','Customers & balances'],more:['More','Tools & business settings'],expenses:['Expenses','Track business spending'],stockPurchases:['Purchases','Stock coming in'],reports:['Reports','Understand your business'],settings:['Settings','Personalize MyBusiness'],suppliers:['Suppliers','Supplier balances'],cashbook:['Cash Book','Money in & out'],staff:['Staff Book','Team & attendance'],reminders:['Reminders','Follow up payments'],businessCard:['Business Card','Share your business'],backup:['Backup & Restore','Keep your data safe'],appLock:['App Lock','Protect the app']};
     const m=meta[page]||[page,'']; const titleUr={'Dashboard':'ڈیش بورڈ','New Sale':'نئی فروخت','Inventory':'اسٹاک','Khata':'کھاتہ','More':'مزید','Expenses':'اخراجات','Purchases':'خریداری','Reports':'رپورٹس','Settings':'ترتیبات','Suppliers':'سپلائرز','Cash Book':'کیش بک','Staff Book':'اسٹاف بک','Reminders':'یاد دہانیاں','Business Card':'بزنس کارڈ','Backup & Restore':'بیک اپ اور بحالی','App Lock':'ایپ لاک'}; const subUr={'Today at a glance':'آج کا خلاصہ','Record a sale quickly':'فروخت جلدی ریکارڈ کریں','Products & stock':'پروڈکٹس اور اسٹاک','Customers & balances':'گاہک اور بیلنس','Tools & business settings':'ٹولز اور کاروباری ترتیبات','Track business spending':'کاروباری اخراجات','Stock coming in':'آنے والا اسٹاک','Understand your business':'اپنے کاروبار کو سمجھیں','Personalize MyBusiness':'MyBusiness کو اپنی مرضی کے مطابق کریں','Supplier balances':'سپلائر بیلنس','Money in & out':'رقم کا لین دین','Team & attendance':'ٹیم اور حاضری','Follow up payments':'ادائیگیوں کی پیروی','Share your business':'اپنا کاروبار شیئر کریں','Keep your data safe':'اپنا ڈیٹا محفوظ رکھیں','Protect the app':'ایپ کو محفوظ کریں'}; if(title)title.innerText=currentLanguage==='ur'?(titleUr[m[0]]||m[0]):m[0]; if(subtitle)subtitle.innerText=currentLanguage==='ur'?(subUr[m[1]]||m[1]):m[1];
     const renderers={dashboard:renderDashboard,sales:renderSales,inventory:renderInventory,customers:renderCustomers,more:renderMore,expenses:renderExpenses,stockPurchases:renderStockPurchases,reports:renderReports,settings:renderSettings,suppliers:renderSuppliers,cashbook:renderCashBook,staff:renderStaff,reminders:renderReminders,businessCard:renderBusinessCard,backup:renderBackup,appLock:renderAppLock};
     if(renderers[page]) renderers[page](content);
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{content.classList.remove('page-loading');content.removeAttribute('aria-busy');}));
     updateConnectionIndicator();
 };
 
@@ -338,6 +353,30 @@ if(!window.history.state?.myBusiness){
 }
 
 
+// Dashboard account drawer: UI-only controls wired to existing actions.
+function openDashboardMenu(){
+    const menu=document.getElementById('dashboard-menu');
+    const backdrop=document.getElementById('dashboard-menu-backdrop');
+    if(!menu||!backdrop) return;
+    const business=data.settings?.name || 'MyBusiness';
+    const owner=auth.currentUser?.displayName || auth.currentUser?.email || 'Business Owner';
+    document.getElementById('dashboard-menu-business')?.replaceChildren(document.createTextNode(business));
+    document.getElementById('dashboard-menu-owner')?.replaceChildren(document.createTextNode(owner));
+    backdrop.classList.remove('hidden');
+    requestAnimationFrame(()=>{backdrop.classList.add('show');menu.classList.add('open');menu.setAttribute('aria-hidden','false');document.body.classList.add('dashboard-menu-open');});
+}
+function closeDashboardMenu(){
+    const menu=document.getElementById('dashboard-menu');
+    const backdrop=document.getElementById('dashboard-menu-backdrop');
+    if(!menu||!backdrop) return;
+    menu.classList.remove('open');menu.setAttribute('aria-hidden','true');backdrop.classList.remove('show');document.body.classList.remove('dashboard-menu-open');
+    setTimeout(()=>{if(!menu.classList.contains('open')) backdrop.classList.add('hidden');},240);
+}
+function navigateFromDashboardMenu(page){ closeDashboardMenu(); setTimeout(()=>navigate(page),40); }
+function openPasswordFromDashboardMenu(){ closeDashboardMenu(); setTimeout(()=>openChangePasswordModal(),40); }
+function openDeleteFromDashboardMenu(){ closeDashboardMenu(); setTimeout(()=>openDeleteRecordsModal(),40); }
+function logoutFromDashboardMenu(){ closeDashboardMenu(); setTimeout(()=>handleLogout(),40); }
+
 Object.assign(window,{
     renderDashboard,renderSales,showSaleTab,renderCart,updateSaleDue,addSaleItem,removeCartItem,completeNormalSale,completeManualSale,completeBulkSale,openProductSelectionModal,toggleProductRow,filterProductSelectionList,addSelectedProductsToCart,
     renderInventory,openProductModal,saveProduct,deleteProduct,openStockAdjustModal,saveStockAdjustment,
@@ -349,7 +388,8 @@ Object.assign(window,{
     renderCashBook,buildCashBookEntries,openSetOpeningBalanceModal,saveOpeningBalance,openCashEntryModal,saveCashEntry,openGlobalSearchModal,runGlobalSearch,addProductByBarcode,startBarcodeScanner,
     openInvoiceModal,downloadInvoicePdf,printInvoice,shareInvoiceWhatsApp,openReturnModal,processReturn,
     renderStaff,openStaffModal,saveStaff,deleteStaff,openAttendanceModal,saveAttendance,renderReminders,openReminderModal,saveReminder,completeReminder,deleteReminder,
-    renderBusinessCard,saveBusinessCard,shareBusinessCard,renderBackup,exportBusinessBackup,importBusinessBackup,renderAppLock,saveAppLock,removeAppLock,checkAppLock
+    renderBusinessCard,saveBusinessCard,shareBusinessCard,renderBackup,exportBusinessBackup,importBusinessBackup,renderAppLock,saveAppLock,removeAppLock,checkAppLock,
+    openDashboardMenu,closeDashboardMenu,navigateFromDashboardMenu,openPasswordFromDashboardMenu,openDeleteFromDashboardMenu,logoutFromDashboardMenu
 });
 
 // Mobile keyboard UX: keep modal lists/forms inside the visible viewport.

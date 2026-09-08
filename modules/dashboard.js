@@ -42,7 +42,7 @@ export function renderDashboard(container) {
             <div class="home-hero-balance">
                 <span>Today's Sales</span>
                 <strong>${formatCurrency(stats.totalSales)}</strong>
-                <em>Net Profit Today: ${formatCurrency(stats.netProfit)}</em>
+                <em>${lowStockProducts.length} low-stock item${lowStockProducts.length===1?'':'s'} to review</em>
             </div>
         </div>
         <div class="home-stat-row">

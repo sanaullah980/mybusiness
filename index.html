@@ -22,9 +22,14 @@
 <body>
 
     <!-- AUTH LOADING SCREEN -->
-    <div id="auth-loading" class="auth-loading">
-        <div class="spinner"></div>
-        <p>Checking authentication...</p>
+    <div id="auth-loading" class="auth-loading" role="status" aria-live="polite">
+        <div class="auth-loader-card">
+            <div class="auth-loader-logo"><i class="fas fa-store"></i></div>
+            <div class="spinner"></div>
+            <strong>MyBusiness</strong>
+            <p>Loading your workspace securely...</p>
+            <div class="auth-loader-shimmer"><span></span><span></span><span></span></div>
+        </div>
     </div>
 
     <!-- AUTH SCREEN -->
@@ -55,20 +60,35 @@
     <!-- MAIN APP -->
     <div id="main-app" class="hidden">
         <header class="app-header">
-            <div class="header-brand"><div class="brand-mark"><i class="fas fa-store"></i></div><div><h1 id="header-title">Dashboard</h1><span class="header-subtitle" id="header-subtitle">Today at a glance</span></div></div>
+            <div class="header-brand"><button class="dashboard-menu-btn" type="button" onclick="openDashboardMenu()" aria-label="Open account menu"><i class="fas fa-bars"></i></button><div class="brand-mark"><i class="fas fa-store"></i></div><div><h1 id="header-title">MyBusiness</h1><span class="header-subtitle" id="header-subtitle">Your business at a glance</span></div></div>
             <div class="header-actions">
                 <span id="connection-indicator" class="connection-indicator online" title="Online"><i id="connection-icon" class="fas fa-wifi"></i><span id="connection-text">Online</span><small id="last-sync-text" class="last-sync-text">Not synced yet</small></span>
                 <button class="btn-icon" onclick="openGlobalSearchModal()" title="Search">
                     <i class="fas fa-search"></i>
                 </button>
                 <button class="btn-icon" onclick="openLanguagePicker()" title="Language" aria-label="Language"><i class="fas fa-language"></i></button>
-                <button class="btn-icon" onclick="handleLogout()" title="Logout">
-                    <i class="fas fa-sign-out-alt"></i>
-                </button>
             </div>
         </header>
 
         <div id="offline-banner" class="offline-banner hidden"><i class="fas fa-cloud"></i><span>Offline mode — your saved data is available and new changes will sync automatically.</span></div>
+        <div id="dashboard-menu-backdrop" class="dashboard-menu-backdrop hidden" onclick="closeDashboardMenu()"></div>
+        <aside id="dashboard-menu" class="dashboard-menu" aria-hidden="true">
+            <div class="dashboard-menu-profile">
+                <div class="dashboard-menu-avatar"><i class="fas fa-store"></i></div>
+                <div><span>MY BUSINESS</span><strong id="dashboard-menu-business">MyBusiness</strong><small id="dashboard-menu-owner">Business Owner</small></div>
+                <button class="drawer-close" type="button" onclick="closeDashboardMenu()" aria-label="Close menu">&times;</button>
+            </div>
+            <div class="drawer-divider"></div>
+            <div class="drawer-section-label">ACCOUNT & APPEARANCE</div>
+            <button class="drawer-item" onclick="navigateFromDashboardMenu('settings')"><i class="fas fa-cog"></i><span>Settings</span><i class="fas fa-chevron-right"></i></button>
+            <button class="drawer-item" onclick="openPasswordFromDashboardMenu()"><i class="fas fa-key"></i><span>Change Password</span><i class="fas fa-chevron-right"></i></button>
+            <button class="drawer-item" onclick="navigateFromDashboardMenu('settings')"><i class="fas fa-palette"></i><span>Change Theme</span><i class="fas fa-chevron-right"></i></button>
+            <button class="drawer-item" onclick="navigateFromDashboardMenu('businessCard')"><i class="fas fa-id-card"></i><span>Business Card</span><i class="fas fa-chevron-right"></i></button>
+            <div class="drawer-divider"></div>
+            <div class="drawer-section-label">DATA & SESSION</div>
+            <button class="drawer-item danger" onclick="openDeleteFromDashboardMenu()"><i class="fas fa-trash-alt"></i><span>Delete Records</span><i class="fas fa-chevron-right"></i></button>
+            <button class="drawer-item danger" onclick="logoutFromDashboardMenu()"><i class="fas fa-sign-out-alt"></i><span>Logout</span><i class="fas fa-chevron-right"></i></button>
+        </aside>
 
         <div id="pull-refresh-indicator" class="pull-refresh-indicator" aria-hidden="true"><i class="fas fa-arrow-down"></i><span>Pull to refresh</span></div>
         <main id="app-content">
