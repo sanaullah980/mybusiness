@@ -460,3 +460,14 @@ body{background:
 .hero-visual-metric>span{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.55px;margin-top:8px;color:#fff}.hero-visual-metric small{font-size:9px;color:rgba(255,255,255,.72);margin-top:3px}
 .hero-sales-metric{min-width:0}.hero-sales-metric>span{font-size:10.5px;color:rgba(255,255,255,.72);text-transform:uppercase;letter-spacing:.6px;font-weight:800}.hero-sales-metric strong{display:block;font-size:30px;margin-top:4px;line-height:1.15}.hero-sales-metric em{display:block;font-style:normal;font-size:11.5px;color:rgba(255,255,255,.78);margin-top:5px}
 @media(max-width:380px){.home-hero-split{grid-template-columns:78px minmax(0,1fr);gap:10px}.hero-orbit{width:48px;height:48px;font-size:20px}.hero-visual-metric>span{font-size:8.5px}.hero-visual-metric small{font-size:8px}.hero-sales-metric strong{font-size:25px}}
+/* Stable navigation: never scale or translate the full page shell. */
+.page-shell,.page-shell.page-loading{transform:none!important;}
+.page-shell.page-loading{opacity:.82;pointer-events:none;}
+.page-shell > *{animation:none!important;}
+.permission-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0 16px}.permission-grid label{display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:var(--surface-2);font-size:13px;font-weight:700}.form-help{font-size:12px;color:var(--gray);margin:10px 0 0}
+body[data-role="employee"] .dashboard-menu .admin-only{display:none!important}
+body[data-role="employee"] #sale-tab-manual .form-group:has(#manual-profit),
+body[data-role="employee"] #sale-tab-bulk .form-group:has(#bulk-profit){display:none!important}
+/* Username-first authentication */
+.auth-subheading{margin:-6px 0 16px;color:var(--gray);font-size:13px}.auth-role-wrap{margin:8px 0}.auth-role-wrap>label{display:block;font-size:12px;color:var(--gray);margin-bottom:8px}.auth-role-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.auth-role-card{cursor:pointer}.auth-role-card input{position:absolute;opacity:0;pointer-events:none}.auth-role-card span{display:flex;align-items:center;justify-content:center;gap:7px;padding:12px 8px;border:1px solid rgba(0,0,0,.1);border-radius:14px;font-weight:700;background:rgba(255,255,255,.7)}.auth-role-card input:checked+span{border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 14%,transparent);color:var(--primary)}
+.invite-code{margin-top:14px;padding:14px;border-radius:14px;background:linear-gradient(135deg,rgba(20,184,166,.12),rgba(59,130,246,.10));text-align:center}.invite-code div{font-size:26px;letter-spacing:4px;font-weight:900;margin:8px 0}.invite-code small{color:var(--gray)}

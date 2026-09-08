@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, setDoc, onSnapshot, query, where, runTransaction, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, setDoc, getDoc, onSnapshot, query, where, runTransaction, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 import { renderDashboard } from './modules/dashboard.js';
 import { renderSales, showSaleTab, renderCart, updateSaleDue, addSaleItem, removeCartItem, completeNormalSale, completeManualSale, completeBulkSale, openProductSelectionModal, toggleProductRow, filterProductSelectionList, addSelectedProductsToCart, addProductByBarcode, startBarcodeScanner } from './modules/sales.js';
@@ -22,6 +22,7 @@ import { renderReminders, openReminderModal, saveReminder, completeReminder, del
 import { renderBusinessCard, saveBusinessCard, shareBusinessCard } from './modules/business.js';
 import { renderBackup, exportBusinessBackup, importBusinessBackup } from './modules/backup.js';
 import { renderAppLock, saveAppLock, removeAppLock, checkAppLock } from './modules/appLock.js';
+import { renderTeam, createEmployeeInvite, cancelEmployeeInvite, toggleEmployeeActive } from './modules/team.js';
 
 const firebaseConfig = {
     apiKey: "AIzaSyBQqnIhMCGd4_FRApjkns3HjIrqw2V1qFc",
@@ -48,7 +49,10 @@ const googleProvider = new GoogleAuthProvider();
 setPersistence(auth, browserLocalPersistence).catch(error => console.warn('Auth persistence setup failed:', error));
 
 const COLLECTIONS = ['products','customers','sales','expenses','stockPurchases','customerTransactions','stockAdjustments','suppliers','supplierTransactions','cashTransactions','salesReturns','staff','attendance','reminders'];
-let currentUserId = null;
+let currentUserId = null; // business owner UID used by existing data documents
+let authUserId = null; // actual Firebase Authentication UID
+let currentRole = null;
+let currentPermissions = {};
 let isLoginMode = true;
 let data = Object.fromEntries(COLLECTIONS.map(name => [name, []]));
 data.settings = {};
@@ -62,6 +66,7 @@ let syncPending = false;
 let pendingSources = new Set();
 let initialSnapshotSources = new Set();
 let initialDataReady = false;
+let expectedInitialSources = COLLECTIONS.length;
 let initialRevealTimer = null;
 let scheduledPageRender = false;
 let navigationReady = false;
@@ -88,7 +93,7 @@ function translateVisibleText(){
   });
 }
 
-function setLanguage(lang){ currentLanguage=lang==='ur'?'ur':'en'; localStorage.setItem('mybusiness-language',currentLanguage); document.documentElement.lang=currentLanguage; document.documentElement.dir=currentLanguage==='ur'?'rtl':'ltr'; applyLanguageToShell(); if(currentUserId) setDoc(doc(db,'settings',currentUserId),{language:currentLanguage,ownerId:currentUserId},{merge:true}).catch(()=>{}); if(typeof window.refreshCurrentPage==='function') window.refreshCurrentPage(); setTimeout(translateVisibleText,40); }
+function setLanguage(lang){ currentLanguage=lang==='ur'?'ur':'en'; localStorage.setItem('mybusiness-language',currentLanguage); document.documentElement.lang=currentLanguage; document.documentElement.dir=currentLanguage==='ur'?'rtl':'ltr'; applyLanguageToShell(); if(currentUserId && currentRole==='admin') setDoc(doc(db,'settings',currentUserId),{language:currentLanguage,ownerId:currentUserId},{merge:true}).catch(()=>{}); if(typeof window.refreshCurrentPage==='function') window.refreshCurrentPage(); setTimeout(translateVisibleText,40); }
 function applyLanguageToShell(){ document.querySelectorAll('[data-i18n]').forEach(el=>{const k=el.dataset.i18n;if(k)el.textContent=tr(k);}); const ct=document.getElementById('connection-text'); if(ct && !syncPending) ct.textContent=navigator.onLine?tr('online'):tr('offline'); const ls=document.getElementById('last-sync-text'); if(ls) ls.textContent=formatLastSync(); document.getElementById('install-title')?.replaceChildren(document.createTextNode(tr('install'))); document.getElementById('install-subtitle')?.replaceChildren(document.createTextNode(tr('installSub'))); }
 function openLanguagePicker(){ const m=document.getElementById('modal-body'); m.innerHTML=`<div class="modal-header"><h2>${tr('chooseLanguage')}</h2><button class="close-btn" onclick="closeModal()">&times;</button></div><div class="language-options"><button class="language-choice ${currentLanguage==='en'?'active':''}" onclick="setLanguage('en');closeModal()"><span>🇬🇧</span><strong>English</strong></button><button class="language-choice ${currentLanguage==='ur'?'active':''}" onclick="setLanguage('ur');closeModal()"><span>🇵🇰</span><strong>اردو</strong></button></div>`; document.getElementById('modal-overlay').classList.remove('hidden'); }
 function saveLastSync(){ localStorage.setItem(LAST_SYNC_KEY,Date.now().toString()); const el=document.getElementById('last-sync-text'); if(el)el.textContent=formatLastSync(); }
@@ -107,10 +112,10 @@ function checkDueReminders(){ if(!('Notification' in window)||Notification.permi
 Object.assign(window,{esc,tr,setLanguage,openLanguagePicker,installPWA,dismissInstallPrompt,startOnboarding,nextOnboarding,skipOnboarding,requestReminderNotifications,checkDueReminders,formatLastSync});
 
 
-Object.assign(window, { data, cart, db, auth, activeReportTab, currentReportMonth, currentUserId: null });
+Object.assign(window, { data, cart, db, auth, activeReportTab, currentReportMonth, currentUserId: null, authUserId: null, currentRole: null, currentPermissions: {} });
 window.doc = doc; window.collection = collection; window.updateDoc = updateDoc; window.addDoc = addDoc;
 window.runTransaction = runTransaction; window.deleteDoc = deleteDoc; window.setDoc = setDoc;
-window.query = query; window.where = where; window.getDocs = getDocs; window.writeBatch = writeBatch;
+window.query = query; window.where = where; window.getDocs = getDocs; window.getDoc = getDoc; window.writeBatch = writeBatch;
 window.EmailAuthProvider = EmailAuthProvider; window.reauthenticateWithCredential = reauthenticateWithCredential; window.updatePassword = updatePassword;
 
 // Atomic writes normally use Firestore transactions. Transactions require a live
@@ -134,6 +139,7 @@ async function runAtomicOrOffline(work) {
         const batch = writeBatch(db);
         const fakeTransaction = {
             get: async ref => offlineDocSnapshot(ref),
+            getAll: async (...refs) => refs.map(offlineDocSnapshot),
             set: (ref, value, options) => batch.set(ref, value, options),
             update: (ref, value) => batch.update(ref, value),
             delete: ref => batch.delete(ref)
@@ -212,7 +218,7 @@ function applyTheme(theme=localStorage.getItem(THEME_KEY)||'teal', dark=localSto
 }
 function saveLocalPreferences(theme,dark){
     applyTheme(theme,dark);
-    if(currentUserId) setDoc(doc(db,'settings',currentUserId),{theme,darkMode:!!dark,ownerId:currentUserId},{merge:true}).catch(e=>console.warn('Preference sync failed:',e));
+    if(currentUserId && currentRole==='admin') setDoc(doc(db,'settings',currentUserId),{theme,darkMode:!!dark,ownerId:currentUserId},{merge:true}).catch(e=>console.warn('Preference sync failed:',e));
 }
 function applyStoredOrCloudTheme(){
     if(data.settings?.language && !localStorage.getItem('mybusiness-language')){currentLanguage=data.settings.language==='ur'?'ur':'en';localStorage.setItem('mybusiness-language',currentLanguage);}
@@ -238,29 +244,55 @@ function updateConnectionIndicator(extra={}) {
 window.updateConnectionIndicator=updateConnectionIndicator;
 window.addEventListener('online',()=>{updateConnectionIndicator();saveLastSync();checkDueReminders();}); window.addEventListener('offline',()=>updateConnectionIndicator());
 
+const USERNAME_DOMAIN='@mybusiness.local';
+function normalizeUsername(value=''){ return String(value).trim().toLowerCase().replace(/^@/,''); }
+function usernameToAuthEmail(username){ return `${normalizeUsername(username)}${USERNAME_DOMAIN}`; }
+function validateUsername(username){ return /^[a-z0-9._-]{3,30}$/.test(normalizeUsername(username)); }
+function selectedSignupRole(){ return document.querySelector('input[name="signup-role"]:checked')?.value || 'admin'; }
+function setSignupRoleFields(){ const employee=selectedSignupRole()==='employee'; const code=document.getElementById('signup-code-wrap'); if(code) code.classList.toggle('hidden',!employee); }
 window.toggleAuthMode=()=>{
     isLoginMode=!isLoginMode;
-    document.getElementById('auth-button').innerText=isLoginMode?'Log In':'Sign Up';
+    document.getElementById('auth-button').innerText=isLoginMode?'Log In':'Create Account';
     document.getElementById('toggle-auth').innerText=isLoginMode?"Don't have an account? Sign Up":"Already have an account? Log In";
-    document.getElementById('login-error').innerText='';
+    document.getElementById('auth-heading').innerText=isLoginMode?'Welcome Back':'Create Your Account';
+    document.getElementById('auth-subheading').innerText=isLoginMode?'Log in quickly with your username.':'Set up your role once. You will not be asked again.';
+    document.querySelectorAll('.signup-only').forEach(el=>el.classList.toggle('hidden',isLoginMode));
+    document.getElementById('forgot-password-link')?.classList.toggle('hidden',!isLoginMode);
+    document.getElementById('login-error').innerText=''; setSignupRoleFields();
 };
+document.addEventListener('change',e=>{if(e.target?.name==='signup-role') setSignupRoleFields();});
 window.handleAuth=async(e)=>{
     if(e)e.preventDefault();
-    const email=document.getElementById('login-email').value.trim(); const pass=document.getElementById('login-password').value; const errorDiv=document.getElementById('login-error');
-    if(!email||!pass){errorDiv.innerText='Please enter both email and password.';return;}
-    showLoading('auth-button',isLoginMode?'Logging in...':'Creating account...');
-    try { if(isLoginMode) await signInWithEmailAndPassword(auth,email,pass); else await createUserWithEmailAndPassword(auth,email,pass); }
-    catch(error){
-        console.error('Authentication error:',error);
-        const messages={'auth/invalid-api-key':'Firebase configuration is invalid.','auth/api-key-not-valid':'Firebase configuration is invalid.','auth/invalid-credential':'Invalid email or password.','auth/wrong-password':'Invalid email or password.','auth/user-not-found':'Invalid email or password.','auth/email-already-in-use':'Email already registered.','auth/weak-password':'Password must be at least 6 characters.','auth/invalid-email':'Enter a valid email address.','auth/too-many-requests':'Too many attempts. Please try again later.','auth/network-request-failed':'Network unavailable. Check your connection and try again.'};
-        errorDiv.innerText=messages[error.code]||error.message||'Authentication failed.';
-    } finally { hideLoading('auth-button'); }
+    const username=normalizeUsername(document.getElementById('login-username').value);
+    const pass=document.getElementById('login-password').value;
+    const errorDiv=document.getElementById('login-error'); errorDiv.innerText='';
+    if(!validateUsername(username)){ errorDiv.innerText='Username must be 3–30 characters and use only letters, numbers, dot, underscore or hyphen.'; return; }
+    if(!pass || pass.length<6){ errorDiv.innerText='Password must be at least 6 characters.'; return; }
+    const authEmail=usernameToAuthEmail(username);
+    if(isLoginMode){
+        showLoading('auth-button','Logging in...');
+        try{ await signInWithEmailAndPassword(auth,authEmail,pass); }
+        catch(error){ console.error('Authentication error:',error); errorDiv.innerText=({'auth/invalid-credential':'Invalid username or password.','auth/wrong-password':'Invalid username or password.','auth/user-not-found':'Invalid username or password.','auth/too-many-requests':'Too many attempts. Please try again later.','auth/network-request-failed':'Network unavailable. Check your connection and try again.'}[error.code]||'Login failed. Please try again.'); }
+        finally{ hideLoading('auth-button'); }
+        return;
+    }
+    const name=document.getElementById('signup-name').value.trim(); const role=selectedSignupRole();
+    const phone=document.getElementById('signup-phone').value.trim(); const email=document.getElementById('signup-email').value.trim().toLowerCase();
+    const inviteCode=(document.getElementById('signup-invite-code')?.value||'').trim().toUpperCase();
+    if(!name){errorDiv.innerText='Please enter your name.';return;}
+    if(role==='employee'&&!inviteCode){errorDiv.innerText='Enter the business invite code provided by your Admin.';return;}
+    if(email && !/^\S+@\S+\.\S+$/.test(email)){errorDiv.innerText='Enter a valid email or leave it empty.';return;}
+    sessionStorage.setItem('mybiz-pending-profile',JSON.stringify({name,username,role,phone,email,inviteCode,createdAt:new Date().toISOString()}));
+    showLoading('auth-button','Creating account...');
+    try{ await createUserWithEmailAndPassword(auth,authEmail,pass); }
+    catch(error){ console.error('Signup error:',error); sessionStorage.removeItem('mybiz-pending-profile'); errorDiv.innerText=({'auth/email-already-in-use':'That username is already taken.','auth/weak-password':'Password must be at least 6 characters.','auth/network-request-failed':'Network unavailable. Check your connection and try again.'}[error.code]||error.message||'Could not create the account.'); hideLoading('auth-button'); }
 };
 window.forgotPassword=async(e)=>{
-    if(e)e.preventDefault(); const email=document.getElementById('login-email').value.trim(); if(!email)return alert('Enter your email first.');
-    try{await sendPasswordResetEmail(auth,email);alert('Password reset link sent.');}catch(error){console.error(error);alert('Unable to send the reset link. Check the email and your connection.');}
+    if(e)e.preventDefault(); const username=normalizeUsername(document.getElementById('login-username').value); if(!validateUsername(username)) return alert('Enter your username first.');
+    alert('Password reset for username-only accounts requires a recovery email. Add an email in your profile, then reset from the recovery option.');
 };
 window.signInWithGoogle=async()=>{
+    sessionStorage.setItem('mybiz-google-signin','1');
     try{await signInWithPopup(auth,googleProvider);}
     catch(error){console.error('Google Sign-In error:',error); if(error.code==='auth/popup-closed-by-user')return; if(error.code==='auth/unauthorized-domain')alert('This website domain is not authorized in Firebase Authentication.'); else if(error.code==='auth/popup-blocked')alert('Your browser blocked the Google sign-in popup. Allow popups and try again.'); else alert(error.message||'Google Sign-In failed.');}
 };
@@ -299,29 +331,36 @@ function handleListenerSnapshot(name,snapshot){
     initialSnapshotSources.add(name);
     if(snapshot.docs.some(d=>d.metadata.hasPendingWrites)) pendingSources.add(name); else pendingSources.delete(name);
     syncPending=pendingSources.size>0;
-    if(initialSnapshotSources.size >= COLLECTIONS.length && !syncPending) saveLastSync();
+    if(initialSnapshotSources.size >= expectedInitialSources && !syncPending) saveLastSync();
     checkDueReminders();
     applyLanguageToShell();
     updateConnectionIndicator();
-    if(initialSnapshotSources.size >= COLLECTIONS.length) revealAppWhenReady();
+    if(initialSnapshotSources.size >= expectedInitialSources) revealAppWhenReady();
     scheduleCurrentPageRender();
 }
-function startDataListeners(uid){
-    clearListeners(); resetData(); currentUserId=uid; window.currentUserId=uid; window.data=data;
+function startDataListeners(ownerId){
+    clearListeners(); resetData(); currentUserId=ownerId; window.currentUserId=ownerId; window.data=data;
     syncPending=false;
     pendingSources.clear();
     initialSnapshotSources.clear();
     initialDataReady=false;
     if(initialRevealTimer) clearTimeout(initialRevealTimer);
-    for(const name of COLLECTIONS){
-        const q=query(collection(db,name),where('ownerId','==',uid));
+    const adminOnlyCollections=['expenses','stockPurchases','stockAdjustments','cashTransactions','salesReturns','supplierTransactions','staff','attendance'];
+    const activeCollections=currentRole==='employee' ? COLLECTIONS.filter(name=>!adminOnlyCollections.includes(name)) : COLLECTIONS;
+    expectedInitialSources=activeCollections.length;
+    for(const name of activeCollections){
+        const q=(name==='sales' && currentRole==='employee') ? query(collection(db,name),where('ownerId','==',ownerId),where('createdBy','==',authUserId)) : query(collection(db,name),where('ownerId','==',ownerId));
         const unsub=onSnapshot(q,snapshot=>handleListenerSnapshot(name,snapshot),error=>{
             console.error(`Firestore listener failed for ${name}:`,error);
             if(error.code==='permission-denied') console.warn(`Firestore rules denied access to ${name}. Deploy firestore.rules if needed.`);
         });
         listeners.push(unsub);
     }
-    const settingsRef=doc(db,'settings',uid);
+    if(currentRole==='admin'){
+        const teamQ=query(collection(db,'businessMembers'),where('ownerId','==',ownerId));
+        listeners.push(onSnapshot(teamQ,snapshot=>{data.teamMembers=snapshot.docs.map(d=>({id:d.id,...d.data()}));window.data=data;if(currentPage==='team')renderTeam(document.getElementById('app-content'));},e=>console.warn('Team listener failed:',e)));
+    }
+    const settingsRef=doc(db,'settings',ownerId);
     listeners.push(onSnapshot(settingsRef,snapshot=>{
         data.settings=snapshot.exists()?snapshot.data():{}; window.data=data; applyStoredOrCloudTheme();
         if(currentPage==='settings') renderSettings(document.getElementById('app-content'));
@@ -334,6 +373,8 @@ function startDataListeners(uid){
 
 window.navigate=(page, options={})=>{
     const {history=true, replace=false}=options||{};
+    const restricted=['reports','expenses','stockPurchases','staff','backup','appLock','settings','businessCard','team'];
+    if(currentRole==='employee' && restricted.includes(page)){ window.showToast?.('This area is available to the Admin only.','warning'); return; }
     if (history && !handlingPopState && currentPage !== page) {
         const state={myBusiness:true,page};
         if (replace) window.history.replaceState(state,'',`#${page}`);
@@ -347,9 +388,9 @@ window.navigate=(page, options={})=>{
     content.className = `page-shell page-${page} page-loading`;
     content.setAttribute('aria-busy','true');
     const title=document.getElementById('header-title'); const subtitle=document.getElementById('header-subtitle');
-    const meta={dashboard:[data.settings?.name||'MyBusiness',new Date().toLocaleDateString('en-PK',{weekday:'long',day:'numeric',month:'short'})],sales:['New Sale','Record a sale quickly'],inventory:['Inventory','Products & stock'],customers:['Khata','Customers & balances'],more:['More','Tools & business settings'],expenses:['Expenses','Track business spending'],stockPurchases:['Purchases','Stock coming in'],reports:['Reports','Understand your business'],settings:['Settings','Personalize MyBusiness'],suppliers:['Suppliers','Supplier balances'],cashbook:['Cash Book','Money in & out'],staff:['Staff Book','Team & attendance'],reminders:['Reminders','Follow up payments'],businessCard:['Business Card','Share your business'],backup:['Backup & Restore','Keep your data safe'],appLock:['App Lock','Protect the app']};
+    const meta={dashboard:[data.settings?.name||'MyBusiness',new Date().toLocaleDateString('en-PK',{weekday:'long',day:'numeric',month:'short'})],sales:['New Sale','Record a sale quickly'],inventory:['Inventory','Products & stock'],customers:['Khata','Customers & balances'],more:['More','Tools & business settings'],expenses:['Expenses','Track business spending'],stockPurchases:['Purchases','Stock coming in'],reports:['Reports','Understand your business'],settings:['Settings','Personalize MyBusiness'],suppliers:['Suppliers','Supplier balances'],cashbook:['Cash Book','Money in & out'],staff:['Staff Book','Team & attendance'],reminders:['Reminders','Follow up payments'],businessCard:['Business Card','Share your business'],backup:['Backup & Restore','Keep your data safe'],appLock:['App Lock','Protect the app'],team:['Team','Employees & access']};
     const m=meta[page]||[page,'']; const titleUr={'Dashboard':'ڈیش بورڈ','New Sale':'نئی فروخت','Inventory':'اسٹاک','Khata':'کھاتہ','More':'مزید','Expenses':'اخراجات','Purchases':'خریداری','Reports':'رپورٹس','Settings':'ترتیبات','Suppliers':'سپلائرز','Cash Book':'کیش بک','Staff Book':'اسٹاف بک','Reminders':'یاد دہانیاں','Business Card':'بزنس کارڈ','Backup & Restore':'بیک اپ اور بحالی','App Lock':'ایپ لاک'}; const subUr={'Today at a glance':'آج کا خلاصہ','Record a sale quickly':'فروخت جلدی ریکارڈ کریں','Products & stock':'پروڈکٹس اور اسٹاک','Customers & balances':'گاہک اور بیلنس','Tools & business settings':'ٹولز اور کاروباری ترتیبات','Track business spending':'کاروباری اخراجات','Stock coming in':'آنے والا اسٹاک','Understand your business':'اپنے کاروبار کو سمجھیں','Personalize MyBusiness':'MyBusiness کو اپنی مرضی کے مطابق کریں','Supplier balances':'سپلائر بیلنس','Money in & out':'رقم کا لین دین','Team & attendance':'ٹیم اور حاضری','Follow up payments':'ادائیگیوں کی پیروی','Share your business':'اپنا کاروبار شیئر کریں','Keep your data safe':'اپنا ڈیٹا محفوظ رکھیں','Protect the app':'ایپ کو محفوظ کریں'}; if(title)title.innerText=currentLanguage==='ur'?(titleUr[m[0]]||m[0]):m[0]; if(subtitle)subtitle.innerText=currentLanguage==='ur'?(subUr[m[1]]||m[1]):m[1];
-    const renderers={dashboard:renderDashboard,sales:renderSales,inventory:renderInventory,customers:renderCustomers,more:renderMore,expenses:renderExpenses,stockPurchases:renderStockPurchases,reports:renderReports,settings:renderSettings,suppliers:renderSuppliers,cashbook:renderCashBook,staff:renderStaff,reminders:renderReminders,businessCard:renderBusinessCard,backup:renderBackup,appLock:renderAppLock};
+    const renderers={dashboard:renderDashboard,sales:renderSales,inventory:renderInventory,customers:renderCustomers,more:renderMore,expenses:renderExpenses,stockPurchases:renderStockPurchases,reports:renderReports,settings:renderSettings,suppliers:renderSuppliers,cashbook:renderCashBook,staff:renderStaff,reminders:renderReminders,businessCard:renderBusinessCard,backup:renderBackup,appLock:renderAppLock,team:renderTeam};
     if(renderers[page]) renderers[page](content);
     requestAnimationFrame(()=>requestAnimationFrame(()=>{content.classList.remove('page-loading');content.removeAttribute('aria-busy');}));
     updateConnectionIndicator();
@@ -398,6 +439,8 @@ function closeDashboardMenu(){
     menu.classList.remove('open');menu.setAttribute('aria-hidden','true');backdrop.classList.remove('show');document.body.classList.remove('dashboard-menu-open');
     setTimeout(()=>{if(!menu.classList.contains('open')) backdrop.classList.add('hidden');},240);
 }
+function hasPermission(key){ return currentRole==='admin' || currentPermissions[key]===true; }
+window.hasPermission=hasPermission;
 function navigateFromDashboardMenu(page){ closeDashboardMenu(); setTimeout(()=>navigate(page),40); }
 function openPasswordFromDashboardMenu(){ closeDashboardMenu(); setTimeout(()=>openChangePasswordModal(),40); }
 function openDeleteFromDashboardMenu(){ closeDashboardMenu(); setTimeout(()=>openDeleteRecordsModal(),40); }
@@ -414,7 +457,7 @@ Object.assign(window,{
     renderCashBook,buildCashBookEntries,openSetOpeningBalanceModal,saveOpeningBalance,openCashEntryModal,saveCashEntry,openGlobalSearchModal,runGlobalSearch,addProductByBarcode,startBarcodeScanner,
     openInvoiceModal,downloadInvoicePdf,printInvoice,shareInvoiceWhatsApp,openReturnModal,processReturn,
     renderStaff,openStaffModal,saveStaff,deleteStaff,openAttendanceModal,saveAttendance,renderReminders,openReminderModal,saveReminder,completeReminder,deleteReminder,
-    renderBusinessCard,saveBusinessCard,shareBusinessCard,renderBackup,exportBusinessBackup,importBusinessBackup,renderAppLock,saveAppLock,removeAppLock,checkAppLock,
+    renderBusinessCard,saveBusinessCard,shareBusinessCard,renderBackup,exportBusinessBackup,importBusinessBackup,renderAppLock,saveAppLock,removeAppLock,checkAppLock,renderTeam,createEmployeeInvite,cancelEmployeeInvite,toggleEmployeeActive,
     openDashboardMenu,closeDashboardMenu,navigateFromDashboardMenu,openPasswordFromDashboardMenu,openDeleteFromDashboardMenu,logoutFromDashboardMenu
 });
 
@@ -462,15 +505,57 @@ applyLanguageToShell();
 onAuthStateChanged(auth, async user=>{
     authResolved=true;
     if(!user){
-        clearListeners(); currentUserId=null; window.currentUserId=null; resetData(); setAuthVisibility(null); updateConnectionIndicator(); return;
+        clearListeners(); currentUserId=null; authUserId=null; currentRole=null; currentPermissions={}; window.currentUserId=null; window.authUserId=null; window.currentRole=null; window.currentPermissions={}; resetData(); setAuthVisibility(null); updateConnectionIndicator(); return;
     }
-    currentUserId=user.uid; window.currentUserId=user.uid;
-    // Keep the stable loading shell on-screen until the first Firestore data burst settles.
+    authUserId=user.uid; window.authUserId=user.uid;
+    // Resolve the role once. Existing accounts stay compatible; new username/Google
+    // users complete setup only when no profile exists.
     try{
-        startDataListeners(user.uid);
+        const memberRef=doc(db,'businessMembers',user.uid);
+        let memberSnap=await getDoc(memberRef);
+        if(!memberSnap.exists()){
+            let pending=null; try{pending=JSON.parse(sessionStorage.getItem('mybiz-pending-profile')||'null');}catch(_){}
+            const googleFirstTime=sessionStorage.getItem('mybiz-google-signin')==='1';
+            if(googleFirstTime && !pending){
+                const defaultName=user.displayName||'';
+                const defaultUsername=normalizeUsername((user.email||'').split('@')[0]).replace(/[^a-z0-9._-]/g,'').slice(0,30);
+                await signOut(auth);
+                sessionStorage.removeItem('mybiz-google-signin');
+                document.getElementById('login-error').textContent='Google profile details were filled in. Choose a username and role to finish setup.';
+                isLoginMode=true; toggleAuthMode();
+                document.getElementById('signup-name').value=defaultName;
+                document.getElementById('login-username').value=defaultUsername;
+                document.getElementById('signup-email').value=user.email||'';
+                return;
+            }
+            if(!pending){
+                // Legacy accounts remain Admins so existing business data keeps working.
+                await setDoc(memberRef,{ownerId:user.uid,role:'admin',active:true,displayName:user.displayName||user.email||'Business Owner',username:normalizeUsername((user.email||'').split('@')[0]),email:(user.email||'').toLowerCase(),phone:'',permissions:{},createdAt:new Date().toISOString()});
+                memberSnap=await getDoc(memberRef);
+            }else if(pending.role==='employee'){
+                const inviteRef=doc(db,'businessInvites',pending.inviteCode);
+                const inviteSnap=await getDoc(inviteRef);
+                if(!inviteSnap.exists()||inviteSnap.data().status!=='pending') throw new Error('Invalid or already used business invite code.');
+                const inv=inviteSnap.data();
+                await setDoc(memberRef,{ownerId:inv.ownerId,role:'employee',active:true,displayName:pending.name,username:pending.username,email:pending.email||'',phone:pending.phone||'',permissions:inv.permissions||{},inviteId:inviteSnap.id,createdAt:new Date().toISOString()});
+                await updateDoc(inviteRef,{status:'claimed',claimedBy:user.uid,claimedAt:new Date().toISOString()});
+                memberSnap=await getDoc(memberRef);
+            }else{
+                await setDoc(memberRef,{ownerId:user.uid,role:'admin',active:true,displayName:pending.name,username:pending.username,email:pending.email||'',phone:pending.phone||'',permissions:{},createdAt:new Date().toISOString()});
+                memberSnap=await getDoc(memberRef);
+            }
+            sessionStorage.removeItem('mybiz-pending-profile'); sessionStorage.removeItem('mybiz-google-signin');
+        }
+        const member=memberSnap.data();
+        if(member.active===false){ await signOut(auth); throw new Error('Your access to this business has been disabled.'); }
+        currentRole=member.role||'employee'; currentPermissions=member.permissions||{}; currentUserId=member.ownerId;
+        window.currentRole=currentRole; window.currentPermissions=currentPermissions; window.currentUserId=currentUserId;
+        document.body.dataset.role=currentRole;
+        startDataListeners(currentUserId);
         applyStoredOrCloudTheme();
         window.navigate('dashboard',{replace:true});
-        setTimeout(()=>checkAppLock().catch?.(()=>{}),100); setTimeout(()=>startOnboarding(),450); setTimeout(()=>checkDueReminders(),900);
+        if(currentRole==='admin') setTimeout(()=>checkAppLock().catch?.(()=>{}),100);
+        setTimeout(()=>startOnboarding(),450); setTimeout(()=>checkDueReminders(),900);
     }catch(error){
         console.error('App initialization failed:',error);
         const err=document.getElementById('login-error'); if(err)err.textContent='The app could not initialize. Please refresh.';

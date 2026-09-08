@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mybusiness-v12';
+const CACHE_NAME = 'mybusiness-v13';
 const APP_SHELL = [
   '/', '/index.html', '/style.css', '/app.js', '/manifest.json',
   '/icon-192.png', '/icon-512.png',
@@ -8,7 +8,7 @@ const APP_SHELL = [
   '/modules/cashbook.js', '/modules/stockPurchases.js', '/modules/expenses.js',
   '/modules/search.js', '/modules/report.js', '/modules/more.js',
   '/modules/staff.js', '/modules/reminders.js', '/modules/business.js',
-  '/modules/backup.js', '/modules/appLock.js',
+  '/modules/backup.js', '/modules/appLock.js', '/modules/team.js',
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
   'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js',
