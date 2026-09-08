@@ -34,27 +34,33 @@ export function renderDashboard(container) {
 
     const businessName = data.settings?.name || 'MyBusiness';
     container.innerHTML = `
-        <div class="dashboard-welcome">
-            <div><span class="eyebrow">YOUR BUSINESS</span><h2>${businessName}</h2><p>${new Date().toLocaleDateString('en-PK',{weekday:'long',day:'numeric',month:'short'})}</p></div>
-            <button class="welcome-settings" onclick="navigate('settings')" title="Appearance"><i class="fas fa-palette"></i></button>
+        <div class="home-hero">
+            <div class="home-hero-top">
+                <div><span class="eyebrow">YOUR BUSINESS</span><h2>${businessName}</h2><p>${new Date().toLocaleDateString('en-PK',{weekday:'long',day:'numeric',month:'short'})}</p></div>
+                <button class="welcome-settings" onclick="navigate('settings')" title="Appearance"><i class="fas fa-palette"></i></button>
+            </div>
+            <div class="home-hero-balance">
+                <span>Today's Sales</span>
+                <strong>${formatCurrency(stats.totalSales)}</strong>
+                <em>Net Profit Today: ${formatCurrency(stats.netProfit)}</em>
+            </div>
         </div>
-        <div class="quick-actions">
-            <button class="quick-action primary" onclick="navigate('sales')"><span><i class="fas fa-plus"></i></span><strong>New Sale</strong><small>Record money in</small></button>
-            <button class="quick-action" onclick="navigate('customers')"><span><i class="fas fa-user-plus"></i></span><strong>Khata</strong><small>Customers & dues</small></button>
-            <button class="quick-action" onclick="navigate('inventory')"><span><i class="fas fa-box-open"></i></span><strong>Stock</strong><small>Products & stock</small></button>
-            <button class="quick-action" onclick="navigate('cashbook')"><span><i class="fas fa-wallet"></i></span><strong>Cash Book</strong><small>Money movement</small></button>
+        <div class="home-stat-row">
+            <div class="home-stat-ring"><span class="ring-icon" style="background:#2EC4B6"><i class="fas fa-wallet"></i></span><strong>${formatCurrency(cashInHand)}</strong><small>Cash in Hand</small></div>
+            <div class="home-stat-ring"><span class="ring-icon" style="background:#FF6B6B"><i class="fas fa-hand-holding-usd"></i></span><strong>${formatCurrency(stats.outstandingDebt)}</strong><small>Receivables</small></div>
+            <div class="home-stat-ring"><span class="ring-icon" style="background:#FFA62B"><i class="fas fa-truck"></i></span><strong>${formatCurrency(totalPayable)}</strong><small>Payables</small></div>
         </div>
-        <div class="dashboard-grid">
-            <div class="card profit"><h3>Today's Sales</h3><div class="value">${formatCurrency(stats.totalSales)}</div></div>
-            <div class="card profit"><h3>Net Profit (Today)</h3><div class="value">${formatCurrency(stats.netProfit)}</div></div>
-        </div>
-        <div class="dashboard-grid">
-            <div class="card"><h3>Cash in Hand</h3><div class="value" style="font-size:22px;">${formatCurrency(cashInHand)}</div></div>
-            <div class="card debt"><h3>Receivables</h3><div class="value" style="font-size:22px;">${formatCurrency(stats.outstandingDebt)}</div></div>
-        </div>
-        <div class="dashboard-grid">
-            <div class="card debt"><h3>Payables</h3><div class="value" style="font-size:22px;">${formatCurrency(totalPayable)}</div></div>
-            <div class="card"><h3>Total Expenses</h3><div class="value" style="font-size:22px;">${formatCurrency(totalExpensesAll)}</div></div>
+        <div class="card action-grid-card">
+            <div class="action-grid">
+                <button class="action-tile" onclick="navigate('sales')"><span class="tile-icon tile-1"><i class="fas fa-plus"></i></span><span>New Sale</span></button>
+                <button class="action-tile" onclick="navigate('customers')"><span class="tile-icon tile-2"><i class="fas fa-user-friends"></i></span><span>Khata</span></button>
+                <button class="action-tile" onclick="navigate('inventory')"><span class="tile-icon tile-3"><i class="fas fa-box-open"></i></span><span>Stock</span></button>
+                <button class="action-tile" onclick="navigate('cashbook')"><span class="tile-icon tile-4"><i class="fas fa-wallet"></i></span><span>Cash Book</span></button>
+                <button class="action-tile" onclick="navigate('reports')"><span class="tile-icon tile-5"><i class="fas fa-chart-line"></i></span><span>Reports</span></button>
+                <button class="action-tile" onclick="navigate('suppliers')"><span class="tile-icon tile-6"><i class="fas fa-truck"></i></span><span>Suppliers</span></button>
+                <button class="action-tile" onclick="navigate('expenses')"><span class="tile-icon tile-7"><i class="fas fa-receipt"></i></span><span>Expenses</span></button>
+                <button class="action-tile" onclick="navigate('more')"><span class="tile-icon tile-8"><i class="fas fa-th-large"></i></span><span>More</span></button>
+            </div>
         </div>
         ${lowStockProducts.length > 0 ? `
         <div class="card" style="border-left:4px solid var(--warning);">
