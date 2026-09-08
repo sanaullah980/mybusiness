@@ -7,7 +7,7 @@ export function renderTeam(container){
   <div class="card"><h3>Invite Employee</h3><input id="emp-name" placeholder="Employee name (label only)">
   <div class="permission-grid"><label><input type="checkbox" id="perm-sales" checked> Sales</label><label><input type="checkbox" id="perm-customers" checked> Customers</label><label><input type="checkbox" id="perm-payments" checked> Payments</label><label><input type="checkbox" id="perm-suppliers"> Suppliers</label></div>
   <button class="btn" id="btn-invite-employee" onclick="createEmployeeInvite()"><i class="fas fa-user-plus"></i> Create Invite Code</button><p class="form-help">Give this code to your employee. They select Employee during first-time signup and enter the code. No email is required.</p><div id="invite-code-result"></div></div>
-  <div class="card"><h3>Team</h3>${members.length?members.map(m=>`<div class="list-item"><div class="list-item-info"><h4><i class="fas fa-user"></i> ${esc(m.displayName||m.username||m.id)}</h4><p>@${esc(m.username||'')} • ${m.role||'employee'} • ${m.active===false?'Disabled':'Active'}</p></div>${m.role==='employee'?`<button class="btn btn-secondary btn-sm" onclick="toggleEmployeeActive('${m.id}',${m.active===false})">${m.active===false?'Enable':'Disable'}</button>`:''}</div>`).join(''):'<p style="color:var(--gray);padding:8px 0;">No employees yet.</p>'}</div>`;
+  <div class="card"><h3>Team</h3>${members.length?members.map(m=>`<div class="list-item"><div class="list-item-info"><h4><i class="fas fa-user"></i> ${esc(m.displayName||m.username||m.id)}</h4><p>@${esc(m.username||'')} • ${m.role||'employee'} • ${m.active===false?'Disabled':'Active'}</p></div>${m.role==='employee'?`<div class="team-member-actions"><button class="btn btn-secondary btn-sm" onclick="toggleEmployeeActive('${m.id}',${m.active===false})">${m.active===false?'Enable':'Disable'}</button><button class="btn btn-danger btn-sm" onclick="deleteEmployee('${m.id}','${esc(m.displayName||m.username||'Employee').replace(/'/g,'\\'')}')"><i class="fas fa-trash"></i> Delete</button></div>`:''}</div>`).join(''):'<p style="color:var(--gray);padding:8px 0;">No employees yet.</p>'}</div>`;
 }
 export async function createEmployeeInvite(){
   if(window.currentRole!=='admin') return window.showToast?.('Admin access required.','warning');
@@ -22,3 +22,15 @@ export async function createEmployeeInvite(){
 }
 export async function cancelEmployeeInvite(id){ await window.deleteDoc(window.doc(window.db,'businessInvites',id)); }
 export async function toggleEmployeeActive(id,next){try{await window.updateDoc(window.doc(window.db,'businessMembers',id),{active:!!next,updatedAt:new Date().toISOString()});window.showToast?.(next?'Employee enabled.':'Employee disabled.','success');}catch(e){alert('Could not update employee access.');}}
+
+export async function deleteEmployee(id,name='Employee'){
+  if(!confirm(`Permanently remove ${name} from this business? They will immediately lose access to all shared business data. This does not delete their separate Firebase login account.`)) return;
+  try{
+    const memberRef=window.doc(window.db,'businessMembers',id);
+    const snap=await window.getDoc?.(memberRef);
+    const member=snap?.exists?.()?snap.data():null;
+    if(member?.inviteId){ try{ await window.deleteDoc(window.doc(window.db,'businessInvites',member.inviteId)); }catch(e){ console.warn('Invite cleanup skipped:',e); } }
+    await window.deleteDoc(memberRef);
+    window.showToast?.('Employee removed from the business.','success');
+  }catch(e){ console.error('Could not delete employee:',e); alert('Could not remove employee. Please try again.'); }
+}

@@ -19,7 +19,10 @@ service cloud.firestore {
          request.resource.data.ownerId == get(/databases/$(database)/documents/businessInvites/$(request.resource.data.inviteId)).data.ownerId &&
          request.resource.data.permissions == get(/databases/$(database)/documents/businessInvites/$(request.resource.data.inviteId)).data.permissions)
       );
-      allow update, delete: if signedIn() && admin(resource.data.ownerId);
+      allow update: if signedIn() && admin(resource.data.ownerId);
+      // A user may remove their own membership only when permanently deleting their own account.
+      // Admins can remove employees from the business.
+      allow delete: if signedIn() && (request.auth.uid == uid || admin(resource.data.ownerId));
     }
 
     match /businessInvites/{id} {
@@ -64,7 +67,7 @@ service cloud.firestore {
     }
     match /stockAdjustments/{id} {
       allow read, delete: if admin(resource.data.ownerId);
-      allow create: if admin(request.resource.data.ownerId);
+      allow create: if belongs(request.resource.data.ownerId) && can('sales');
       allow update: if admin(resource.data.ownerId) && request.resource.data.ownerId == resource.data.ownerId;
     }
     match /cashTransactions/{id} {

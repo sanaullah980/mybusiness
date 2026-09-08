@@ -96,7 +96,7 @@ export function openSupplierDetails(supplierId) {
             <button class="btn ledger-btn give" onclick="openSupplierPayModal('${s.id}')">Pay Supplier</button>
             <button class="btn ledger-btn receive" onclick="openSupplierDebtModal('${s.id}')">Record Credit Purchase</button>
         </div>
-        <button class="btn btn-secondary" style="margin-top:10px;" onclick="deleteSupplier('${s.id}')">Delete Supplier</button>`;
+        <button class="btn btn-secondary admin-only" style="margin-top:10px;" onclick="deleteSupplier('${s.id}')">Delete Supplier</button>`;
     document.getElementById('modal-overlay').classList.remove('hidden');
 }
 

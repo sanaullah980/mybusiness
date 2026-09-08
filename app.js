@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, reauthenticateWithPopup, updatePassword, deleteUser } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, setDoc, getDoc, onSnapshot, query, where, runTransaction, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 import { renderDashboard } from './modules/dashboard.js';
@@ -22,7 +22,7 @@ import { renderReminders, openReminderModal, saveReminder, completeReminder, del
 import { renderBusinessCard, saveBusinessCard, shareBusinessCard } from './modules/business.js';
 import { renderBackup, exportBusinessBackup, importBusinessBackup } from './modules/backup.js';
 import { renderAppLock, saveAppLock, removeAppLock, checkAppLock } from './modules/appLock.js';
-import { renderTeam, createEmployeeInvite, cancelEmployeeInvite, toggleEmployeeActive } from './modules/team.js';
+import { renderTeam, createEmployeeInvite, cancelEmployeeInvite, toggleEmployeeActive, deleteEmployee } from './modules/team.js';
 
 const firebaseConfig = {
     apiKey: "AIzaSyBQqnIhMCGd4_FRApjkns3HjIrqw2V1qFc",
@@ -139,7 +139,6 @@ async function runAtomicOrOffline(work) {
         const batch = writeBatch(db);
         const fakeTransaction = {
             get: async ref => offlineDocSnapshot(ref),
-            getAll: async (...refs) => refs.map(offlineDocSnapshot),
             set: (ref, value, options) => batch.set(ref, value, options),
             update: (ref, value) => batch.update(ref, value),
             delete: ref => batch.delete(ref)
@@ -326,6 +325,38 @@ getRedirectResult(auth).catch(error=>{
 });
 window.handleLogout=async()=>{if(!confirm('Log out?'))return;try{await signOut(auth);}catch(e){console.error(e);alert('Could not log out. Please try again.');}};
 
+// Permanently removes the signed-in user's access profile and Firebase Auth account.
+// Business records are intentionally not deleted here; account deletion must never erase
+// shared business data by accident.
+window.deleteMyAccount=async()=>{
+    const user=auth.currentUser;
+    if(!user) return;
+    if(!confirm('Permanently delete your account? You will lose access to MyBusiness on this account. Shared business records will not be deleted. This cannot be undone.')) return;
+    try{
+        const providers=(user.providerData||[]).map(p=>p.providerId);
+        if(providers.includes('password')){
+            const password=prompt('For security, enter your password to permanently delete your account:');
+            if(password===null) return;
+            if(!password) throw new Error('Password is required to delete your account.');
+            await reauthenticateWithCredential(user,EmailAuthProvider.credential(user.email,password));
+        }else if(providers.includes('google.com')){
+            await reauthenticateWithPopup(user,googleProvider);
+        }
+        // Remove this user's business membership first. The rules allow a user to remove
+        // their own membership only after the explicit account-deletion flow is enabled.
+        const memberRef=doc(db,'businessMembers',user.uid);
+        try{ await deleteDoc(memberRef); }catch(error){ console.warn('Could not remove membership before account deletion:',error); throw error; }
+        await deleteUser(user);
+        alert('Your account has been permanently deleted.');
+    }catch(error){
+        console.error('Account deletion failed:',error);
+        const code=error?.code||'';
+        if(code==='auth/requires-recent-login') alert('Please log in again and try deleting your account immediately afterward.');
+        else if(code==='auth/wrong-password'||code==='auth/invalid-credential') alert('Incorrect password. Your account was not deleted.');
+        else alert(error?.message||'Could not delete your account. Please try again.');
+    }
+};
+
 function clearListeners(){listeners.forEach(unsub=>{try{unsub();}catch(_){}});listeners=[];}
 function resetData(){data=Object.fromEntries(COLLECTIONS.map(name=>[name,[]]));data.settings={};window.data=data;}
 function setAuthVisibility(user){
@@ -402,7 +433,7 @@ function startDataListeners(ownerId){
 
 window.navigate=(page, options={})=>{
     const {history=true, replace=false}=options||{};
-    const restricted=['reports','expenses','stockPurchases','staff','backup','appLock','settings','businessCard','team'];
+    const restricted=['reports','expenses','stockPurchases','staff','backup','appLock','settings','businessCard','team','cashbook'];
     if(currentRole==='employee' && restricted.includes(page)){ window.showToast?.('This area is available to the Admin only.','warning'); return; }
     if(currentRole==='employee' && page==='suppliers' && !currentPermissions.suppliers){ window.showToast?.('Ask your Admin to grant Suppliers access.','warning'); return; }
     if (history && !handlingPopState && currentPage !== page) {
@@ -487,8 +518,8 @@ Object.assign(window,{
     renderCashBook,buildCashBookEntries,openSetOpeningBalanceModal,saveOpeningBalance,openCashEntryModal,saveCashEntry,openGlobalSearchModal,runGlobalSearch,addProductByBarcode,startBarcodeScanner,
     openInvoiceModal,downloadInvoicePdf,printInvoice,shareInvoiceWhatsApp,openReturnModal,processReturn,
     renderStaff,openStaffModal,saveStaff,deleteStaff,openAttendanceModal,saveAttendance,renderReminders,openReminderModal,saveReminder,completeReminder,deleteReminder,
-    renderBusinessCard,saveBusinessCard,shareBusinessCard,renderBackup,exportBusinessBackup,importBusinessBackup,renderAppLock,saveAppLock,removeAppLock,checkAppLock,renderTeam,createEmployeeInvite,cancelEmployeeInvite,toggleEmployeeActive,
-    openDashboardMenu,closeDashboardMenu,navigateFromDashboardMenu,openPasswordFromDashboardMenu,openDeleteFromDashboardMenu,logoutFromDashboardMenu
+    renderBusinessCard,saveBusinessCard,shareBusinessCard,renderBackup,exportBusinessBackup,importBusinessBackup,renderAppLock,saveAppLock,removeAppLock,checkAppLock,renderTeam,createEmployeeInvite,cancelEmployeeInvite,toggleEmployeeActive,deleteEmployee,
+    openDashboardMenu,closeDashboardMenu,navigateFromDashboardMenu,openPasswordFromDashboardMenu,openDeleteFromDashboardMenu,logoutFromDashboardMenu,deleteMyAccount
 });
 
 // Mobile keyboard UX: keep modal lists/forms inside the visible viewport.
