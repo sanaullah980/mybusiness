@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, setDoc, getDoc, onSnapshot, query, where, runTransaction, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 import { renderDashboard } from './modules/dashboard.js';
@@ -294,8 +294,36 @@ window.forgotPassword=async(e)=>{
 window.signInWithGoogle=async()=>{
     sessionStorage.setItem('mybiz-google-signin','1');
     try{await signInWithPopup(auth,googleProvider);}
-    catch(error){console.error('Google Sign-In error:',error); if(error.code==='auth/popup-closed-by-user')return; if(error.code==='auth/unauthorized-domain')alert('This website domain is not authorized in Firebase Authentication.'); else if(error.code==='auth/popup-blocked')alert('Your browser blocked the Google sign-in popup. Allow popups and try again.'); else alert(error.message||'Google Sign-In failed.');}
+    catch(error){
+        console.error('Google Sign-In error:',error);
+        if(error.code==='auth/popup-closed-by-user'){ sessionStorage.removeItem('mybiz-google-signin'); return; }
+        if(error.code==='auth/unauthorized-domain'){ sessionStorage.removeItem('mybiz-google-signin'); alert('This website domain is not authorized in Firebase Authentication.'); return; }
+        // Popups need a live iframe on the authDomain to relay sign-in state back to this
+        // page. Browsers that partition third-party storage (Safari ITP, Chrome storage
+        // partitioning, some in-app browsers) block that relay, which surfaces as a
+        // "missing initial state" / storage error rather than a normal auth error code.
+        // Falling back to a full-page redirect avoids the cross-origin relay entirely.
+        const storagePartitioned = error.code==='auth/web-storage-unsupported' || /missing initial state|storage is inaccessible|sessionstorage/i.test(error?.message||'');
+        if(storagePartitioned || error.code==='auth/popup-blocked'){
+            try{ await signInWithRedirect(auth,googleProvider); return; }
+            catch(redirectError){ console.error('Google redirect sign-in error:',redirectError); sessionStorage.removeItem('mybiz-google-signin'); alert(redirectError.message||'Google Sign-In failed.'); return; }
+        }
+        sessionStorage.removeItem('mybiz-google-signin');
+        alert(error.message||'Google Sign-In failed.');
+    }
 };
+// Completes the flow started by signInWithRedirect above. onAuthStateChanged also fires
+// on return, but resolving the redirect result first surfaces redirect-specific errors
+// (e.g. an account already existing under a different sign-in method) instead of silently
+// leaving the user on the login screen.
+getRedirectResult(auth).catch(error=>{
+    console.error('Google redirect result error:',error);
+    sessionStorage.removeItem('mybiz-google-signin');
+    const err=document.getElementById('login-error');
+    if(err) err.textContent = error.code==='auth/account-exists-with-different-credential'
+        ? 'An account already exists with this email using a different sign-in method.'
+        : (error.message||'Google Sign-In failed.');
+});
 window.handleLogout=async()=>{if(!confirm('Log out?'))return;try{await signOut(auth);}catch(e){console.error(e);alert('Could not log out. Please try again.');}};
 
 function clearListeners(){listeners.forEach(unsub=>{try{unsub();}catch(_){}});listeners=[];}

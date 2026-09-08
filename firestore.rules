@@ -25,7 +25,7 @@ service cloud.firestore {
     match /businessInvites/{id} {
       allow create: if signedIn() && admin(request.resource.data.ownerId);
       // Employees can read a single invite code after authenticating in order to join.
-      allow read: if signedIn() && resource.data.status == 'pending';
+      allow read: if signedIn() && (resource == null || resource.data.status == 'pending');
       allow update: if signedIn() && (admin(resource.data.ownerId) || (resource.data.status == 'pending' && request.resource.data.status == 'claimed' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','claimedBy','claimedAt']) && request.resource.data.claimedBy == request.auth.uid));
       allow delete: if signedIn() && admin(resource.data.ownerId);
     }
