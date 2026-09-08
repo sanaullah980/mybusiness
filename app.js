@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail, sendEmailVerification, EmailAuthProvider, reauthenticateWithCredential, updatePassword, linkWithCredential, credentialFromError } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, setDoc, onSnapshot, query, where, runTransaction, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 import { renderDashboard } from './modules/dashboard.js';
@@ -45,7 +45,8 @@ try {
     db = getFirestore(firebaseApp);
 }
 const googleProvider = new GoogleAuthProvider();
-setPersistence(auth, browserLocalPersistence).catch(error => console.warn('Auth persistence setup failed:', error));
+const authPersistenceReady = setPersistence(auth, browserLocalPersistence).catch(error => { console.warn('Auth persistence setup failed:', error); throw error; });
+let pendingGoogleCredential = null;
 
 const COLLECTIONS = ['products','customers','sales','expenses','stockPurchases','customerTransactions','stockAdjustments','suppliers','supplierTransactions','cashTransactions','salesReturns','staff','attendance','reminders'];
 let currentUserId = null;
@@ -87,6 +88,22 @@ function translateVisibleText(){
 
 function setLanguage(lang){ currentLanguage=lang==='ur'?'ur':'en'; localStorage.setItem('mybusiness-language',currentLanguage); document.documentElement.lang=currentLanguage; document.documentElement.dir=currentLanguage==='ur'?'rtl':'ltr'; applyLanguageToShell(); if(currentUserId) setDoc(doc(db,'settings',currentUserId),{language:currentLanguage,ownerId:currentUserId},{merge:true}).catch(()=>{}); if(typeof window.refreshCurrentPage==='function') window.refreshCurrentPage(); setTimeout(translateVisibleText,40); }
 function applyLanguageToShell(){ document.querySelectorAll('[data-i18n]').forEach(el=>{const k=el.dataset.i18n;if(k)el.textContent=tr(k);}); const ct=document.getElementById('connection-text'); if(ct && !syncPending) ct.textContent=navigator.onLine?tr('online'):tr('offline'); const ls=document.getElementById('last-sync-text'); if(ls) ls.textContent=formatLastSync(); document.getElementById('install-title')?.replaceChildren(document.createTextNode(tr('install'))); document.getElementById('install-subtitle')?.replaceChildren(document.createTextNode(tr('installSub'))); }
+function openDashboardMenu(){
+    const modal=document.getElementById('modal-body');
+    modal.innerHTML=`<div class="modal-header"><h2>Menu</h2><button class="close-btn" onclick="closeModal()" aria-label="Close">&times;</button></div>
+    <div class="dashboard-menu-grid">
+      <button onclick="closeModal();navigate('settings')"><span><i class="fas fa-cog"></i></span><strong>Settings</strong><small>Business & preferences</small></button>
+      <button onclick="closeModal();openChangePasswordModal()"><span><i class="fas fa-key"></i></span><strong>Change Password</strong><small>Update account password</small></button>
+      <button onclick="closeModal();navigate('settings')"><span><i class="fas fa-palette"></i></span><strong>Change Color</strong><small>Theme & appearance</small></button>
+      <button onclick="closeModal();navigate('businessCard')"><span><i class="fas fa-id-card"></i></span><strong>Business Card</strong><small>Share your business</small></button>
+      <button onclick="closeModal();navigate('backup')"><span><i class="fas fa-cloud-download-alt"></i></span><strong>Backup & Restore</strong><small>Protect your records</small></button>
+      <button onclick="closeModal();navigate('appLock')"><span><i class="fas fa-lock"></i></span><strong>App Lock</strong><small>PIN protection</small></button>
+      <button class="danger" onclick="openDeleteRecordsModal()"><span><i class="fas fa-trash-alt"></i></span><strong>Delete Records</strong><small>Remove business data</small></button>
+      <button class="danger" onclick="closeModal();handleLogout()"><span><i class="fas fa-sign-out-alt"></i></span><strong>Logout</strong><small>Sign out of MyBusiness</small></button>
+    </div>`;
+    document.getElementById('modal-overlay').classList.remove('hidden');
+}
+
 function openLanguagePicker(){ const m=document.getElementById('modal-body'); m.innerHTML=`<div class="modal-header"><h2>${tr('chooseLanguage')}</h2><button class="close-btn" onclick="closeModal()">&times;</button></div><div class="language-options"><button class="language-choice ${currentLanguage==='en'?'active':''}" onclick="setLanguage('en');closeModal()"><span>🇬🇧</span><strong>English</strong></button><button class="language-choice ${currentLanguage==='ur'?'active':''}" onclick="setLanguage('ur');closeModal()"><span>🇵🇰</span><strong>اردو</strong></button></div>`; document.getElementById('modal-overlay').classList.remove('hidden'); }
 function saveLastSync(){ localStorage.setItem(LAST_SYNC_KEY,Date.now().toString()); const el=document.getElementById('last-sync-text'); if(el)el.textContent=formatLastSync(); }
 function formatLastSync(){ const t=Number(localStorage.getItem(LAST_SYNC_KEY)||0); if(!t)return tr('notSynced'); const diff=Math.max(0,Date.now()-t); if(diff<60000)return tr('justNow'); const min=Math.floor(diff/60000); if(min<60)return currentLanguage==='ur'?`${min} منٹ پہلے`:`${min} min ago`; const hr=Math.floor(min/60); if(hr<24)return currentLanguage==='ur'?`${hr} گھنٹے پہلے`:`${hr} hr ago`; return new Date(t).toLocaleDateString(currentLanguage==='ur'?'ur-PK':'en-PK'); }
@@ -157,6 +174,8 @@ Object.assign(window,{formatCurrency,getStartOfDay,getEndOfDay,getStartOfMonth,g
 
 // Lightweight in-app feedback and refresh helpers. These avoid forcing users to
 // leave the current page just to refresh cached data or see a success message.
+window.openDashboardMenu=openDashboardMenu;
+
 window.showToast=(message,type='success')=>{
     let toast=document.getElementById('mybiz-toast');
     if(!toast){toast=document.createElement('div');toast.id='mybiz-toast';toast.className='mybiz-toast';document.body.appendChild(toast);}
@@ -230,33 +249,113 @@ window.toggleAuthMode=()=>{
 };
 window.handleAuth=async(e)=>{
     if(e)e.preventDefault();
-    const email=document.getElementById('login-email').value.trim(); const pass=document.getElementById('login-password').value; const errorDiv=document.getElementById('login-error');
+    const email=document.getElementById('login-email').value.trim().toLowerCase();
+    const pass=document.getElementById('login-password').value;
+    const errorDiv=document.getElementById('login-error');
     if(!email||!pass){errorDiv.innerText='Please enter both email and password.';return;}
+    if(!isLoginMode && pass.length<8){errorDiv.innerText='Use a password with at least 8 characters.';return;}
     showLoading('auth-button',isLoginMode?'Logging in...':'Creating account...');
-    try { if(isLoginMode) await signInWithEmailAndPassword(auth,email,pass); else await createUserWithEmailAndPassword(auth,email,pass); }
+    try {
+        await authPersistenceReady;
+        if(isLoginMode){
+            const result=await signInWithEmailAndPassword(auth,email,pass);
+            if(pendingGoogleCredential && result.user.email?.toLowerCase()===email){
+                try{
+                    await linkWithCredential(result.user,pendingGoogleCredential);
+                    pendingGoogleCredential=null;
+                    errorDiv.innerText='Google sign-in has been linked to your account.';
+                }catch(linkError){
+                    console.warn('Google account linking failed:',linkError);
+                    pendingGoogleCredential=null;
+                }
+            }
+        } else {
+            const result=await createUserWithEmailAndPassword(auth,email,pass);
+            try{ await sendEmailVerification(result.user); }catch(verificationError){ console.warn('Verification email could not be sent:',verificationError); }
+        }
+        errorDiv.innerText='';
+    }
     catch(error){
         console.error('Authentication error:',error);
-        const messages={'auth/invalid-api-key':'Firebase configuration is invalid.','auth/api-key-not-valid':'Firebase configuration is invalid.','auth/invalid-credential':'Invalid email or password.','auth/wrong-password':'Invalid email or password.','auth/user-not-found':'Invalid email or password.','auth/email-already-in-use':'Email already registered.','auth/weak-password':'Password must be at least 6 characters.','auth/invalid-email':'Enter a valid email address.','auth/too-many-requests':'Too many attempts. Please try again later.','auth/network-request-failed':'Network unavailable. Check your connection and try again.'};
-        errorDiv.innerText=messages[error.code]||error.message||'Authentication failed.';
+        const messages={
+            'auth/invalid-api-key':'Firebase configuration is invalid. Please contact the app owner.',
+            'auth/api-key-not-valid':'Firebase configuration is invalid. Please contact the app owner.',
+            'auth/invalid-credential':'Invalid email or password.',
+            'auth/wrong-password':'Invalid email or password.',
+            'auth/user-not-found':'Invalid email or password.',
+            'auth/email-already-in-use':'This email is already registered. Try Log In instead.',
+            'auth/weak-password':'Password is too weak. Use at least 8 characters.',
+            'auth/invalid-email':'Enter a valid email address.',
+            'auth/too-many-requests':'Too many attempts. Please wait and try again.',
+            'auth/network-request-failed':'Network unavailable. Check your connection and try again.',
+            'auth/operation-not-allowed':'This sign-in method is not enabled in Firebase Authentication.',
+            'auth/user-disabled':'This account has been disabled. Contact the app owner.',
+            'auth/invalid-login-credentials':'Invalid email or password.'
+        };
+        errorDiv.innerText=messages[error.code]||'Authentication failed. Please try again.';
     } finally { hideLoading('auth-button'); }
 };
 window.forgotPassword=async(e)=>{
-    if(e)e.preventDefault(); const email=document.getElementById('login-email').value.trim(); if(!email)return alert('Enter your email first.');
-    try{await sendPasswordResetEmail(auth,email);alert('Password reset link sent.');}catch(error){console.error(error);alert('Unable to send the reset link. Check the email and your connection.');}
+    if(e)e.preventDefault();
+    const email=document.getElementById('login-email').value.trim().toLowerCase();
+    if(!email){return showAuthMessage('Enter your email address first.');}
+    try{
+        await authPersistenceReady;
+        await sendPasswordResetEmail(auth,email);
+        showAuthMessage('If an account exists for this email, a password reset link has been sent.');
+    }catch(error){
+        console.error('Password reset error:',error);
+        const message=error.code==='auth/invalid-email'?'Enter a valid email address.':error.code==='auth/too-many-requests'?'Too many requests. Please try again later.':'Unable to send the reset email. Check your connection and try again.';
+        showAuthMessage(message,true);
+    }
+};
+window.resendVerificationEmail=async()=>{
+    const user=auth.currentUser;
+    if(!user||!user.email)return showAuthMessage('Please log in first.',true);
+    try{await sendEmailVerification(user);showAuthMessage('Verification email sent. Check your inbox.');}
+    catch(error){console.error(error);showAuthMessage(error.code==='auth/too-many-requests'?'Please wait before requesting another email.':'Could not send the verification email.',true);}
 };
 window.signInWithGoogle=async()=>{
-    try{await signInWithPopup(auth,googleProvider);}
-    catch(error){console.error('Google Sign-In error:',error); if(error.code==='auth/popup-closed-by-user')return; if(error.code==='auth/unauthorized-domain')alert('This website domain is not authorized in Firebase Authentication.'); else if(error.code==='auth/popup-blocked')alert('Your browser blocked the Google sign-in popup. Allow popups and try again.'); else alert(error.message||'Google Sign-In failed.');}
+    const button=document.querySelector('.google-btn');
+    if(button)button.disabled=true;
+    try{
+        await authPersistenceReady;
+        await signInWithPopup(auth,googleProvider);
+        pendingGoogleCredential=null;
+    }catch(error){
+        console.error('Google Sign-In error:',error);
+        if(error.code==='auth/popup-closed-by-user')return;
+        if(error.code==='auth/popup-blocked')return showAuthMessage('Google sign-in popup was blocked. Allow popups for this site and try again.',true);
+        if(error.code==='auth/unauthorized-domain')return showAuthMessage('This website domain is not authorized in Firebase Authentication. Add this domain in Firebase Console → Authentication → Settings → Authorized domains.',true);
+        if(error.code==='auth/account-exists-with-different-credential'){
+            pendingGoogleCredential=credentialFromError(error);
+            const email=error.customData?.email||'';
+            document.getElementById('login-email').value=email;
+            isLoginMode=true;
+            document.getElementById('auth-button').innerText='Log In';
+            document.getElementById('toggle-auth').innerText="Don't have an account? Sign Up";
+            showAuthMessage('An account already exists with this email. Log in with your existing password once; Google will then be linked.',true);
+            return;
+        }
+        if(error.code==='auth/network-request-failed')return showAuthMessage('Network unavailable. Check your connection and try again.',true);
+        if(error.code==='auth/operation-not-allowed')return showAuthMessage('Google sign-in is not enabled in Firebase Authentication.',true);
+        showAuthMessage('Google sign-in failed. Please try again.',true);
+    }finally{if(button)button.disabled=false;}
 };
-window.handleLogout=async()=>{if(!confirm('Log out?'))return;try{await signOut(auth);}catch(e){console.error(e);alert('Could not log out. Please try again.');}};
+function showAuthMessage(message,isError=false){
+    const el=document.getElementById('login-error');
+    if(el){el.innerText=message;el.classList.toggle('success-msg',!isError);}
+}
+window.handleLogout=async()=>{if(!confirm('Log out?'))return;try{pendingGoogleCredential=null; await signOut(auth);}catch(e){console.error(e);showAuthMessage('Could not log out. Please try again.',true);}};
 
 function clearListeners(){listeners.forEach(unsub=>{try{unsub();}catch(_){}});listeners=[];}
 function resetData(){data=Object.fromEntries(COLLECTIONS.map(name=>[name,[]]));data.settings={};window.data=data;}
 function setAuthVisibility(user){
     const loading=document.getElementById('auth-loading'); const authScreen=document.getElementById('auth-screen'); const main=document.getElementById('main-app');
+    const verify=document.getElementById('resend-verification');
     if(loading) loading.classList.add('hidden');
-    if(user){authScreen?.classList.add('hidden');main?.classList.remove('hidden');}
-    else{main?.classList.add('hidden');authScreen?.classList.remove('hidden');}
+    if(user){authScreen?.classList.add('hidden');main?.classList.remove('hidden'); if(verify)verify.classList.add('hidden');}
+    else{main?.classList.add('hidden');authScreen?.classList.remove('hidden'); if(verify)verify.classList.toggle('hidden',!auth.currentUser?.email || !!auth.currentUser?.emailVerified);}
 }
 function handleListenerSnapshot(name,snapshot){
     data[name]=snapshot.docs.map(d=>({id:d.id,...d.data()}));

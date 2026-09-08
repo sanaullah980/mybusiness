@@ -38,6 +38,7 @@ export function openCustomerModal(customerId = null) {
     modal.innerHTML = `<div class="modal-header"><h2>${c ? 'Edit Customer' : 'Add Customer'}</h2><button class="close-btn" onclick="closeModal()" aria-label="Close">&times;</button></div>
         <div class="form-group"><label>Customer Name *</label><input type="text" id="c-name" value="${esc(c?.name || '')}" autocomplete="name"></div>
         <div class="form-group"><label>Phone / Contact</label><input type="text" id="c-phone" value="${esc(c?.phone || '')}" autocomplete="tel"></div>
+        <div class="form-group"><label>Due Date</label><input type="date" id="c-due-date" value="${esc(c?.dueDate || '')}"></div>
         <div class="form-group"><label>Notes</label><textarea id="c-notes" rows="2">${esc(c?.notes || '')}</textarea></div>
         <button class="btn" id="btn-save-customer" onclick="saveCustomer('${esc(customerId || '')}')">${c ? 'Update Customer' : 'Save Customer'}</button>`;
     document.getElementById('modal-overlay').classList.remove('hidden');
@@ -48,11 +49,12 @@ export async function saveCustomer(customerId) {
     const name = document.getElementById('c-name').value.trim();
     const phone = document.getElementById('c-phone').value.trim();
     const notes = document.getElementById('c-notes').value.trim();
+    const dueDate = document.getElementById('c-due-date')?.value || '';
     if (!name) return alert('Customer name is required.');
     if (!window.currentUserId) return alert('Please log in again.');
     window.showLoading('btn-save-customer', 'Saving...');
     try {
-        const cData = { name, phone, notes, ownerId: window.currentUserId };
+        const cData = { name, phone, notes, dueDate, ownerId: window.currentUserId, updatedAt: new Date().toISOString() };
         if (customerId) await window.updateDoc(window.doc(window.db, 'customers', customerId), cData);
         else { cData.balance = 0; cData.createdAt = new Date().toISOString(); await window.addDoc(window.collection(window.db, 'customers'), cData); }
         closeModal();
@@ -68,11 +70,23 @@ export function openCustomerDetails(customerId) {
     const giveIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m6 11 6-6 6 6"/></svg>`;
     const receiveIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m18 13-6 6-6-6"/></svg>`;
     const balance = Math.max(0, Number(c.balance) || 0);
+    const dueDate = c.dueDate ? new Date(c.dueDate + 'T00:00:00') : null;
+    const dueDateText = dueDate && !Number.isNaN(dueDate.getTime()) ? dueDate.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : 'No due date';
+    const phoneDigits = String(c.phone || '').replace(/[^0-9+]/g,'');
+    const smsUrl = phoneDigits ? `sms:${phoneDigits}` : '';
+    const waText = encodeURIComponent(`Hi ${c.name}, your outstanding balance with ${window.data.settings?.name || 'My Business'} is ${window.formatCurrency(balance)}. Thank you.`);
+    const waUrl = phoneDigits ? `https://wa.me/${phoneDigits.replace(/^\+/,'')}?text=${waText}` : `https://wa.me/?text=${waText}`;
     modal.innerHTML = `<div class="customer-detail-head">
         <button class="close-btn" onclick="closeModal()" aria-label="Close">&times;</button>
         <span class="customer-avatar customer-avatar-lg">${esc((c.name || '?').trim().charAt(0).toUpperCase())}</span>
         <h2>${esc(c.name)}</h2><p>${esc(c.phone || 'No phone number')}</p>
         <div class="customer-balance"><span>Current Due</span><strong class="${balance > 0 ? 'text-danger' : 'text-success'}">${window.formatCurrency(balance)}</strong></div>
+    </div>
+    <div class="customer-quick-actions">
+        <button class="customer-quick-action sms" ${smsUrl ? `onclick="window.location.href='${esc(smsUrl)}'"` : `onclick="showToast('Add a phone number first','info')"`}><span><i class="fas fa-comment-dots"></i></span><strong>SMS</strong><small>Message</small></button>
+        <button class="customer-quick-action whatsapp" onclick="window.open('${esc(waUrl)}','_blank')"><span><i class="fab fa-whatsapp"></i></span><strong>WhatsApp</strong><small>Reminder</small></button>
+        <button class="customer-quick-action date" onclick="openCustomerDueDateModal('${esc(c.id)}')"><span><i class="fas fa-calendar-alt"></i></span><strong>Set Date</strong><small>${esc(dueDateText)}</small></button>
+        <button class="customer-quick-action report" onclick="downloadCustomerStatementPdf('${esc(c.id)}')"><span><i class="fas fa-file-invoice"></i></span><strong>Report</strong><small>Statement</small></button>
     </div>
     <div class="ledger-heading"><div><h3>Transaction History</h3><p>All changes to this customer's balance</p></div></div>
     <div id="cust-ledger-container" class="customer-ledger-wrap"></div>
@@ -80,12 +94,32 @@ export function openCustomerDetails(customerId) {
         <button class="ledger-action give" onclick="openGiveModal('${esc(c.id)}')">${giveIcon}<span>Gave</span><small>Increase due</small></button>
         <button class="ledger-action receive" onclick="openReceiveModal('${esc(c.id)}')">${receiveIcon}<span>Received</span><small>Reduce due</small></button>
     </div>
-    <div class="customer-secondary-actions">
-        <button class="btn btn-secondary" onclick="downloadCustomerStatementPdf('${esc(c.id)}')">Download Statement</button>
-        ${balance > 0 ? `<button class="btn btn-light" onclick="sendPaymentReminder('${esc(c.id)}')">Send Payment Reminder</button>` : ''}
-    </div>`;
+    <div class="customer-detail-meta"><span><i class="fas fa-calendar-check"></i> Due date: <strong>${esc(dueDateText)}</strong></span><button class="btn btn-secondary customer-edit-btn" onclick="openCustomerModal('${esc(c.id)}')"><i class="fas fa-edit"></i> Edit</button></div>`;
     document.getElementById('modal-overlay').classList.remove('hidden');
     renderCustomerLedgerTable(customerId);
+}
+
+export function openCustomerDueDateModal(customerId) {
+    const c = window.data.customers.find(x => x.id === customerId); if (!c) return;
+    const modal = document.getElementById('modal-body');
+    modal.innerHTML = `<div class="modal-header"><h2>Set Due Date</h2><button class="close-btn" onclick="openCustomerDetails('${esc(c.id)}')">&times;</button></div>
+        <p class="modal-helper">Set a follow-up date for <strong>${esc(c.name)}</strong>.</p>
+        <div class="form-group"><label>Due / Follow-up Date</label><input type="date" id="customer-due-date" value="${esc(c.dueDate || '')}"></div>
+        <button class="btn" id="btn-customer-due-date" onclick="saveCustomerDueDate('${esc(c.id)}')">Save Date</button>`;
+    document.getElementById('modal-overlay').classList.remove('hidden');
+}
+
+export async function saveCustomerDueDate(customerId) {
+    const value = document.getElementById('customer-due-date')?.value || '';
+    if (!window.currentUserId) return alert('Please log in again.');
+    window.showLoading('btn-customer-due-date','Saving...');
+    try {
+        await window.updateDoc(window.doc(window.db,'customers',customerId), { dueDate:value, updatedAt:new Date().toISOString() });
+        const local = window.data.customers.find(x=>x.id===customerId); if (local) local.dueDate=value;
+        window.showToast(value ? 'Due date saved' : 'Due date cleared');
+        openCustomerDetails(customerId);
+    } catch (error) { alert(error.message || 'Failed to save due date.'); }
+    finally { window.hideLoading('btn-customer-due-date'); }
 }
 
 export function renderCustomerLedgerTable(customerId) {
@@ -221,4 +255,4 @@ export async function processReceive(customerId) {
     finally{window.hideLoading('btn-receive');}
 }
 
-window.openCustomerModal=openCustomerModal; window.saveCustomer=saveCustomer; window.openCustomerDetails=openCustomerDetails; window.renderCustomerLedgerTable=renderCustomerLedgerTable; window.downloadCustomerStatementPdf=downloadCustomerStatementPdf; window.sendPaymentReminder=sendPaymentReminder; window.openGiveModal=openGiveModal; window.processGive=processGive; window.openReceiveModal=openReceiveModal; window.processReceive=processReceive;
+window.openCustomerModal=openCustomerModal; window.saveCustomer=saveCustomer; window.openCustomerDueDateModal=openCustomerDueDateModal; window.saveCustomerDueDate=saveCustomerDueDate; window.openCustomerDetails=openCustomerDetails; window.renderCustomerLedgerTable=renderCustomerLedgerTable; window.downloadCustomerStatementPdf=downloadCustomerStatementPdf; window.sendPaymentReminder=sendPaymentReminder; window.openGiveModal=openGiveModal; window.processGive=processGive; window.openReceiveModal=openReceiveModal; window.processReceive=processReceive;
