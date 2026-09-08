@@ -560,7 +560,13 @@ onAuthStateChanged(auth, async user=>{
         setTimeout(()=>startOnboarding(),450); setTimeout(()=>checkDueReminders(),900);
     }catch(error){
         console.error('App initialization failed:',error);
-        const err=document.getElementById('login-error'); if(err)err.textContent='The app could not initialize. Please refresh.';
+        const err=document.getElementById('login-error');
+        if(err){
+            const friendly=error?.code==='permission-denied'
+                ? 'The app could not initialize: Firestore denied access. This usually means the security rules in this build have not been deployed to your Firebase project yet (run "firebase deploy --only firestore:rules"). Please refresh after deploying.'
+                : `The app could not initialize (${error?.code||error?.message||'unknown error'}). Please refresh.`;
+            err.textContent=friendly;
+        }
         setAuthVisibility(null);
     }
 });
