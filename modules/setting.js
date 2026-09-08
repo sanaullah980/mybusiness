@@ -43,7 +43,7 @@ export async function saveSettings() {
     const currency = document.getElementById('set-currency').value.trim() || 'Rs.';
     window.showLoading('btn-save-settings', 'Saving...');
     try {
-        await window.setDoc(window.doc(window.db, 'settings', window.currentUserId), { name, currency, theme: window.currentTheme || 'teal', darkMode: !!window.darkMode, ownerId: window.currentUserId }, { merge: true });
+        await setDoc(doc(window.db, 'settings', window.currentUserId), { name, currency, theme: window.currentTheme || 'teal', darkMode: !!window.darkMode, ownerId: window.currentUserId }, { merge: true });
         window.data.settings = { ...window.data.settings, name, currency };
         alert('Business settings saved.');
     } catch (error) {

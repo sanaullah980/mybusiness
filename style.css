@@ -1,9 +1,9 @@
 :root {
-  --primary: #1abc9c; --primary-dark: #16a085; --dark: #2c3e50;
-  --light: #f4f7f6; --white: #ffffff; --danger: #e74c3c;
-  --warning: #f39c12; --text: #333333; --gray: #7f8c8d;
-  --success: #27ae60; --success-dark: #219150;
-  --shadow: 0 2px 10px rgba(0,0,0,0.1);
+    --primary: #1abc9c; --primary-dark: #16a085; --dark: #2c3e50;
+    --light: #f4f7f6; --white: #ffffff; --danger: #e74c3c;
+    --warning: #f39c12; --text: #333333; --gray: #7f8c8d;
+    --success: #27ae60; --success-dark: #219150;
+    --shadow: 0 2px 10px rgba(0,0,0,0.1);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
@@ -216,22 +216,22 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .dark-mode .quick-action:hover,.dark-mode .customer-row:hover{box-shadow:0 10px 28px rgba(0,0,0,.25)}
 .hidden{display:none!important}
 @media(max-width:600px){
-#app-content{padding:12px 11px 18px}
-.app-header{position:sticky;top:0;z-index:30}
-.bottom-nav{z-index:40}
-.modal-content{max-height:90vh;overflow:auto}
+  #app-content{padding:12px 11px 18px}
+  .app-header{position:sticky;top:0;z-index:30}
+  .bottom-nav{z-index:40}
+  .modal-content{max-height:90vh;overflow:auto}
 }
 
 /* Startup recovery */
 .auth-retry-btn {
-  margin-top: 10px;
-  padding: 9px 18px;
-  border: 0;
-  border-radius: 10px;
-  font-weight: 700;
-  cursor: pointer;
-  background: var(--primary, #0f766e);
-  color: #fff;
+    margin-top: 10px;
+    padding: 9px 18px;
+    border: 0;
+    border-radius: 10px;
+    font-weight: 700;
+    cursor: pointer;
+    background: var(--primary, #0f766e);
+    color: #fff;
 }
 .auth-retry-btn:focus-visible { outline: 3px solid currentColor; outline-offset: 2px; }
 
@@ -262,8 +262,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 
 
 /* =========================================================
- MyBusiness 2.0 — app-wide visual consistency + keyboard UX
- ========================================================= */
+   MyBusiness 2.0 — app-wide visual consistency + keyboard UX
+   ========================================================= */
 .page-shell{min-height:calc(100vh - 90px);padding-top:2px}
 .page-shell > .card,.page-shell > .feature-hero,.page-shell > .stats-grid,.page-shell > .tabs{width:100%}
 .page-shell .card{border-radius:20px;border:1px solid var(--border);background:var(--surface);box-shadow:var(--shadow-soft)}
@@ -304,24 +304,24 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 
 /* Keep the focused field and its surrounding content visible above mobile keyboards. */
 @media(max-width:767px){
-body{overflow-x:hidden}
-#app-content{scroll-margin-top:76px}
-.page-shell .feature-hero{padding:17px;border-radius:20px}
-.page-shell .feature-hero h2{font-size:20px}
-.page-shell .card{padding:15px}
-.page-shell .form-row{gap:8px}
-.page-shell .form-row .form-group{min-width:0}
-.modal-overlay{padding:7px 7px max(7px,env(safe-area-inset-bottom))}
-.modal-content{max-height:calc(100dvh - 14px);padding:17px;border-radius:22px}
-.product-selection-modal{height:calc(100dvh - 14px);max-height:calc(100dvh - 14px)!important}
-.product-selection-modal .modal-header h2{font-size:18px}
-.product-selection-modal #product-selection-list{padding-bottom:14px}
-.product-selection-modal .form-group input{min-height:48px}
+  body{overflow-x:hidden}
+  #app-content{scroll-margin-top:76px}
+  .page-shell .feature-hero{padding:17px;border-radius:20px}
+  .page-shell .feature-hero h2{font-size:20px}
+  .page-shell .card{padding:15px}
+  .page-shell .form-row{gap:8px}
+  .page-shell .form-row .form-group{min-width:0}
+  .modal-overlay{padding:7px 7px max(7px,env(safe-area-inset-bottom))}
+  .modal-content{max-height:calc(100dvh - 14px);padding:17px;border-radius:22px}
+  .product-selection-modal{height:calc(100dvh - 14px);max-height:calc(100dvh - 14px)!important}
+  .product-selection-modal .modal-header h2{font-size:18px}
+  .product-selection-modal #product-selection-list{padding-bottom:14px}
+  .product-selection-modal .form-group input{min-height:48px}
 }
 @media(min-width:768px){
-.modal-overlay{align-items:center;padding:20px}
-.modal-content{max-height:86vh}
-.product-selection-modal{max-height:86vh!important;height:auto}
+  .modal-overlay{align-items:center;padding:20px}
+  .modal-content{max-height:86vh}
+  .product-selection-modal{max-height:86vh!important;height:auto}
 }
 
 /* Consistent screen section rhythm and motion. */
@@ -351,9 +351,9 @@ body{overflow-x:hidden}
 .product-picker-footer{flex:0 0 auto;padding-top:9px;background:var(--surface);box-shadow:0 -10px 22px color-mix(in srgb,var(--surface) 88%,transparent);z-index:5}
 .product-picker-footer .btn{width:100%;min-height:48px}
 @media(max-width:767px){
-.product-selection-modal{height:calc(100dvh - 14px)!important;max-height:calc(100dvh - 14px)!important}
-.product-selection-modal .modal-header{padding-top:2px}
-.product-selection-list{padding-bottom:18px!important}
+  .product-selection-modal{height:calc(100dvh - 14px)!important;max-height:calc(100dvh - 14px)!important}
+  .product-selection-modal .modal-header{padding-top:2px}
+  .product-selection-list{padding-bottom:18px!important}
 }
 
 /* Reports: lightweight mobile-friendly ranking visual without external chart libraries. */
@@ -366,105 +366,3 @@ body{overflow-x:hidden}
 .report-rank-track{height:7px;margin:8px 0;border-radius:999px;background:var(--surface-2);overflow:hidden}
 .report-rank-track span{display:block;height:100%;border-radius:inherit;background:var(--primary);transition:width .35s ease}
 .report-rank-foot strong{font-size:12px;color:var(--primary)}
-
-/* =========================================================
- LEGACY APPEARANCE COMPATIBILITY
- Keeps the newer functionality/markup while restoring the
- classic MyBusiness visual language from the previous build.
- ========================================================= */
-
-/* New dashboard markup -> classic cards/layout */
-.dashboard-premium{background:transparent!important;padding:0!important}
-.dash-business-hero{background:transparent!important;border:0!important;box-shadow:none!important;padding:4px 2px 13px!important;border-radius:0!important}
-.dash-hero-top{display:flex!important;justify-content:space-between!important;align-items:center!important}
-.dash-brand-row{display:flex!important;align-items:center!important;gap:10px!important}
-.dash-avatar{width:42px!important;height:42px!important;border-radius:12px!important;background:var(--primary)!important;color:#fff!important;display:grid!important;place-items:center!important;font-weight:800!important}
-.dash-business-copy h1{font-size:22px!important;margin:3px 0!important;color:var(--text)!important}
-.dash-business-copy p{font-size:11px!important;color:var(--gray)!important}
-.dash-kicker{font-size:9px!important;color:var(--gray)!important;letter-spacing:1px!important;font-weight:700!important}
-.dash-menu-btn{width:42px!important;height:42px!important;border-radius:14px!important;border:1px solid var(--border)!important;background:var(--surface)!important;color:var(--primary)!important;box-shadow:var(--shadow-soft)!important}
-.dash-greeting{display:none!important}
-
-.dash-section{margin-bottom:15px!important}
-.dash-section-heading{display:flex!important;justify-content:space-between!important;align-items:center!important;margin:0 2px 9px!important}
-.dash-section-heading span{font-size:9px!important;color:var(--gray)!important;letter-spacing:.8px!important;font-weight:700!important}
-.dash-section-heading h2{font-size:16px!important;color:var(--text)!important;margin:2px 0 0!important}
-.dash-section-heading>i{color:var(--primary)!important}
-.dash-section-heading button{border:0!important;background:none!important;color:var(--primary)!important;font-size:12px!important;font-weight:700!important}
-
-.dash-hero-grid{display:grid!important;grid-template-columns:1fr 1fr!important;gap:15px!important}
-.dash-performance-card{background:var(--white)!important;border:0!important;border-radius:12px!important;box-shadow:var(--shadow)!important;padding:20px!important;text-align:left!important;color:var(--text)!important}
-.dash-performance-card.sales,.dash-performance-card.profit{background:var(--white)!important}
-.dash-card-icon{display:none!important}
-.dash-card-label{color:var(--gray)!important;font-size:14px!important;text-transform:uppercase!important;letter-spacing:.5px!important;margin-bottom:8px!important}
-.dash-performance-card.sales .dash-card-value{color:var(--primary)!important}
-.dash-performance-card.profit .dash-card-value{color:var(--primary)!important}
-.dash-card-value{font-size:28px!important;font-weight:bold!important}
-.dash-trend{font-size:10px!important;margin-top:6px!important;display:inline-block!important}
-.dash-trend.up{color:var(--success)!important}.dash-trend.down{color:var(--danger)!important}.dash-trend.neutral{color:var(--gray)!important}
-
-.dash-money-grid{display:grid!important;grid-template-columns:1fr 1fr!important;gap:15px!important;margin-bottom:15px!important}
-.dash-money-card{background:var(--white)!important;border-radius:12px!important;box-shadow:var(--shadow)!important;border:0!important;padding:15px!important;display:flex!important;align-items:center!important;gap:10px!important}
-.dash-money-card:nth-child(3){grid-column:1/-1}
-.dash-money-icon{width:34px!important;height:34px!important;border-radius:10px!important;background:color-mix(in srgb,var(--primary) 10%,transparent)!important;color:var(--primary)!important;display:grid!important;place-items:center!important}
-.dash-money-card span{display:block!important;color:var(--gray)!important;font-size:11px!important}
-.dash-money-card strong{display:block!important;color:var(--text)!important;font-size:18px!important;margin-top:2px!important}
-.dash-card-arrow{display:none!important}
-
-.dash-quick-grid{display:grid!important;grid-template-columns:repeat(2,1fr)!important;gap:9px!important}
-.dash-quick-grid button{border:1px solid var(--border)!important;background:var(--surface)!important;color:var(--text)!important;border-radius:18px!important;padding:13px!important;text-align:left!important;box-shadow:var(--shadow-soft)!important}
-.qa-icon{width:34px!important;height:34px!important;display:grid!important;place-items:center!important;border-radius:11px!important;background:color-mix(in srgb,var(--primary) 11%,transparent)!important;color:var(--primary)!important;margin-bottom:8px!important}
-.dash-quick-grid strong{display:block!important;font-size:13px!important}
-.dash-quick-grid small{display:block!important;color:var(--gray)!important;font-size:9px!important;margin-top:3px!important}
-
-.dash-overview-grid{display:grid!important;grid-template-columns:1fr 1fr!important;gap:15px!important}
-.dash-overview-card{background:var(--white)!important;padding:15px!important;border-radius:12px!important;box-shadow:var(--shadow)!important}
-.dash-overview-card span{display:block!important;color:var(--gray)!important;font-size:12px!important}
-.dash-overview-card strong{display:block!important;font-size:20px!important;color:var(--text)!important;margin:6px 0!important}
-.dash-overview-card small{color:var(--gray)!important;font-size:10px!important}
-
-.dash-alert-card,.dash-success-card{background:var(--white)!important;border-radius:12px!important;box-shadow:var(--shadow)!important;padding:15px!important;margin-bottom:15px!important;border-left:4px solid var(--warning)!important}
-.dash-alert-head{display:flex!important;justify-content:space-between!important;align-items:center!important}
-.dash-alert-title{display:flex!important;align-items:center!important;gap:9px!important}
-.dash-alert-icon{width:34px!important;height:34px!important;border-radius:10px!important;background:#fff3e0!important;color:var(--warning)!important;display:grid!important;place-items:center!important}
-.dash-alert-title span:not(.dash-alert-icon){font-size:9px!important;color:var(--gray)!important;letter-spacing:.6px!important}
-.dash-alert-title h2{font-size:15px!important;color:var(--warning)!important;margin-top:2px!important}
-.dash-alert-head button{border:0!important;background:none!important;color:var(--primary)!important;font-size:11px!important}
-.dash-alert-summary{font-size:12px!important;color:var(--gray)!important;margin:10px 0!important}
-.dash-stock-list{display:block!important}
-.dash-stock-row{width:100%!important;display:flex!important;align-items:center!important;gap:9px!important;padding:10px 0!important;background:none!important;border:0!important;border-bottom:1px solid var(--border)!important;text-align:left!important}
-.dash-stock-row:last-child{border-bottom:0!important}
-.dash-stock-box{width:32px!important;height:32px!important;border-radius:9px!important;background:color-mix(in srgb,var(--primary) 10%,transparent)!important;color:var(--primary)!important;display:grid!important;place-items:center!important}
-.dash-stock-name{flex:1!important}.dash-stock-name strong{display:block!important;font-size:12px!important;color:var(--text)!important}.dash-stock-name small{display:block!important;color:var(--gray)!important;font-size:10px!important;margin-top:2px!important}
-.dash-stock-count{font-size:11px!important;font-weight:700!important;color:var(--warning)!important}.dash-stock-count.out{color:var(--danger)!important}
-.dash-stock-row>i{color:var(--gray)!important;font-size:10px!important}
-.dash-success-card{border-left-color:var(--success)!important;display:flex!important;gap:10px!important;align-items:center!important}
-.dash-success-card>span{width:34px!important;height:34px!important;border-radius:10px!important;background:#e8f5e9!important;color:var(--success)!important;display:grid!important;place-items:center!important}
-.dash-success-card strong,.dash-success-card small{display:block!important}.dash-success-card small{font-size:10px!important;color:var(--gray)!important;margin-top:2px!important}
-
-.dash-activity-card{background:var(--white)!important;border-radius:12px!important;box-shadow:var(--shadow)!important;padding:0 15px!important}
-.dash-activity-row{width:100%!important;display:flex!important;align-items:center!important;gap:10px!important;padding:13px 0!important;background:none!important;border:0!important;border-bottom:1px solid #eee!important;text-align:left!important}
-.dash-activity-row:last-child{border-bottom:0!important}
-.activity-icon{width:34px!important;height:34px!important;border-radius:10px!important;display:grid!important;place-items:center!important;background:color-mix(in srgb,var(--primary) 10%,transparent)!important;color:var(--primary)!important;flex:none!important}
-.activity-copy{flex:1!important;min-width:0!important}.activity-copy strong{display:block!important;font-size:12px!important;color:var(--text)!important}.activity-copy small{display:block!important;font-size:10px!important;color:var(--gray)!important;margin-top:2px!important}
-.activity-amount{font-size:12px!important;font-weight:700!important}.activity-amount.positive{color:var(--success)!important}.activity-amount.negative{color:var(--danger)!important}
-.dash-empty{text-align:center!important;padding:20px 10px!important;color:var(--gray)!important}.dash-empty i{display:block!important;font-size:24px!important;margin-bottom:7px!important}.dash-empty strong,.dash-empty span{display:block!important}.dash-empty strong{color:var(--text)!important;font-size:13px!important}.dash-empty span{font-size:10px!important;margin-top:3px!important}
-.dash-reports-btn{width:100%!important;display:flex!important;align-items:center!important;gap:10px!important;background:var(--primary)!important;color:#fff!important;border:0!important;border-radius:8px!important;padding:12px!important;font-weight:bold!important;margin-bottom:20px!important}
-.dash-reports-btn>span{font-size:18px!important}.dash-reports-btn div{flex:1!important;text-align:left!important}.dash-reports-btn strong,.dash-reports-btn small{display:block!important}.dash-reports-btn small{font-size:10px!important;opacity:.85!important;margin-top:2px!important}
-.dash-reports-btn>i{font-size:12px!important}
-
-/* New customer quick actions -> same compact legacy button treatment */
-.customer-quick-actions{display:grid!important;grid-template-columns:repeat(4,1fr)!important;gap:7px!important;margin:10px 0 14px!important}
-.customer-quick-action{border:1px solid var(--border)!important;background:var(--surface)!important;color:var(--text)!important;border-radius:12px!important;padding:9px 5px!important;box-shadow:var(--shadow-soft)!important}
-.customer-quick-action .qa-icon{width:28px!important;height:28px!important;margin:0 auto 5px!important}
-.customer-quick-action strong{display:block!important;font-size:10px!important}
-.customer-detail-meta{font-size:11px!important;color:var(--gray)!important}
-.customer-edit-btn{border:1px solid var(--border)!important;background:var(--surface)!important;color:var(--primary)!important;border-radius:8px!important}
-.modal-helper{font-size:12px!important;color:var(--gray)!important}
-
-/* Desktop: retain the old spacious grid behavior */
-@media(min-width:700px){
-.dash-quick-grid{grid-template-columns:repeat(4,1fr)!important}
-.customer-quick-actions{grid-template-columns:repeat(4,1fr)!important}
-}
-

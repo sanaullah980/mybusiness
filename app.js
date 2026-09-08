@@ -87,22 +87,6 @@ function translateVisibleText(){
 
 function setLanguage(lang){ currentLanguage=lang==='ur'?'ur':'en'; localStorage.setItem('mybusiness-language',currentLanguage); document.documentElement.lang=currentLanguage; document.documentElement.dir=currentLanguage==='ur'?'rtl':'ltr'; applyLanguageToShell(); if(currentUserId) setDoc(doc(db,'settings',currentUserId),{language:currentLanguage,ownerId:currentUserId},{merge:true}).catch(()=>{}); if(typeof window.refreshCurrentPage==='function') window.refreshCurrentPage(); setTimeout(translateVisibleText,40); }
 function applyLanguageToShell(){ document.querySelectorAll('[data-i18n]').forEach(el=>{const k=el.dataset.i18n;if(k)el.textContent=tr(k);}); const ct=document.getElementById('connection-text'); if(ct && !syncPending) ct.textContent=navigator.onLine?tr('online'):tr('offline'); const ls=document.getElementById('last-sync-text'); if(ls) ls.textContent=formatLastSync(); document.getElementById('install-title')?.replaceChildren(document.createTextNode(tr('install'))); document.getElementById('install-subtitle')?.replaceChildren(document.createTextNode(tr('installSub'))); }
-function openDashboardMenu(){
-    const modal=document.getElementById('modal-body');
-    modal.innerHTML=`<div class="modal-header"><h2>Menu</h2><button class="close-btn" onclick="closeModal()" aria-label="Close">&times;</button></div>
-    <div class="dashboard-menu-grid">
-      <button onclick="closeModal();navigate('settings')"><span><i class="fas fa-cog"></i></span><strong>Settings</strong><small>Business & preferences</small></button>
-      <button onclick="closeModal();openChangePasswordModal()"><span><i class="fas fa-key"></i></span><strong>Change Password</strong><small>Update account password</small></button>
-      <button onclick="closeModal();navigate('settings')"><span><i class="fas fa-palette"></i></span><strong>Change Color</strong><small>Theme & appearance</small></button>
-      <button onclick="closeModal();navigate('businessCard')"><span><i class="fas fa-id-card"></i></span><strong>Business Card</strong><small>Share your business</small></button>
-      <button onclick="closeModal();navigate('backup')"><span><i class="fas fa-cloud-download-alt"></i></span><strong>Backup & Restore</strong><small>Protect your records</small></button>
-      <button onclick="closeModal();navigate('appLock')"><span><i class="fas fa-lock"></i></span><strong>App Lock</strong><small>PIN protection</small></button>
-      <button class="danger" onclick="openDeleteRecordsModal()"><span><i class="fas fa-trash-alt"></i></span><strong>Delete Records</strong><small>Remove business data</small></button>
-      <button class="danger" onclick="closeModal();handleLogout()"><span><i class="fas fa-sign-out-alt"></i></span><strong>Logout</strong><small>Sign out of MyBusiness</small></button>
-    </div>`;
-    document.getElementById('modal-overlay').classList.remove('hidden');
-}
-
 function openLanguagePicker(){ const m=document.getElementById('modal-body'); m.innerHTML=`<div class="modal-header"><h2>${tr('chooseLanguage')}</h2><button class="close-btn" onclick="closeModal()">&times;</button></div><div class="language-options"><button class="language-choice ${currentLanguage==='en'?'active':''}" onclick="setLanguage('en');closeModal()"><span>🇬🇧</span><strong>English</strong></button><button class="language-choice ${currentLanguage==='ur'?'active':''}" onclick="setLanguage('ur');closeModal()"><span>🇵🇰</span><strong>اردو</strong></button></div>`; document.getElementById('modal-overlay').classList.remove('hidden'); }
 function saveLastSync(){ localStorage.setItem(LAST_SYNC_KEY,Date.now().toString()); const el=document.getElementById('last-sync-text'); if(el)el.textContent=formatLastSync(); }
 function formatLastSync(){ const t=Number(localStorage.getItem(LAST_SYNC_KEY)||0); if(!t)return tr('notSynced'); const diff=Math.max(0,Date.now()-t); if(diff<60000)return tr('justNow'); const min=Math.floor(diff/60000); if(min<60)return currentLanguage==='ur'?`${min} منٹ پہلے`:`${min} min ago`; const hr=Math.floor(min/60); if(hr<24)return currentLanguage==='ur'?`${hr} گھنٹے پہلے`:`${hr} hr ago`; return new Date(t).toLocaleDateString(currentLanguage==='ur'?'ur-PK':'en-PK'); }
@@ -173,8 +157,6 @@ Object.assign(window,{formatCurrency,getStartOfDay,getEndOfDay,getStartOfMonth,g
 
 // Lightweight in-app feedback and refresh helpers. These avoid forcing users to
 // leave the current page just to refresh cached data or see a success message.
-window.openDashboardMenu=openDashboardMenu;
-
 window.showToast=(message,type='success')=>{
     let toast=document.getElementById('mybiz-toast');
     if(!toast){toast=document.createElement('div');toast.id='mybiz-toast';toast.className='mybiz-toast';document.body.appendChild(toast);}
