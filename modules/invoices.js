@@ -34,7 +34,7 @@ function buildInvoiceLines(sale) {
     if (sale.items && sale.items.length > 0 && sale.saleType !== 'bulk') {
         return sale.items.map(item => `${item.name}  x${item.qty}  @ ${formatCurrency(item.price)}  =  ${formatCurrency(item.price * item.qty)}`);
     }
-    return [`${sale.note || sale.saleType === 'bulk' ? 'Bulk / Quick Sale' : 'Sale'}  =  ${formatCurrency(sale.total)}`];
+    return [`${sale.note || (sale.saleType === 'bulk' ? 'Bulk / Quick Sale' : 'Sale')}  =  ${formatCurrency(sale.total)}`];
 }
 
 export async function openInvoiceModal(saleId) {

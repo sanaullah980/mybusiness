@@ -72,7 +72,12 @@ export function renderReports(container) {
     const getStartOfDay = window.getStartOfDay; const getEndOfDay = window.getEndOfDay;
     const getStartOfMonth = window.getStartOfMonth; const getEndOfMonth = window.getEndOfMonth;
     let startDate, endDate;
-    if (window.activeReportTab === 'daily') { startDate = getStartOfDay(new Date()); endDate = getEndOfDay(new Date()); }
+    if (window.activeReportTab === 'daily') {
+        const dayStart = getStartOfDay(new Date());
+        const customStart = data.settings?.businessDayStart ? new Date(data.settings.businessDayStart) : null;
+        startDate = (customStart && !isNaN(customStart) && customStart > dayStart && customStart <= new Date()) ? customStart : dayStart;
+        endDate = getEndOfDay(new Date());
+    }
     else if (window.activeReportTab === 'monthly') { startDate = getStartOfMonth(window.currentReportMonth); endDate = getEndOfMonth(window.currentReportMonth); }
     else if (window.activeReportTab === 'custom') {
         const fromVal = document.getElementById('report-custom-from')?.value || window.getLocalDateStr(new Date());

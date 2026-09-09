@@ -17,7 +17,7 @@ import { renderCashBook, buildCashBookEntries, openSetOpeningBalanceModal, saveO
 import { openGlobalSearchModal, runGlobalSearch } from './modules/search.js';
 import { openInvoiceModal, downloadInvoicePdf, printInvoice, shareInvoiceWhatsApp } from './modules/invoices.js';
 import { openReturnModal, processReturn } from './modules/returns.js';
-import { renderStaff, openStaffModal, saveStaff, deleteStaff, openAttendanceModal, saveAttendance } from './modules/staff.js';
+import { renderStaff, openStaffModal, saveStaff, deleteStaff, openAttendanceModal, onAttendanceDateChange, saveAttendance } from './modules/staff.js';
 import { renderReminders, openReminderModal, saveReminder, completeReminder, deleteReminder } from './modules/reminders.js';
 import { renderBusinessCard, saveBusinessCard, shareBusinessCard } from './modules/business.js';
 import { renderBackup, exportBusinessBackup, importBusinessBackup } from './modules/backup.js';
@@ -517,7 +517,7 @@ Object.assign(window,{
     renderSuppliers,openSupplierModal,saveSupplier,deleteSupplier,openSupplierDetails,openSupplierPayModal,processSupplierPayment,openSupplierDebtModal,processSupplierDebt,
     renderCashBook,buildCashBookEntries,openSetOpeningBalanceModal,saveOpeningBalance,openCashEntryModal,saveCashEntry,openGlobalSearchModal,runGlobalSearch,addProductByBarcode,startBarcodeScanner,
     openInvoiceModal,downloadInvoicePdf,printInvoice,shareInvoiceWhatsApp,openReturnModal,processReturn,
-    renderStaff,openStaffModal,saveStaff,deleteStaff,openAttendanceModal,saveAttendance,renderReminders,openReminderModal,saveReminder,completeReminder,deleteReminder,
+    renderStaff,openStaffModal,saveStaff,deleteStaff,openAttendanceModal,onAttendanceDateChange,saveAttendance,renderReminders,openReminderModal,saveReminder,completeReminder,deleteReminder,
     renderBusinessCard,saveBusinessCard,shareBusinessCard,renderBackup,exportBusinessBackup,importBusinessBackup,renderAppLock,saveAppLock,removeAppLock,checkAppLock,renderTeam,createEmployeeInvite,cancelEmployeeInvite,toggleEmployeeActive,deleteEmployee,
     openDashboardMenu,closeDashboardMenu,navigateFromDashboardMenu,openPasswordFromDashboardMenu,openDeleteFromDashboardMenu,logoutFromDashboardMenu,deleteMyAccount
 });

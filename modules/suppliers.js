@@ -102,6 +102,7 @@ export function openSupplierDetails(supplierId) {
 
 export function openSupplierPayModal(supplierId) {
     const s = (window.data.suppliers || []).find(x => x.id === supplierId);
+    const esc = window.esc;
     const modal = document.getElementById('modal-body');
     modal.innerHTML = `<div class="modal-header"><h2>Pay ${esc(s.name)}</h2><button class="close-btn" onclick="openSupplierDetails('${s.id}')">&times;</button></div><p style="margin-bottom:15px;">Current Payable: <strong>${window.formatCurrency(s.balance || 0)}</strong></p><div class="form-group"><label>Amount (Rs.) *</label><input type="number" id="sup-pay-amount" min="1" max="${s.balance || 0}"></div><div class="form-group"><label>Note (Optional)</label><input type="text" id="sup-pay-note" placeholder="e.g., Cash paid"></div><button class="btn" id="btn-sup-pay" style="background:var(--success);" onclick="processSupplierPayment('${s.id}')">Confirm Payment</button>`;
     document.getElementById('modal-overlay').classList.remove('hidden');
@@ -140,6 +141,7 @@ export async function processSupplierPayment(supplierId) {
 
 export function openSupplierDebtModal(supplierId) {
     const s = (window.data.suppliers || []).find(x => x.id === supplierId);
+    const esc = window.esc;
     const modal = document.getElementById('modal-body');
     modal.innerHTML = `<div class="modal-header"><h2>Credit Purchase from ${esc(s.name)}</h2><button class="close-btn" onclick="openSupplierDetails('${s.id}')">&times;</button></div><p style="margin-bottom:15px; font-size:13px; color:var(--gray);">Use this for a manual balance adjustment. For actual stock purchases, use Stock Purchases so inventory updates too.</p><div class="form-group"><label>Amount (Rs.) *</label><input type="number" id="sup-debt-amount" min="1"></div><div class="form-group"><label>Note (Optional)</label><input type="text" id="sup-debt-note"></div><button class="btn" id="btn-sup-debt" style="background:var(--danger);" onclick="processSupplierDebt('${s.id}')">Confirm</button>`;
     document.getElementById('modal-overlay').classList.remove('hidden');
