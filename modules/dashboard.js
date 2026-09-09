@@ -33,6 +33,38 @@ export function renderDashboard(container) {
     const recentActivity = activity.slice(0, 8);
 
     const businessName = data.settings?.name || 'MyBusiness';
+
+    // Employee mode is intentionally a different dashboard, not an Admin
+    // dashboard with disabled controls. Only allowed business actions are shown.
+    if (window.currentRole === 'employee') {
+        const can = key => window.hasPermission ? window.hasPermission(key) : (window.currentPermissions?.[key] === true);
+        const employeeSales = (data.sales || []).filter(s => !s.createdBy || s.createdBy === window.authUserId);
+        const todaySales = employeeSales.filter(s => { const d=new Date(s.date); return d>=startOfDay && d<=endOfDay; })
+            .reduce((sum,s)=>sum+Number(s.total||0),0);
+        const employeeTiles = [
+            can('sales') ? `<button class="action-tile" onclick="navigate('sales')"><span class="tile-icon tile-1"><i class="fas fa-cash-register"></i></span><span>Sales</span></button>` : '',
+            can('customers') ? `<button class="action-tile" onclick="navigate('customers')"><span class="tile-icon tile-2"><i class="fas fa-user-friends"></i></span><span>Customers</span></button>` : '',
+            can('payments') ? `<button class="action-tile" onclick="navigate('customers')"><span class="tile-icon tile-4"><i class="fas fa-hand-holding-usd"></i></span><span>Receive Payment</span></button>` : '',
+            `<button class="action-tile" onclick="navigate('inventory')"><span class="tile-icon tile-3"><i class="fas fa-box-open"></i></span><span>Products</span></button>`,
+            can('suppliers') ? `<button class="action-tile" onclick="navigate('suppliers')"><span class="tile-icon tile-6"><i class="fas fa-truck"></i></span><span>Suppliers</span></button>` : '',
+            `<button class="action-tile" onclick="navigate('more')"><span class="tile-icon tile-8"><i class="fas fa-user-circle"></i></span><span>More</span></button>`
+        ].filter(Boolean).join('');
+        container.innerHTML = `
+            <div class="home-hero employee-home-hero">
+                <div class="home-hero-top">
+                    <div><span class="eyebrow">EMPLOYEE WORKSPACE</span><h2>${window.currentMemberName || 'Employee'}</h2><p>${businessName} • ${new Date().toLocaleDateString('en-PK',{weekday:'long',day:'numeric',month:'short'})}</p></div>
+                </div>
+                <div class="home-hero-balance home-hero-split">
+                    <div class="hero-visual-metric"><div class="hero-orbit"><i class="fas fa-briefcase"></i></div><span>My activity</span><small>${employeeSales.length} sale${employeeSales.length===1?'':'s'} recorded</small></div>
+                    <div class="hero-sales-metric"><span>My Sales Today</span><strong>${formatCurrency(todaySales)}</strong><em>Only your permitted business actions are shown</em></div>
+                </div>
+            </div>
+            <div class="card action-grid-card"><div class="action-grid employee-action-grid">${employeeTiles}</div></div>
+            <div class="card"><h3>My Recent Sales</h3>${employeeSales.length===0?'<p style="color:var(--gray);text-align:center;padding:10px;">No sales yet.</p>':employeeSales.sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,6).map(s=>`<div class="list-item" onclick="viewSaleDetail('${s.id}')"><div class="list-item-info"><h4>${s.customerName||'Walk-in'} <span class="badge ${s.saleType==='retail'?'badge-ok':'badge-unknown'}">${s.saleType==='retail'?'Retail':'Wholesale'}</span></h4><p>${new Date(s.date).toLocaleString()}</p></div><div style="font-weight:bold;color:var(--primary);">${formatCurrency(s.total)}</div></div>`).join('')}</div>
+        `;
+        return;
+    }
+
     container.innerHTML = `
         <div class="home-hero">
             <div class="home-hero-top">

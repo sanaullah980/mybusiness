@@ -55,6 +55,7 @@ let currentUserId = null; // business owner UID used by existing data documents
 let authUserId = null; // actual Firebase Authentication UID
 let currentRole = null;
 let currentPermissions = {};
+let currentMemberName = '';
 let isLoginMode = true;
 let data = Object.fromEntries(COLLECTIONS.map(name => [name, []]));
 data.settings = {};
@@ -114,7 +115,7 @@ function checkDueReminders(){ if(!('Notification' in window)||Notification.permi
 Object.assign(window,{esc,tr,setLanguage,openLanguagePicker,installPWA,dismissInstallPrompt,startOnboarding,nextOnboarding,skipOnboarding,requestReminderNotifications,checkDueReminders,formatLastSync});
 
 
-Object.assign(window, { data, cart, db, auth, storage, activeReportTab, currentReportMonth, currentUserId: null, authUserId: null, currentRole: null, currentPermissions: {} });
+Object.assign(window, { data, cart, db, auth, storage, activeReportTab, currentReportMonth, currentUserId: null, authUserId: null, currentRole: null, currentPermissions: {}, currentMemberName: '' });
 window.doc = doc; window.collection = collection; window.updateDoc = updateDoc; window.addDoc = addDoc;
 window.runTransaction = runTransaction; window.deleteDoc = deleteDoc; window.setDoc = setDoc;
 window.query = query; window.where = where; window.getDocs = getDocs; window.getDoc = getDoc; window.writeBatch = writeBatch;
@@ -569,7 +570,7 @@ applyLanguageToShell();
 onAuthStateChanged(auth, async user=>{
     authResolved=true;
     if(!user){
-        clearListeners(); currentUserId=null; authUserId=null; currentRole=null; currentPermissions={}; window.currentUserId=null; window.authUserId=null; window.currentRole=null; window.currentPermissions={}; resetData(); setAuthVisibility(null); updateConnectionIndicator(); return;
+        clearListeners(); currentUserId=null; authUserId=null; currentRole=null; currentPermissions={}; currentMemberName=''; window.currentUserId=null; window.authUserId=null; window.currentRole=null; window.currentPermissions={}; window.currentMemberName=''; resetData(); setAuthVisibility(null); updateConnectionIndicator(); return;
     }
     authUserId=user.uid; window.authUserId=user.uid;
     // Resolve the role once. Existing accounts stay compatible; new username/Google
@@ -612,8 +613,8 @@ onAuthStateChanged(auth, async user=>{
         }
         const member=memberSnap.data();
         if(member.active===false){ await signOut(auth); throw new Error('Your access to this business has been disabled.'); }
-        currentRole=member.role||'employee'; currentPermissions=member.permissions||{}; currentUserId=member.ownerId;
-        window.currentRole=currentRole; window.currentPermissions=currentPermissions; window.currentUserId=currentUserId;
+        currentRole=member.role||'employee'; currentPermissions=member.permissions||{}; currentMemberName=member.displayName||member.username||user.displayName||'User'; currentUserId=member.ownerId;
+        window.currentRole=currentRole; window.currentPermissions=currentPermissions; window.currentMemberName=currentMemberName; window.currentUserId=currentUserId;
         document.body.dataset.role=currentRole;
         startDataListeners(currentUserId);
         applyStoredOrCloudTheme();
