@@ -3,16 +3,16 @@
 // (a returned item's revenue/profit shouldn't still count as a sale).
 export function calculateReportData(startDate, endDate) {
     const data = window.data;
-    let totalSales = 0, knownProfit = 0, unknownCount = 0, txCount = 0;
+    let totalSales = 0, knownProfit = 0, wholesaleProfit = 0, retailProfit = 0, unknownCount = 0, txCount = 0;
     let totalExpenses = 0, totalStockPurchases = 0, customerPayments = 0, newDebt = 0, returnedAmount = 0;
-    data.sales.forEach(s => { const d = new Date(s.date); if (d >= startDate && d <= endDate) { totalSales += (s.total || 0); if (s.profitKnown) knownProfit += (s.totalProfit || 0); else unknownCount++; txCount++; } });
+    data.sales.forEach(s => { const d = new Date(s.date); if (d >= startDate && d <= endDate) { totalSales += (s.total || 0); if (s.profitKnown) { knownProfit += (s.totalProfit || 0); const type=s.saleType==='retail'?'retail':'wholesale'; if(type==='retail') retailProfit += (s.totalProfit || 0); else wholesaleProfit += (s.totalProfit || 0); } else unknownCount++; txCount++; } });
     (data.salesReturns || []).forEach(r => { const d = new Date(r.date); if (d >= startDate && d <= endDate) { returnedAmount += (r.refundAmount || 0); } });
     data.expenses.forEach(e => { const d = new Date(e.date); if (d >= startDate && d <= endDate) totalExpenses += (e.amount || 0); });
     data.stockPurchases.forEach(p => { const d = new Date(p.date); if (d >= startDate && d <= endDate) totalStockPurchases += (p.amount || 0); });
     data.customerTransactions.forEach(t => { const d = new Date(t.date); if (d >= startDate && d <= endDate) { if (t.type === 'payment') customerPayments += (t.amount || 0); else if (t.type === 'sale_debt' || t.type === 'manual_debt') newDebt += (t.amount || 0); } });
     const netProfit = knownProfit - totalExpenses;
     const outstandingDebt = data.customers.reduce((sum, c) => sum + (c.balance || 0), 0);
-    return { totalSales, knownProfit, unknownCount, totalExpenses, netProfit, totalStockPurchases, customerPayments, newDebt, outstandingDebt, txCount, returnedAmount };
+    return { totalSales, knownProfit, wholesaleProfit, retailProfit, unknownCount, totalExpenses, netProfit, totalStockPurchases, customerPayments, newDebt, outstandingDebt, txCount, returnedAmount };
 }
 
 // Everything beyond the core dashboard numbers lives here so the Dashboard's
@@ -53,7 +53,7 @@ function calculateAdvancedReportData(startDate, endDate) {
     const productStats = {};
     (data.sales || []).forEach(s => {
         const d = new Date(s.date);
-        if (d >= startDate && d <= endDate && s.saleType === 'normal' && s.items) {
+        if (d >= startDate && d <= endDate && (s.saleType === 'normal' || s.saleType === 'wholesale' || s.saleType === 'retail') && s.items) {
             s.items.forEach(item => {
                 const key = item.id || item.name;
                 if (!productStats[key]) productStats[key] = { name: item.name, qty: 0, revenue: 0 };
@@ -105,7 +105,7 @@ export function renderReports(container) {
         <h3 style="margin:10px 0;">Sales &amp; Profit</h3>
         <div class="dashboard-grid">
             <div class="card profit"><h3>Total Sales</h3><div class="value">${formatCurrency(stats.totalSales)}</div></div>
-            <div class="card profit"><h3>Known Profit</h3><div class="value">${formatCurrency(stats.knownProfit)}</div></div>
+            <div class="card profit"><h3>Wholesale Profit</h3><div class="value">${formatCurrency(stats.wholesaleProfit)}</div></div><div class="card profit"><h3>Retail Profit</h3><div class="value">${formatCurrency(stats.retailProfit)}</div></div><div class="card profit"><h3>Total Known Profit</h3><div class="value">${formatCurrency(stats.knownProfit)}</div></div>
             <div class="card"><h3>Transactions</h3><div class="value">${stats.txCount}</div></div>
             <div class="card"><h3>Unknown Profit Txns</h3><div class="value" style="color:var(--warning);">${stats.unknownCount}</div></div>
             <div class="card debt"><h3>Expenses</h3><div class="value">${formatCurrency(stats.totalExpenses)}</div></div>

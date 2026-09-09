@@ -1,0 +1,25 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() { return request.auth != null; }
+    function member(ownerId) {
+      return signedIn() &&
+        firestore.exists(/databases/(default)/documents/businessMembers/$(request.auth.uid)) &&
+        firestore.get(/databases/(default)/documents/businessMembers/$(request.auth.uid)).data.active == true &&
+        firestore.get(/databases/(default)/documents/businessMembers/$(request.auth.uid)).data.ownerId == ownerId;
+    }
+    function admin(ownerId) {
+      return member(ownerId) &&
+        firestore.get(/databases/(default)/documents/businessMembers/$(request.auth.uid)).data.role == 'admin';
+    }
+    match /customerAttachments/{ownerId}/{customerId}/{transactionId}/{fileName} {
+      allow read: if member(ownerId);
+      allow create: if member(ownerId) &&
+        request.resource.size < 15 * 1024 * 1024 &&
+        (request.resource.contentType.matches('image/.*') || request.resource.contentType == 'application/pdf') &&
+        request.resource.metadata.ownerId == ownerId;
+      allow delete: if admin(ownerId);
+      allow update: if false;
+    }
+  }
+}

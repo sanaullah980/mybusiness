@@ -1,11 +1,12 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, reauthenticateWithPopup, updatePassword, deleteUser } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, setDoc, getDoc, onSnapshot, query, where, runTransaction, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 import { renderDashboard } from './modules/dashboard.js';
-import { renderSales, showSaleTab, renderCart, updateSaleDue, addSaleItem, removeCartItem, completeNormalSale, completeManualSale, completeBulkSale, openProductSelectionModal, toggleProductRow, filterProductSelectionList, addSelectedProductsToCart, addProductByBarcode, startBarcodeScanner } from './modules/sales.js';
+import { renderSales, showSaleTab, renderCart, updateSaleDue, addSaleItem, removeCartItem, completeNormalSale, completeWholesaleSale, completeRetailSale, completeManualSale, completeBulkSale, openProductSelectionModal, toggleProductRow, filterProductSelectionList, addSelectedProductsToCart, addProductByBarcode, startBarcodeScanner } from './modules/sales.js';
 import { renderInventory, openProductModal, saveProduct, deleteProduct, openStockAdjustModal, saveStockAdjustment } from './modules/inventory.js';
-import { renderCustomers, openCustomerModal, saveCustomer, openCustomerDetails, renderCustomerLedgerTable, downloadCustomerStatementPdf, sendPaymentReminder, openGiveModal, processGive, openReceiveModal, processReceive } from './modules/customers.js';
+import { renderCustomers, openCustomerModal, saveCustomer, openCustomerDetails, renderCustomerLedgerTable, filterCustomerLedger, downloadCustomerStatementPdf, openCustomerReportOptions, sendCustomerReport, sendCustomerSms, sendPaymentReminder, openCustomerSetDate, saveCustomerDueDate, openGiveModal, processGive, openReceiveModal, processReceive } from './modules/customers.js';
 import { renderExpenses, openExpenseModal, saveExpense, deleteExpense } from './modules/expenses.js';
 import { renderStockPurchases, openStockPurchaseModal, showStockPurchaseTab, onStockPurchaseProductChange, saveStockPurchase, deleteStockPurchase } from './modules/stockPurchases.js';
 import { renderReports, setReportTab, changeReportMonth, resetDailyReport, calculateReportData } from './modules/report.js';
@@ -46,6 +47,7 @@ try {
     db = getFirestore(firebaseApp);
 }
 const googleProvider = new GoogleAuthProvider();
+const storage = getStorage(firebaseApp);
 setPersistence(auth, browserLocalPersistence).catch(error => console.warn('Auth persistence setup failed:', error));
 
 const COLLECTIONS = ['products','customers','sales','expenses','stockPurchases','customerTransactions','stockAdjustments','suppliers','supplierTransactions','cashTransactions','salesReturns','staff','attendance','reminders'];
@@ -112,10 +114,11 @@ function checkDueReminders(){ if(!('Notification' in window)||Notification.permi
 Object.assign(window,{esc,tr,setLanguage,openLanguagePicker,installPWA,dismissInstallPrompt,startOnboarding,nextOnboarding,skipOnboarding,requestReminderNotifications,checkDueReminders,formatLastSync});
 
 
-Object.assign(window, { data, cart, db, auth, activeReportTab, currentReportMonth, currentUserId: null, authUserId: null, currentRole: null, currentPermissions: {} });
+Object.assign(window, { data, cart, db, auth, storage, activeReportTab, currentReportMonth, currentUserId: null, authUserId: null, currentRole: null, currentPermissions: {} });
 window.doc = doc; window.collection = collection; window.updateDoc = updateDoc; window.addDoc = addDoc;
 window.runTransaction = runTransaction; window.deleteDoc = deleteDoc; window.setDoc = setDoc;
 window.query = query; window.where = where; window.getDocs = getDocs; window.getDoc = getDoc; window.writeBatch = writeBatch;
+window.storageRef = storageRef; window.uploadBytes = uploadBytes; window.getDownloadURL = getDownloadURL;
 window.EmailAuthProvider = EmailAuthProvider; window.reauthenticateWithCredential = reauthenticateWithCredential; window.updatePassword = updatePassword;
 
 // Atomic writes normally use Firestore transactions. Transactions require a live
@@ -508,9 +511,9 @@ function openDeleteFromDashboardMenu(){ closeDashboardMenu(); setTimeout(()=>ope
 function logoutFromDashboardMenu(){ closeDashboardMenu(); setTimeout(()=>handleLogout(),40); }
 
 Object.assign(window,{
-    renderDashboard,renderSales,showSaleTab,renderCart,updateSaleDue,addSaleItem,removeCartItem,completeNormalSale,completeManualSale,completeBulkSale,openProductSelectionModal,toggleProductRow,filterProductSelectionList,addSelectedProductsToCart,
+    renderDashboard,renderSales,showSaleTab,renderCart,updateSaleDue,addSaleItem,removeCartItem,completeNormalSale,completeWholesaleSale,completeRetailSale,completeManualSale,completeBulkSale,openProductSelectionModal,toggleProductRow,filterProductSelectionList,addSelectedProductsToCart,
     renderInventory,openProductModal,saveProduct,deleteProduct,openStockAdjustModal,saveStockAdjustment,
-    renderCustomers,openCustomerModal,saveCustomer,openCustomerDetails,renderCustomerLedgerTable,downloadCustomerStatementPdf,sendPaymentReminder,openGiveModal,processGive,openReceiveModal,processReceive,
+    renderCustomers,openCustomerModal,saveCustomer,openCustomerDetails,renderCustomerLedgerTable,filterCustomerLedger,downloadCustomerStatementPdf,openCustomerReportOptions,sendCustomerReport,sendCustomerSms,sendPaymentReminder,openCustomerSetDate,saveCustomerDueDate,openGiveModal,processGive,openReceiveModal,processReceive,
     renderExpenses,openExpenseModal,saveExpense,deleteExpense,renderStockPurchases,openStockPurchaseModal,showStockPurchaseTab,onStockPurchaseProductChange,saveStockPurchase,deleteStockPurchase,
     renderReports,setReportTab,changeReportMonth,resetDailyReport,renderMore,openDeleteRecordsModal,deleteCollectionData,deleteEverything,
     renderSettings,saveSettings,selectTheme,toggleDarkMode,openChangePasswordModal,changePassword,closeModal,viewSaleDetail,
