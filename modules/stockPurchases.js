@@ -25,35 +25,59 @@ export function renderStockPurchases(container) {
         }).join('')}</div>`;
 }
 
-export function openStockPurchaseModal() {
+function stockPurchaseFormHtml(selectedId='', values={}) {
     const data=window.data;
-    const modal=document.getElementById('modal-body');
     const supplierOptions=`<option value="">No Supplier / Cash Purchase</option>${(data.suppliers||[]).map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('')}`;
-    modal.classList.remove('product-selection-modal');
-    modal.innerHTML=`
+    const p=(data.products||[]).find(x=>x.id===selectedId);
+    const productLabel=p ? `<i class="fas fa-box"></i> ${esc(p.name)}` : `<i class="fas fa-box"></i> Select product`;
+    const price=selectedId ? lastPurchasePrice(selectedId,p?.cost) : Number(values.price||0);
+    const hint=selectedId && price>0 ? `Last purchase price: ${window.formatCurrency(price)} per unit. You can edit it.` : '';
+    return `
       <div class="modal-header"><h2>Record Stock Purchase</h2><button class="close-btn" onclick="closeModal()">&times;</button></div>
       <div class="form-group">
         <label>Product</label>
         <button type="button" class="btn btn-secondary stock-purchase-product-picker" id="sp-product-picker" onclick="openStockPurchaseProductPicker()">
-          <span id="sp-product-label"><i class="fas fa-box"></i> Select product</span><i class="fas fa-chevron-down"></i>
+          <span id="sp-product-label">${productLabel}</span><i class="fas fa-chevron-down"></i>
         </button>
-        <input type="hidden" id="sp-product">
-        <small style="display:block;margin-top:6px;color:var(--gray);">Select an existing product, or leave it unselected and enter a product name below.</small>
+        <input type="hidden" id="sp-product" value="${esc(selectedId||'')}">
+        <small style="display:block;margin-top:6px;color:var(--gray);">Select an existing product. For a new/unlisted item, leave it unselected and enter a product name below.</small>
       </div>
       <div class="form-group">
         <label>Product Name (Optional)</label>
-        <input type="text" id="sp-manual-name" maxlength="120" placeholder="Use this only if the product is not in Inventory">
+        <input type="text" id="sp-manual-name" maxlength="120" placeholder="Use this only if the product is not in Inventory" value="${esc(values.name||'')}">
       </div>
       <div class="form-row">
-        <div class="form-group"><label>Quantity *</label><input type="number" id="sp-qty" min="1" value="1" inputmode="numeric"></div>
-        <div class="form-group"><label>Price per Unit (Rs.) *</label><input type="number" id="sp-unit-cost" step="0.01" min="0" inputmode="decimal" placeholder="0"></div>
+        <div class="form-group"><label>Quantity *</label><input type="number" id="sp-qty" min="1" value="${esc(values.qty||1)}" inputmode="numeric"></div>
+        <div class="form-group"><label>Price per Unit (Rs.) *</label><input type="number" id="sp-unit-cost" step="0.01" min="0" inputmode="decimal" placeholder="0" value="${price||''}"></div>
       </div>
-      <div id="sp-price-hint" style="font-size:12px;color:var(--gray);margin:-6px 0 12px;"></div>
+      <div id="sp-price-hint" style="font-size:12px;color:var(--gray);margin:-6px 0 12px;">${hint}</div>
       <div class="form-group"><label>Supplier</label><select id="sp-supplier">${supplierOptions}</select></div>
-      <div class="form-group"><label>Date *</label><input type="date" id="sp-date" value="${window.getLocalDateStr(new Date())}"></div>
-      <div class="form-group"><label>Amount Paid Now (Rs.)</label><input type="number" id="sp-amount-paid" min="0" step="0.01" placeholder="Leave blank to mark fully paid"></div>
-      <div class="form-group"><label>Note</label><input type="text" id="sp-note"></div>
+      <div class="form-group"><label>Date *</label><input type="date" id="sp-date" value="${esc(values.date||window.getLocalDateStr(new Date()))}"></div>
+      <div class="form-group"><label>Amount Paid Now (Rs.)</label><input type="number" id="sp-amount-paid" min="0" step="0.01" placeholder="Leave blank to mark fully paid" value="${esc(values.paid||'')}"></div>
+      <div class="form-group"><label>Note</label><input type="text" id="sp-note" value="${esc(values.note||'')}"></div>
       <button class="btn" id="btn-save-sp" onclick="saveStockPurchase()">Save Purchase</button>`;
+}
+
+function readStockPurchaseForm() {
+    return {
+        productId:document.getElementById('sp-product')?.value||'',
+        name:document.getElementById('sp-manual-name')?.value||'',
+        qty:document.getElementById('sp-qty')?.value||1,
+        price:document.getElementById('sp-unit-cost')?.value||'',
+        supplier:document.getElementById('sp-supplier')?.value||'',
+        date:document.getElementById('sp-date')?.value||window.getLocalDateStr(new Date()),
+        paid:document.getElementById('sp-amount-paid')?.value||'',
+        note:document.getElementById('sp-note')?.value||''
+    };
+}
+
+export function openStockPurchaseModal(values={}) {
+    const modal=document.getElementById('modal-body');
+    const selectedId=values.productId||'';
+    modal.classList.remove('product-selection-modal');
+    modal.innerHTML=stockPurchaseFormHtml(selectedId,values);
+    const supplier=document.getElementById('sp-supplier');
+    if(supplier && values.supplier) supplier.value=values.supplier;
     document.getElementById('modal-overlay').classList.remove('hidden');
     requestAnimationFrame(()=>document.getElementById('sp-qty')?.select());
 }
@@ -65,9 +89,13 @@ export function openStockPurchaseProductPicker(){
       <div class="modal-header"><h2>Select Product</h2><button class="close-btn" onclick="closeStockPurchaseProductPicker()">&times;</button></div>
       <div class="product-picker-search form-group"><input type="search" id="sp-product-search" placeholder="Search products..." autocomplete="off" oninput="filterStockPurchaseProducts()"></div>
       <div id="sp-product-list" class="product-selection-list">
-        ${products.length?products.map(p=>`<button type="button" class="product-select-item sp-product-option" data-name="${esc(String(p.name||'').toLowerCase())}" onclick="selectStockPurchaseProduct('${esc(p.id)}')">
-          <span class="product-select-main"><strong>${esc(p.name||'Unnamed product')}</strong><small>Stock: ${Number(p.stock)||0} · Last price: ${window.formatCurrency(lastPurchasePrice(p.id,p.cost))}</small></span><i class="fas fa-chevron-right"></i>
-        </button>`).join(''):'<p class="empty-state"><i class="fas fa-box-open"></i><strong>No products found</strong><span>Add products in Inventory or use a manual product name.</span></p>'}
+        ${products.length?products.map(p=>{
+          const purchasePrice=lastPurchasePrice(p.id,p.cost);
+          return `<button type="button" class="product-select-item-wrapper sp-product-option" data-name="${esc(String(p.name||'').toLowerCase())}" onclick="selectStockPurchaseProduct('${esc(p.id)}')">
+            <span class="product-select-main"><strong>${esc(p.name||'Unnamed product')}</strong><small>Stock: ${Number(p.stock)||0} · Price: ${window.formatCurrency(purchasePrice)}</small></span>
+            <i class="fas fa-chevron-right product-select-chevron" aria-hidden="true"></i>
+          </button>`;
+        }).join(''):'<p class="empty-state"><i class="fas fa-box-open"></i><strong>No products found</strong><span>Add products in Inventory or use a manual product name.</span></p>'}
       </div>`;
     requestAnimationFrame(()=>document.getElementById('sp-product-search')?.blur());
 }
@@ -76,39 +104,17 @@ export function filterStockPurchaseProducts(){
     const q=(document.getElementById('sp-product-search')?.value||'').toLowerCase().trim();
     document.querySelectorAll('.sp-product-option').forEach(el=>el.classList.toggle('hidden',!el.dataset.name.includes(q)));
 }
-export function closeStockPurchaseProductPicker(){ openStockPurchaseModal(); }
+export function closeStockPurchaseProductPicker(){
+    const values=readStockPurchaseForm();
+    openStockPurchaseModal(values);
+}
 export function selectStockPurchaseProduct(productId){
     const p=(window.data.products||[]).find(x=>x.id===productId); if(!p)return;
-    document.getElementById('sp-product').value=p.id;
-    document.getElementById('sp-manual-name').value='';
-    document.getElementById('sp-product-label').innerHTML=`<i class="fas fa-box"></i> ${esc(p.name)}`;
-    const price=lastPurchasePrice(p.id,p.cost);
-    document.getElementById('sp-unit-cost').value=price||'';
-    document.getElementById('sp-price-hint').textContent=price>0?`Last purchase price: ${window.formatCurrency(price)} per unit. You can edit it.`:'No previous purchase price found. Enter the unit price.';
-    openStockPurchaseModalPreserve();
-}
-function openStockPurchaseModalPreserve(){
-    // Rebuild the purchase form, then restore selected values.
-    const productId=document.getElementById('sp-product')?.value;
-    const name=document.getElementById('sp-manual-name')?.value||'';
-    const qty=document.getElementById('sp-qty')?.value||1;
-    const price=document.getElementById('sp-unit-cost')?.value||'';
-    const supplier=document.getElementById('sp-supplier')?.value||'';
-    const date=document.getElementById('sp-date')?.value||window.getLocalDateStr(new Date());
-    const paid=document.getElementById('sp-amount-paid')?.value||'';
-    const note=document.getElementById('sp-note')?.value||'';
-    openStockPurchaseModal();
-    document.getElementById('sp-product').value=productId||'';
-    const p=(window.data.products||[]).find(x=>x.id===productId);
-    document.getElementById('sp-product-label').innerHTML=p?`<i class="fas fa-box"></i> ${esc(p.name)}`:'<i class="fas fa-box"></i> Select product';
-    document.getElementById('sp-manual-name').value=name;
-    document.getElementById('sp-qty').value=qty;
-    document.getElementById('sp-unit-cost').value=price;
-    document.getElementById('sp-supplier').value=supplier;
-    document.getElementById('sp-date').value=date;
-    document.getElementById('sp-amount-paid').value=paid;
-    document.getElementById('sp-note').value=note;
-    document.getElementById('sp-price-hint').textContent=price?`Last purchase price: ${window.formatCurrency(price)} per unit. You can edit it.`:'';
+    const values=readStockPurchaseForm();
+    values.productId=p.id;
+    values.name='';
+    values.price=lastPurchasePrice(p.id,p.cost)||'';
+    openStockPurchaseModal(values);
 }
 
 export function onStockPurchaseProductChange(){ /* kept for compatibility with existing links */ }
