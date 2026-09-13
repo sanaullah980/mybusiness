@@ -29,8 +29,10 @@ export function renderDashboard(container) {
     (data.customerTransactions || []).forEach(t => { if (t.type === 'payment') activity.push({ date: t.date, icon: 'fa-hand-holding-usd', text: `Customer payment received`, amount: t.amount, color: 'var(--success)' }); });
     (data.supplierTransactions || []).forEach(t => { if (t.type === 'payment') activity.push({ date: t.date, icon: 'fa-truck', text: `Paid supplier`, amount: -(t.amount || 0), color: 'var(--danger)' }); });
     (data.salesReturns || []).forEach(r => activity.push({ date: r.date, icon: 'fa-undo', text: `Sales return`, amount: -(r.refundAmount || 0), color: 'var(--danger)' }));
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     activity.sort((a, b) => new Date(b.date) - new Date(a.date));
-    const recentActivity = activity.slice(0, 8);
+    const recentActivity = activity.filter(a => new Date(a.date) >= sevenDaysAgo).slice(0, 8);
 
     const businessName = data.settings?.name || 'MyBusiness';
 

@@ -6,7 +6,15 @@ function customerTransactionsFor(customerId) {
         .filter(t => t.customerId === customerId)
         .sort((a, b) => new Date(b.date) - new Date(a.date));
 }
-function isReceived(t){ return t.type === 'payment' || t.type === 'return_credit'; }
+function debitFor(t){
+    if(t.debitAmount!==undefined) return Math.max(0,Number(t.debitAmount)||0);
+    return ['sale_debt','manual_debt'].includes(t.type) ? Math.max(0,Number(t.amount)||0) : 0;
+}
+function creditFor(t){
+    if(t.creditAmount!==undefined) return Math.max(0,Number(t.creditAmount)||0);
+    return isReceived(t) ? Math.max(0,Number(t.amount)||0) : 0;
+}
+function isReceived(t){ return t.type === 'payment' || t.type === 'return_credit' || Number(t.creditAmount||0)>0; }
 function money(v){ return window.formatCurrency(Number(v)||0); }
 function billNumberFor(t){
     if (t.billNo) return t.billNo;
@@ -15,57 +23,8 @@ function billNumberFor(t){
 }
 function ledgerRows(customerId){
     const rows=[...customerTransactionsFor(customerId)].sort((a,b)=>new Date(a.date)-new Date(b.date));
-    return rows.map((t,i)=>({t,balance:Number.isFinite(Number(t.balanceAfter))?Number(t.balanceAfter):null,index:i+1}));
-}
-
-export function renderCustomers(container) {
-    const customers = window.data.customers || [];
-    const totalDebt = customers.reduce((sum, c) => sum + Math.max(0, Number(c.balance) || 0), 0);
-    container.innerHTML = `
-        <div class="customer-summary-card"><div><span class="summary-label">Customers</span><strong>${customers.length}</strong></div><div class="summary-divider"></div><div><span class="summary-label">Total receivable</span><strong class="text-danger">${money(totalDebt)}</strong></div></div>
-        <button class="btn customer-add-btn" onclick="openCustomerModal()"><i class="fas fa-user-plus"></i><span>Add Customer</span></button>
-        <div class="customer-list-card" id="customer-list">${customers.length===0?`<div class="empty-state"><div class="empty-icon"><i class="fas fa-users"></i></div><h3>No customers yet</h3><p>Add your first customer to start tracking credit.</p></div>`:customers.map(c=>{const b=Math.max(0,Number(c.balance)||0);return `<button class="customer-row" onclick="openCustomerDetails('${esc(c.id)}')"><span class="customer-avatar">${esc((c.name||'?').trim().charAt(0).toUpperCase())}</span><span class="customer-row-main"><strong>${esc(c.name)}</strong><small>${esc(c.phone||'No phone number')}</small></span><span class="customer-row-balance"><small>Due</small><strong class="${b>0?'text-danger':'text-success'}">${money(b)}</strong></span><i class="fas fa-chevron-right"></i></button>`}).join('')}</div>`;
-}
-
-export function openCustomerModal(customerId = null) {
-    const c = customerId ? window.data.customers.find(x => x.id === customerId) : null;
-    const modal = document.getElementById('modal-body');
-    modal.innerHTML = `<div class="modal-header"><h2>${c ? 'Edit Customer' : 'Add Customer'}</h2><button class="close-btn" onclick="closeModal()" aria-label="Close">&times;</button></div>
-        <div class="form-group"><label>Customer Name *</label><input type="text" id="c-name" value="${esc(c?.name || '')}" autocomplete="name"></div>
-        <div class="form-group"><label>Phone / Contact</label><input type="tel" id="c-phone" value="${esc(c?.phone || '')}" autocomplete="tel"></div>
-        <div class="form-group"><label>Due / Reminder Date</label><input type="date" id="c-due-date" value="${esc(c?.dueDate || '')}"></div>
-        <div class="form-group"><label>Notes</label><textarea id="c-notes" rows="2">${esc(c?.notes || '')}</textarea></div>
-        <button class="btn" id="btn-save-customer" onclick="saveCustomer('${esc(customerId || '')}')">${c ? 'Update Customer' : 'Save Customer'}</button>`;
-    document.getElementById('modal-overlay').classList.remove('hidden');
-}
-
-export async function saveCustomer(customerId) {
-    const name=document.getElementById('c-name').value.trim(), phone=document.getElementById('c-phone').value.trim(), notes=document.getElementById('c-notes').value.trim(), dueDate=document.getElementById('c-due-date').value||null;
-    if(!name) return alert('Customer name is required.'); if(!window.currentUserId) return alert('Please log in again.');
-    window.showLoading('btn-save-customer','Saving...');
-    try{const cData={name,phone,notes,dueDate,ownerId:window.currentUserId};if(customerId) await window.updateDoc(window.doc(window.db,'customers',customerId),cData);else{cData.balance=0;cData.createdAt=new Date().toISOString();await window.addDoc(window.collection(window.db,'customers'),cData);}closeModal();window.navigate('customers');}catch(e){console.error(e);alert(e.message||'Failed to save customer.');}finally{window.hideLoading('btn-save-customer');}
-}
-
-export function openCustomerDetails(customerId){
-    const c=(window.data.customers||[]).find(x=>x.id===customerId); if(!c)return alert('Customer not found.');
-    const balance=Math.max(0,Number(c.balance)||0), phone=String(c.phone||'').trim();
-    const modal=document.getElementById('modal-body');
-    modal.className='modal-content customer-detail-modal';
-    modal.innerHTML=`<div class="khata-customer-page">
-      <div class="khata-topbar"><button class="khata-back" onclick="closeModal()"><i class="fas fa-chevron-left"></i></button><div class="khata-title"><h2>${esc(c.name)} <span>Customer</span></h2><button class="khata-settings" onclick="openCustomerModal('${esc(c.id)}')">${phone?esc(phone):'Click here to view settings'}</button></div><a class="khata-call ${phone?'':'disabled'}" href="${phone?'tel:'+esc(phone):'#'}"><i class="fas fa-phone"></i></a></div>
-      <div class="khata-balance-card"><strong class="${balance>0?'due':'settled'}">${money(balance)}</strong><span>${balance>0?'You will get':'Settled'}</span>${c.dueDate?`<small>Due date: ${new Date(c.dueDate+'T00:00:00').toLocaleDateString()}</small>`:''}</div>
-      <div class="khata-quick-actions">
-        <button class="admin-only" onclick="openCustomerReportOptions('${esc(c.id)}')"><i class="far fa-file-alt"></i><span>Report</span></button>
-        <button onclick="openCustomerSetDate('${esc(c.id)}')"><i class="far fa-calendar-plus"></i><span>Set Date</span></button>
-        <button onclick="sendPaymentReminder('${esc(c.id)}')"><i class="fab fa-whatsapp"></i><span>Reminder</span></button>
-        <button onclick="sendCustomerSms('${esc(c.id)}')"><i class="far fa-comment-alt"></i><span>SMS</span></button>
-      </div>
-      <div class="khata-search"><i class="fas fa-search"></i><input id="customer-ledger-search" type="search" placeholder="Search" oninput="filterCustomerLedger('${esc(c.id)}')"></div>
-      <div class="khata-ledger-head"><strong>Entries</strong><strong>You Gave</strong><strong>You Got</strong></div>
-      <div id="cust-ledger-container" class="khata-ledger"></div>
-      <div class="khata-bottom-actions"><button class="gave" onclick="openGiveModal('${esc(c.id)}')">YOU GAVE <small>Rs</small></button><button class="got" onclick="openReceiveModal('${esc(c.id)}')">YOU GOT <small>Rs</small></button></div>
-    </div>`;
-    document.getElementById('modal-overlay').classList.remove('hidden'); renderCustomerLedgerTable(customerId);
+    let running=0;
+    return rows.map((t,i)=>{ running=Math.max(0,running+debitFor(t)-creditFor(t)); return {t,balance:running,index:i+1}; });
 }
 
 export function renderCustomerLedgerTable(customerId){
@@ -73,9 +32,73 @@ export function renderCustomerLedgerTable(customerId){
     const query=(document.getElementById('customer-ledger-search')?.value||'').trim().toLowerCase();
     const rows=ledgerRows(customerId).filter(({t})=>`${t.note||''} ${billNumberFor(t)}`.toLowerCase().includes(query));
     if(!rows.length){container.innerHTML='<div class="ledger-empty"><strong>No transactions found</strong></div>';return;}
-    container.innerHTML=rows.slice().reverse().map(({t,balance})=>{const d=new Date(t.date), received=isReceived(t), bill=billNumberFor(t);const details=[bill?`Bill No. ${esc(bill)}`:'',t.note&&(!bill||!String(t.note).includes(bill))?esc(t.note):''].filter(Boolean).join('<br>');const bal=balance===null?'':`Bal. ${money(balance)}`;const attachment=t.attachment?.url?`<a class="khata-attachment" href="${esc(t.attachment.url)}" target="_blank" rel="noopener"><i class="fas fa-paperclip"></i> ${esc(t.attachment.name||'View attachment')}</a>`:'';return `<div class="khata-entry"><div class="khata-entry-main"><strong>${d.toLocaleDateString('en-GB',{weekday:'short',day:'2-digit',month:'short',year:'2-digit'})} • ${d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</strong>${details?`<div class="khata-entry-detail">${details}</div>`:''}${attachment}${bal?`<span class="khata-running-balance">${bal}</span>`:''}</div><div class="khata-entry-money gave-money">${received?'':money(t.amount)}</div><div class="khata-entry-money received-money">${received?money(t.amount):''}</div></div>`;}).join('');
+    container.innerHTML=rows.slice().reverse().map(({t,balance})=>{
+        const d=new Date(t.date), debit=debitFor(t), credit=creditFor(t), bill=billNumberFor(t);
+        const details=[bill?`Bill No. ${esc(bill)}`:'',t.note&&!String(t.note).includes(bill||'§')?esc(t.note):''].filter(Boolean).join('<br>');
+        const attachment=t.attachment?.url?`<a class="khata-attachment" href="${esc(t.attachment.url)}" target="_blank" rel="noopener"><i class="fas fa-paperclip"></i> ${esc(t.attachment.name||'View attachment')}</a>`:'';
+        return `<button type="button" class="khata-entry" onclick="${t.saleId ? `viewSaleDetail('${esc(t.saleId)}')` : `openCustomerEntryActions('${esc(customerId)}','${esc(t.id)}')`}">
+          <div class="khata-entry-main"><strong>${d.toLocaleDateString('en-GB',{weekday:'short',day:'2-digit',month:'short',year:'2-digit'})} • ${d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</strong>${details?`<div class="khata-entry-detail">${details}</div>`:''}${attachment}<span class="khata-running-balance">Bal. ${money(balance)}</span></div>
+          <div class="khata-entry-money gave-money">${debit?money(debit):''}</div>
+          <div class="khata-entry-money received-money">${credit?money(credit):''}</div>
+        </button>`;
+    }).join('');
 }
+
 export function filterCustomerLedger(customerId){ renderCustomerLedgerTable(customerId); }
+
+
+async function recomputeCustomerLedger(customerId){
+    const q=window.query(window.collection(window.db,'customerTransactions'),window.where('customerId','==',customerId));
+    const snap=await window.getDocs(q);
+    const txns=snap.docs.filter(d=>d.data()?.ownerId===window.currentUserId).sort((a,b)=>new Date(a.data().date)-new Date(b.data().date));
+    let balance=0; const updates=[];
+    txns.forEach(d=>{const t=d.data(); balance=Math.max(0,balance+debitFor(t)-creditFor(t)); updates.push({ref:d.ref,balance});});
+    for(let i=0;i<updates.length;i+=450){const batch=window.writeBatch(window.db);updates.slice(i,i+450).forEach(x=>batch.update(x.ref,{balanceAfter:x.balance}));await batch.commit();}
+    await window.updateDoc(window.doc(window.db,'customers',customerId),{balance,updatedAt:new Date().toISOString()});
+}
+export function openCustomerEntryActions(customerId,transactionId){
+    if(window.currentRole!=='admin') return window.showToast?.('Only the Admin can edit or delete a Khata entry.','warning');
+    const t=(window.data.customerTransactions||[]).find(x=>x.id===transactionId); if(!t)return;
+    const m=document.getElementById('modal-body');
+    const debit=debitFor(t),credit=creditFor(t);
+    m.className='modal-content';
+    m.innerHTML=`<div class="modal-header"><h2>Khata Entry</h2><button class="close-btn" onclick="openCustomerDetails('${esc(customerId)}')">&times;</button></div>
+      <p class="form-help">Edit the amounts or remove this entry. The customer's running balance will be recalculated.</p>
+      <div class="form-row"><div class="form-group"><label>You Gave (Rs.)</label><input type="number" id="edit-entry-debit" min="0" step="0.01" value="${debit}"></div><div class="form-group"><label>Amount Paid (Rs.)</label><input type="number" id="edit-entry-credit" min="0" step="0.01" value="${credit}"></div></div>
+      <div class="form-group"><label>Note</label><input type="text" id="edit-entry-note" maxlength="120" value="${esc(t.note||'')}"></div>
+      <div class="form-row"><button class="btn" onclick="editCustomerEntry('${esc(customerId)}','${esc(transactionId)}')">Save Changes</button><button class="btn btn-danger" onclick="deleteCustomerEntry('${esc(customerId)}','${esc(transactionId)}')">Delete Entry</button></div>`;
+    document.getElementById('modal-overlay').classList.remove('hidden');
+}
+export async function editCustomerEntry(customerId,transactionId){
+    const debit=Math.max(0,Number(document.getElementById('edit-entry-debit')?.value)||0),credit=Math.max(0,Number(document.getElementById('edit-entry-credit')?.value)||0),note=document.getElementById('edit-entry-note')?.value.trim()||'';
+    if(debit===0&&credit===0)return alert('Enter an amount.');
+    try{await window.updateDoc(window.doc(window.db,'customerTransactions',transactionId),{debitAmount:debit,creditAmount:credit,amount:debit||credit,note,updatedAt:new Date().toISOString()});await recomputeCustomerLedger(customerId);window.showToast?.('Entry updated','success');openCustomerDetails(customerId);}catch(e){console.error(e);alert(e.message||'Failed to update entry.');}
+}
+export async function deleteCustomerEntry(customerId,transactionId){
+    if(!confirm('Delete this Khata entry? The customer balance will be recalculated.'))return;
+    try{await window.deleteDoc(window.doc(window.db,'customerTransactions',transactionId));await recomputeCustomerLedger(customerId);window.showToast?.('Entry deleted','success');openCustomerDetails(customerId);}catch(e){console.error(e);alert(e.message||'Failed to delete entry.');}
+}
+
+export async function deleteCustomer(customerId){
+    const c=(window.data.customers||[]).find(x=>x.id===customerId);
+    if(!c) return;
+    if(!confirm(`Delete customer "${c.name}" permanently? Their customer ledger entries will also be deleted. Sales records will remain.`)) return;
+    if(!window.currentUserId) return alert('Please log in again.');
+    try{
+        const q=window.query(window.collection(window.db,'customerTransactions'), window.where('customerId','==',customerId));
+        const snap=await window.getDocs(q);
+        const owned=snap.docs.filter(d=>d.data()?.ownerId===window.currentUserId);
+        for(let i=0;i<owned.length;i+=450){
+            const batch=window.writeBatch(window.db);
+            owned.slice(i,i+450).forEach(d=>batch.delete(d.ref));
+            await batch.commit();
+        }
+        await window.deleteDoc(window.doc(window.db,'customers',customerId));
+        window.showToast?.('Customer deleted','success');
+        window.closeModal?.();
+        window.navigate('customers');
+    }catch(e){console.error(e);alert(e.message||'Failed to delete customer.');}
+}
 
 export function openCustomerSetDate(customerId){const c=(window.data.customers||[]).find(x=>x.id===customerId);if(!c)return;const m=document.getElementById('modal-body');m.className='modal-content';m.innerHTML=`<div class="modal-header"><h2>Set Date</h2><button class="close-btn" onclick="openCustomerDetails('${esc(customerId)}')">&times;</button></div><div class="form-group"><label>Payment / Due Date</label><input type="date" id="customer-due-date" value="${esc(c.dueDate||'')}"></div><button class="btn" onclick="saveCustomerDueDate('${esc(customerId)}')">Save Date</button>`;}
 export async function saveCustomerDueDate(customerId){const dueDate=document.getElementById('customer-due-date')?.value||null;try{await window.updateDoc(window.doc(window.db,'customers',customerId),{dueDate,updatedAt:new Date().toISOString()});window.showToast?.('Date updated','success');openCustomerDetails(customerId);}catch(e){alert(e.message||'Unable to update date.');}}
@@ -84,7 +107,7 @@ export function sendCustomerSms(customerId){const c=(window.data.customers||[]).
 function statementDateRange(customerId){const txns=ledgerRows(customerId);const dates=txns.map(x=>new Date(x.t.date)).filter(d=>!isNaN(d));return {from:dates[0]||new Date(),to:dates[dates.length-1]||new Date()};}
 function buildStatementPdf(customerId, fromValue=null, toValue=null){
  const c=(window.data.customers||[]).find(x=>x.id===customerId); if(!c||!window.jspdf)return null; const {jsPDF}=window.jspdf;const pdf=new jsPDF({unit:'pt',format:'a4'});let txns=ledgerRows(customerId); if(fromValue||toValue){const from=fromValue?new Date(fromValue+'T00:00:00'):new Date(0);const to=toValue?new Date(toValue+'T23:59:59'):new Date();txns=txns.filter(({t})=>{const d=new Date(t.date);return d>=from&&d<=to;});} let gave=0,got=0;txns.forEach(({t})=>isReceived(t)?got+=Number(t.amount)||0:gave+=Number(t.amount)||0);const business=window.data.settings?.name||'MyBusiness', range={from:fromValue?new Date(fromValue+'T00:00:00'):statementDateRange(customerId).from,to:toValue?new Date(toValue+'T23:59:59'):statementDateRange(customerId).to};let y=42;const W=555;
- pdf.setFillColor(178,48,23);pdf.rect(0,0,595,36,'F');pdf.setTextColor(255);pdf.setFontSize(16);pdf.text(business,28,24);pdf.setTextColor(30);pdf.setFontSize(20);pdf.text(`${c.name} Statement`,W/2,y+35,{align:'center'});y+=58;pdf.setFontSize(11);pdf.setTextColor(70);pdf.text(`Phone Number: ${c.phone||'Not added'}`,W/2,y,{align:'center'});y+=18;pdf.text(`(${range.from.toLocaleDateString()} - ${range.to.toLocaleDateString()})`,W/2,y,{align:'center'});y+=25;
+ pdf.setFillColor(178,48,23);pdf.rect(0,0,595,36,'F');pdf.setTextColor(255);pdf.setFontSize(16);pdf.text(business,28,24);pdf.setTextColor(30);pdf.setFontSize(20);pdf.text(`${c.name} Statement`,W/2,y+35,{align:'center'});y+=58;pdf.setFontSize(11);pdf.setTextColor(70);pdf.text(`Phone Number: ${c.phone||'Not added'}`,W/2,y,{align:'center'});y+=18;if(c.address){pdf.text(`Address: ${String(c.address).slice(0,90)}`,W/2,y,{align:'center'});y+=18;}pdf.text(`(${range.from.toLocaleDateString()} - ${range.to.toLocaleDateString()})`,W/2,y,{align:'center'});y+=25;
  const boxY=y;pdf.setDrawColor(120);pdf.rect(24,boxY,547,88);const cols=[24,134,244,354,464,571];cols.slice(1,-1).forEach(x=>pdf.line(x,boxY,x,boxY+88));const stats=[['Opening Balance','Rs 0'],['Total Debit (-)',money(gave)],['Total Credit (+)',money(got)],['Net Balance',money(c.balance||0)],['Running Balance',money(c.balance||0)]];stats.forEach((s,i)=>{const x=cols[i]+12;pdf.setFontSize(9);pdf.setTextColor(80);pdf.text(s[0],x,boxY+24);pdf.setFontSize(11);pdf.setTextColor(i===2?30:120,i===2?110:35,i===2?55:35);pdf.text(s[1],x,boxY+48);});y=boxY+112;pdf.setTextColor(25);pdf.setFontSize(14);pdf.text(`No. of Entries: ${txns.length} (All)`,24,y);y+=18;
  const headers=['#','Date','Details','Debit (-)','Credit (+)','Balance'];const xs=[28,62,150,330,420,505];pdf.setFillColor(245);pdf.rect(24,y,547,28,'F');pdf.setFontSize(9);pdf.setTextColor(25);headers.forEach((h,i)=>pdf.text(h,xs[i],y+18));y+=38;let idx=1;txns.forEach(({t,balance})=>{if(y>750){pdf.addPage();y=50;}const rec=isReceived(t);const d=new Date(t.date);pdf.setFontSize(8.5);pdf.setTextColor(35);pdf.text(String(idx++),xs[0],y);pdf.text(d.toLocaleDateString('en-GB'),xs[1],y);const det=`${billNumberFor(t)?'Bill No. '+billNumberFor(t):t.note||t.type||'Entry'}`;pdf.text(det.slice(0,28),xs[2],y);if(!rec)pdf.text(money(t.amount),xs[3],y);if(rec)pdf.text(money(t.amount),xs[4],y);pdf.text(money(balance??0),xs[5],y);y+=22;});pdf.line(24,y,571,y);y+=20;pdf.setFontSize(11);pdf.text('Grand Total',32,y);pdf.text(money(gave),xs[3],y);pdf.text(money(got),xs[4],y);pdf.text(money(c.balance||0),xs[5],y);y+=28;pdf.setFontSize(8);pdf.text(`Report Generated: ${new Date().toLocaleString()}`,24,y);return {pdf,c};
 }
@@ -145,7 +168,7 @@ export function openGiveModal(customerId) {
     const modal = document.getElementById('modal-body');
     modal.innerHTML = `<div class="modal-header"><h2>Gave to ${esc(c.name)}</h2><button class="close-btn" onclick="openCustomerDetails('${esc(c.id)}')">&times;</button></div>
         <div class="action-explainer give-explainer"><strong>Increase customer's due</strong><span>This amount will be added to their outstanding balance.</span></div>
-        <div class="form-group"><label>Amount (Rs.) *</label><input type="number" id="give-amount" min="0.01" step="0.01" inputmode="decimal" placeholder="0"></div>
+        <div class="form-row"><div class="form-group"><label>You Gave (Rs.) *</label><input type="number" id="give-amount" min="0.01" step="0.01" inputmode="decimal" placeholder="0"></div><div class="form-group"><label>Amount Paid (Rs.)</label><input type="number" id="give-paid" min="0" step="0.01" inputmode="decimal" placeholder="0"></div></div>
         <div class="form-group"><label>Note (Optional)</label><input type="text" id="give-note" maxlength="120" placeholder="e.g. Cash given"></div>
         ${attachmentFields('give')}
         <button class="btn ledger-confirm give-confirm" id="btn-give" onclick="processGive('${esc(c.id)}')">Confirm Gave</button>`;
@@ -153,40 +176,13 @@ export function openGiveModal(customerId) {
 }
 
 export async function processGive(customerId) {
-    const amount = Number.parseFloat(document.getElementById('give-amount')?.value);
-    const note = document.getElementById('give-note')?.value.trim();
-    const billNo = document.getElementById('give-bill-no')?.value.trim()||null;
-    const file=selectedAttachment('give');
-    if (!Number.isFinite(amount) || amount <= 0) return alert('Enter a valid amount greater than zero.');
-    if (!window.currentUserId) return alert('Please log in again.');
+    const amount=Number.parseFloat(document.getElementById('give-amount')?.value), paidRaw=document.getElementById('give-paid')?.value??'', paid=paidRaw===''?0:Number.parseFloat(paidRaw);
+    const note=document.getElementById('give-note')?.value.trim(), billNo=document.getElementById('give-bill-no')?.value.trim()||null, file=selectedAttachment('give');
+    if(!Number.isFinite(amount)||amount<=0)return alert('Enter a valid amount greater than zero.');
+    if(!Number.isFinite(paid)||paid<0||paid>amount)return alert(`Amount paid must be between Rs. 0 and ${window.formatCurrency(amount)}.`);
+    if(!window.currentUserId)return alert('Please log in again.');
     window.showLoading('btn-give',file?'Uploading...':'Saving...');
-    try {
-        const customerRef = window.doc(window.db,'customers',customerId);
-        if (!navigator.onLine) {
-            if(file)throw new Error('Attachments cannot be uploaded while offline. Save without the attachment or reconnect and try again.');
-            const current = Math.max(0, Number(window.data.customers.find(c=>c.id===customerId)?.balance)||0);
-            const newBalance = current + amount;
-            const batch = window.writeBatch(window.db);
-            batch.update(customerRef,{balance:newBalance,updatedAt:new Date().toISOString()});
-            const txnRef = window.doc(window.collection(window.db,'customerTransactions'));
-            batch.set(txnRef,transactionPayload({customerId,type:'manual_debt',amount,balanceAfter:newBalance,note:note||'Debt increased',billNo,offlineCreated:true}));
-            await batch.commit();
-        } else {
-            const txnRef=window.doc(window.collection(window.db,'customerTransactions'));
-            const attachment=await uploadCustomerAttachment(customerId,txnRef.id,file);
-            await window.runAtomicOrOffline(async transaction => {
-                const snap = await transaction.get(customerRef);
-                if (!snap.exists()) throw new Error('Customer not found.');
-                if (snap.data().ownerId !== window.currentUserId) throw new Error('Unauthorized.');
-                const current = Math.max(0, Number(snap.data().balance)||0);
-                const newBalance = current + amount;
-                transaction.update(customerRef,{balance:newBalance,updatedAt:new Date().toISOString()});
-                transaction.set(txnRef,transactionPayload({customerId,type:'manual_debt',amount,balanceAfter:newBalance,note:note||'Debt increased',billNo,attachment}));
-            });
-        }
-        window.navigate('customers'); setTimeout(()=>openCustomerDetails(customerId),50);
-    } catch(error){ console.error(error); alert(error.message||'Failed to update debt.'); }
-    finally{window.hideLoading('btn-give');}
+    try{const customerRef=window.doc(window.db,'customers',customerId),txnRef=window.doc(window.collection(window.db,'customerTransactions'));const attachment=await uploadCustomerAttachment(customerId,txnRef.id,file);await window.runAtomicOrOffline(async transaction=>{const snap=await transaction.get(customerRef);if(!snap.exists())throw new Error('Customer not found.');const current=Math.max(0,Number(snap.data().balance)||0),newBalance=Math.max(0,current+amount-paid);transaction.update(customerRef,{balance:newBalance,updatedAt:new Date().toISOString()});transaction.set(txnRef,{ownerId:window.currentUserId,customerId,type:'manual_debt',amount,amountPaid:paid,debitAmount:amount,creditAmount:paid,balanceAfter:newBalance,date:new Date().toISOString(),note:note||'Gave',billNo,attachment:attachment||null,createdBy:window.authUserId||window.currentUserId});});window.showToast?.('Khata entry saved','success');window.closeModal();openCustomerDetails(customerId);}catch(e){console.error(e);alert(e.message||'Failed to update debt.');}finally{window.hideLoading('btn-give');}
 }
 
 export function openReceiveModal(customerId) {
@@ -202,35 +198,10 @@ export function openReceiveModal(customerId) {
 }
 
 export async function processReceive(customerId) {
-    const amount=Number.parseFloat(document.getElementById('receive-amount')?.value);
-    const note=document.getElementById('receive-note')?.value.trim();
-    const billNo=document.getElementById('receive-bill-no')?.value.trim()||null;
-    const file=selectedAttachment('receive');
-    if (!Number.isFinite(amount)||amount<=0) return alert('Enter a valid amount greater than zero.');
-    if(!window.currentUserId)return alert('Please log in again.');
+    const amount=Number.parseFloat(document.getElementById('receive-amount')?.value),note=document.getElementById('receive-note')?.value.trim(),billNo=document.getElementById('receive-bill-no')?.value.trim()||null,file=selectedAttachment('receive');
+    if(!Number.isFinite(amount)||amount<=0)return alert('Enter a valid amount greater than zero.'); if(!window.currentUserId)return alert('Please log in again.');
     window.showLoading('btn-receive',file?'Uploading...':'Saving...');
-    try {
-        const customerRef=window.doc(window.db,'customers',customerId);
-        if (!navigator.onLine) {
-            if(file)throw new Error('Attachments cannot be uploaded while offline. Save without the attachment or reconnect and try again.');
-            const current=Math.max(0,Number(window.data.customers.find(c=>c.id===customerId)?.balance)||0);
-            if(amount>current) throw new Error(`Received amount cannot exceed current due of ${window.formatCurrency(current)}.`);
-            const newBalance=current-amount; const batch=window.writeBatch(window.db); batch.update(customerRef,{balance:newBalance,updatedAt:new Date().toISOString()});
-            const txnRef=window.doc(window.collection(window.db,'customerTransactions'));
-            batch.set(txnRef,transactionPayload({customerId,type:'payment',amount,balanceAfter:newBalance,note:note||'Payment received',billNo,offlineCreated:true})); await batch.commit();
-        } else {
-            const txnRef=window.doc(window.collection(window.db,'customerTransactions'));
-            const attachment=await uploadCustomerAttachment(customerId,txnRef.id,file);
-            await window.runAtomicOrOffline(async transaction=>{
-                const snap=await transaction.get(customerRef); if(!snap.exists())throw new Error('Customer not found.'); if(snap.data().ownerId!==window.currentUserId)throw new Error('Unauthorized.');
-                const current=Math.max(0,Number(snap.data().balance)||0); if(amount>current)throw new Error(`Received amount cannot exceed current due of ${window.formatCurrency(current)}.`);
-                const newBalance=current-amount; transaction.update(customerRef,{balance:newBalance,updatedAt:new Date().toISOString()});
-                transaction.set(txnRef,transactionPayload({customerId,type:'payment',amount,balanceAfter:newBalance,note:note||'Payment received',billNo,attachment}));
-            });
-        }
-        window.navigate('customers'); setTimeout(()=>openCustomerDetails(customerId),50);
-    } catch(error){console.error(error);alert(error.message||'Failed to record payment.');}
-    finally{window.hideLoading('btn-receive');}
+    try{const customerRef=window.doc(window.db,'customers',customerId),txnRef=window.doc(window.collection(window.db,'customerTransactions'));const attachment=await uploadCustomerAttachment(customerId,txnRef.id,file);await window.runAtomicOrOffline(async transaction=>{const snap=await transaction.get(customerRef);if(!snap.exists())throw new Error('Customer not found.');const current=Math.max(0,Number(snap.data().balance)||0),newBalance=Math.max(0,current-amount);transaction.update(customerRef,{balance:newBalance,updatedAt:new Date().toISOString()});transaction.set(txnRef,{ownerId:window.currentUserId,customerId,type:'payment',amount,amountPaid:amount,debitAmount:0,creditAmount:amount,balanceAfter:newBalance,date:new Date().toISOString(),note:note||'Payment received',billNo,attachment:attachment||null,createdBy:window.authUserId||window.currentUserId});});window.showToast?.('Payment recorded','success');window.closeModal();openCustomerDetails(customerId);}catch(e){console.error(e);alert(e.message||'Failed to record payment.');}finally{window.hideLoading('btn-receive');}
 }
 
-window.customerAttachmentSelected=customerAttachmentSelected; window.openCustomerModal=openCustomerModal; window.saveCustomer=saveCustomer; window.openCustomerDetails=openCustomerDetails; window.renderCustomerLedgerTable=renderCustomerLedgerTable; window.downloadCustomerStatementPdf=downloadCustomerStatementPdf; window.sendPaymentReminder=sendPaymentReminder; window.openGiveModal=openGiveModal; window.processGive=processGive; window.openReceiveModal=openReceiveModal; window.processReceive=processReceive;
+window.customerAttachmentSelected=customerAttachmentSelected; window.openCustomerModal=openCustomerModal; window.saveCustomer=saveCustomer; window.openCustomerDetails=openCustomerDetails; window.renderCustomerLedgerTable=renderCustomerLedgerTable; window.openCustomerEntryActions=openCustomerEntryActions; window.editCustomerEntry=editCustomerEntry; window.deleteCustomerEntry=deleteCustomerEntry; window.downloadCustomerStatementPdf=downloadCustomerStatementPdf; window.sendPaymentReminder=sendPaymentReminder; window.openGiveModal=openGiveModal; window.processGive=processGive; window.openReceiveModal=openReceiveModal; window.processReceive=processReceive;

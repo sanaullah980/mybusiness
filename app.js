@@ -4,9 +4,9 @@ import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 import { renderDashboard } from './modules/dashboard.js';
-import { renderSales, showSaleTab, renderCart, updateSaleDue, addSaleItem, removeCartItem, completeNormalSale, completeWholesaleSale, completeRetailSale, completeManualSale, completeBulkSale, openProductSelectionModal, toggleProductRow, filterProductSelectionList, addSelectedProductsToCart, addProductByBarcode, startBarcodeScanner } from './modules/sales.js';
+import { renderSales, showSaleTab, renderCart, updateSaleDue, updateCartItemQty, addSaleItem, removeCartItem, completeNormalSale, completeWholesaleSale, completeRetailSale, completeManualSale, completeBulkSale, openProductSelectionModal, toggleProductRow, filterProductSelectionList, addSelectedProductsToCart, addProductByBarcode, startBarcodeScanner } from './modules/sales.js';
 import { renderInventory, openProductModal, saveProduct, deleteProduct, openStockAdjustModal, saveStockAdjustment } from './modules/inventory.js';
-import { renderCustomers, openCustomerModal, saveCustomer, openCustomerDetails, renderCustomerLedgerTable, filterCustomerLedger, downloadCustomerStatementPdf, openCustomerReportOptions, sendCustomerReport, sendCustomerSms, sendPaymentReminder, openCustomerSetDate, saveCustomerDueDate, openGiveModal, processGive, openReceiveModal, processReceive } from './modules/customers.js';
+import { renderCustomers, openCustomerModal, saveCustomer, openCustomerDetails, renderCustomerLedgerTable, filterCustomerLedger, deleteCustomer, openCustomerEntryActions, editCustomerEntry, deleteCustomerEntry, downloadCustomerStatementPdf, openCustomerReportOptions, sendCustomerReport, sendCustomerSms, sendPaymentReminder, openCustomerSetDate, saveCustomerDueDate, openGiveModal, processGive, openReceiveModal, processReceive } from './modules/customers.js';
 import { renderExpenses, openExpenseModal, saveExpense, deleteExpense } from './modules/expenses.js';
 import { renderStockPurchases, openStockPurchaseModal, showStockPurchaseTab, onStockPurchaseProductChange, saveStockPurchase, deleteStockPurchase } from './modules/stockPurchases.js';
 import { renderReports, setReportTab, changeReportMonth, resetDailyReport, calculateReportData } from './modules/report.js';
@@ -337,6 +337,15 @@ window.deleteMyAccount=async()=>{
     if(!user) return;
     if(!confirm('Permanently delete your account? You will lose access to MyBusiness on this account. Shared business records will not be deleted. This cannot be undone.')) return;
     try{
+        if(window.currentRole==='admin'){
+            const q=query(collection(db,'businessMembers'),where('ownerId','==',user.uid));
+            const snap=await getDocs(q);
+            const hasOtherMembers=snap.docs.some(d=>d.id!==user.uid);
+            if(hasOtherMembers){
+                alert('You still have team members with access to this business. Remove everyone from Team & Access first — deleting your account now would permanently lock them out, since no one would be left with Admin access.');
+                return;
+            }
+        }
         const providers=(user.providerData||[]).map(p=>p.providerId);
         if(providers.includes('password')){
             const password=prompt('For security, enter your password to permanently delete your account:');
@@ -381,11 +390,12 @@ function scheduleCurrentPageRender(){
     scheduledPageRender=true;
     requestAnimationFrame(()=>{
         scheduledPageRender=false;
-        const content=document.getElementById('app-content');
-        if(!content) return;
-        if(currentPage==='dashboard') renderDashboard(content);
-        else if(currentPage==='customers') renderCustomers(content);
-        else if(currentPage==='inventory') renderInventory(content);
+        const content=document.getElementById('app-content'); if(!content)return;
+        // Never rebuild an active sale form/cart or an open modal from a background snapshot.
+        const modalOpen=!document.getElementById('modal-overlay')?.classList.contains('hidden');
+        if(currentPage==='sales' || modalOpen)return;
+        const renderers={dashboard:renderDashboard,customers:renderCustomers,inventory:renderInventory,more:renderMore,expenses:renderExpenses,stockPurchases:renderStockPurchases,reports:renderReports,settings:renderSettings,suppliers:renderSuppliers,cashbook:renderCashBook,staff:renderStaff,reminders:renderReminders,businessCard:renderBusinessCard,backup:renderBackup,appLock:renderAppLock,team:renderTeam};
+        if(renderers[currentPage])renderers[currentPage](content);
     });
 }
 function handleListenerSnapshot(name,snapshot){
@@ -399,6 +409,13 @@ function handleListenerSnapshot(name,snapshot){
     applyLanguageToShell();
     updateConnectionIndicator();
     if(initialSnapshotSources.size >= expectedInitialSources) revealAppWhenReady();
+    const modal=document.getElementById('modal-overlay'), modalBody=document.getElementById('modal-body');
+    if(currentPage==='customers' && modal && !modal.classList.contains('hidden') && modalBody?.classList.contains('customer-detail-modal') && name==='customerTransactions'){
+        const cid=modalBody.dataset.customerId; if(cid) renderCustomerLedgerTable(cid);
+    }
+    if(currentPage==='customers' && modal && !modal.classList.contains('hidden') && modalBody?.classList.contains('customer-detail-modal') && name==='customers'){
+        const cid=modalBody.dataset.customerId; if(cid) openCustomerDetails(cid);
+    }
     scheduleCurrentPageRender();
 }
 function startDataListeners(ownerId){
@@ -512,9 +529,9 @@ function openDeleteFromDashboardMenu(){ closeDashboardMenu(); setTimeout(()=>ope
 function logoutFromDashboardMenu(){ closeDashboardMenu(); setTimeout(()=>handleLogout(),40); }
 
 Object.assign(window,{
-    renderDashboard,renderSales,showSaleTab,renderCart,updateSaleDue,addSaleItem,removeCartItem,completeNormalSale,completeWholesaleSale,completeRetailSale,completeManualSale,completeBulkSale,openProductSelectionModal,toggleProductRow,filterProductSelectionList,addSelectedProductsToCart,
+    renderDashboard,renderSales,showSaleTab,renderCart,updateSaleDue,updateCartItemQty,addSaleItem,removeCartItem,completeNormalSale,completeWholesaleSale,completeRetailSale,completeManualSale,completeBulkSale,openProductSelectionModal,toggleProductRow,filterProductSelectionList,addSelectedProductsToCart,
     renderInventory,openProductModal,saveProduct,deleteProduct,openStockAdjustModal,saveStockAdjustment,
-    renderCustomers,openCustomerModal,saveCustomer,openCustomerDetails,renderCustomerLedgerTable,filterCustomerLedger,downloadCustomerStatementPdf,openCustomerReportOptions,sendCustomerReport,sendCustomerSms,sendPaymentReminder,openCustomerSetDate,saveCustomerDueDate,openGiveModal,processGive,openReceiveModal,processReceive,
+    renderCustomers,openCustomerModal,saveCustomer,openCustomerDetails,renderCustomerLedgerTable,filterCustomerLedger,deleteCustomer,openCustomerEntryActions,editCustomerEntry,deleteCustomerEntry,downloadCustomerStatementPdf,openCustomerReportOptions,sendCustomerReport,sendCustomerSms,sendPaymentReminder,openCustomerSetDate,saveCustomerDueDate,openGiveModal,processGive,openReceiveModal,processReceive,
     renderExpenses,openExpenseModal,saveExpense,deleteExpense,renderStockPurchases,openStockPurchaseModal,showStockPurchaseTab,onStockPurchaseProductChange,saveStockPurchase,deleteStockPurchase,
     renderReports,setReportTab,changeReportMonth,resetDailyReport,renderMore,openDeleteRecordsModal,deleteCollectionData,deleteEverything,
     renderSettings,saveSettings,selectTheme,toggleDarkMode,openChangePasswordModal,changePassword,closeModal,viewSaleDetail,
@@ -524,6 +541,20 @@ Object.assign(window,{
     renderStaff,openStaffModal,saveStaff,deleteStaff,openAttendanceModal,onAttendanceDateChange,saveAttendance,renderReminders,openReminderModal,saveReminder,completeReminder,deleteReminder,
     renderBusinessCard,saveBusinessCard,shareBusinessCard,renderBackup,exportBusinessBackup,importBusinessBackup,renderAppLock,saveAppLock,removeAppLock,checkAppLock,renderTeam,createEmployeeInvite,cancelEmployeeInvite,toggleEmployeeActive,deleteEmployee,
     openDashboardMenu,closeDashboardMenu,navigateFromDashboardMenu,openPasswordFromDashboardMenu,openDeleteFromDashboardMenu,logoutFromDashboardMenu,deleteMyAccount
+});
+
+// Quantity-field UX: whenever a quantity input receives focus, select its existing value
+// so the user can type a replacement immediately without backspacing first.
+document.addEventListener('focusin', (event) => {
+    const el = event.target;
+    if (!(el instanceof HTMLInputElement) || el.type !== 'number') return;
+    const id = String(el.id || '').toLowerCase();
+    const name = String(el.name || '').toLowerCase();
+    const label = String(el.getAttribute('aria-label') || '').toLowerCase();
+    if (!/(qty|quantity)/.test(`${id} ${name} ${label}`)) return;
+    requestAnimationFrame(() => {
+        try { el.select(); } catch (_) {}
+    });
 });
 
 // Mobile keyboard UX: keep modal lists/forms inside the visible viewport.
