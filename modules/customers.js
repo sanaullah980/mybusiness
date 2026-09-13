@@ -27,6 +27,59 @@ function ledgerRows(customerId){
     return rows.map((t,i)=>{ running=Math.max(0,running+debitFor(t)-creditFor(t)); return {t,balance:running,index:i+1}; });
 }
 
+export function renderCustomers(container) {
+    const customers = window.data.customers || [];
+    const totalDebt = customers.reduce((sum, c) => sum + Math.max(0, Number(c.balance) || 0), 0);
+    container.innerHTML = `
+        <div class="customer-summary-card"><div><span class="summary-label">Customers</span><strong>${customers.length}</strong></div><div class="summary-divider"></div><div><span class="summary-label">Total receivable</span><strong class="text-danger">${money(totalDebt)}</strong></div></div>
+        <button class="btn customer-add-btn" onclick="openCustomerModal()"><i class="fas fa-user-plus"></i><span>Add Customer</span></button>
+        <div class="customer-list-card" id="customer-list">${customers.length===0?`<div class="empty-state"><div class="empty-icon"><i class="fas fa-users"></i></div><h3>No customers yet</h3><p>Add your first customer to start tracking credit.</p></div>`:customers.map(c=>{const b=Math.max(0,Number(c.balance)||0);return `<button class="customer-row" onclick="openCustomerDetails('${esc(c.id)}')"><span class="customer-avatar">${esc((c.name||'?').trim().charAt(0).toUpperCase())}</span><span class="customer-row-main"><strong>${esc(c.name)}</strong><small>${esc(c.phone||'No phone number')}</small></span><span class="customer-row-balance"><small>Due</small><strong class="${b>0?'text-danger':'text-success'}">${money(b)}</strong></span><i class="fas fa-chevron-right"></i></button>`}).join('')}</div>`;
+}
+
+export function openCustomerModal(customerId = null) {
+    const c = customerId ? window.data.customers.find(x => x.id === customerId) : null;
+    const modal = document.getElementById('modal-body');
+    modal.innerHTML = `<div class="modal-header"><h2>${c ? 'Edit Customer' : 'Add Customer'}</h2><button class="close-btn" onclick="closeModal()" aria-label="Close">&times;</button></div>
+        <div class="form-group"><label>Customer Name *</label><input type="text" id="c-name" value="${esc(c?.name || '')}" autocomplete="name"></div>
+        <div class="form-group"><label>Phone / Contact</label><input type="tel" id="c-phone" value="${esc(c?.phone || '')}" autocomplete="tel"></div>
+        <div class="form-group"><label>Address</label><textarea id="c-address" rows="2" autocomplete="street-address" placeholder="Customer address">${esc(c?.address || '')}</textarea></div>
+        <div class="form-group"><label>Due / Reminder Date</label><input type="date" id="c-due-date" value="${esc(c?.dueDate || '')}"></div>
+        <div class="form-group"><label>Notes</label><textarea id="c-notes" rows="2">${esc(c?.notes || '')}</textarea></div>
+        <button class="btn" id="btn-save-customer" onclick="saveCustomer('${esc(customerId || '')}')">${c ? 'Update Customer' : 'Save Customer'}</button>`;
+    document.getElementById('modal-overlay').classList.remove('hidden');
+}
+
+export async function saveCustomer(customerId) {
+    const name=document.getElementById('c-name').value.trim(), phone=document.getElementById('c-phone').value.trim(), address=document.getElementById('c-address')?.value.trim()||'', notes=document.getElementById('c-notes').value.trim(), dueDate=document.getElementById('c-due-date').value||null;
+    if(!name) return alert('Customer name is required.'); if(!window.currentUserId) return alert('Please log in again.');
+    window.showLoading('btn-save-customer','Saving...');
+    try{const cData={name,phone,address,notes,dueDate,ownerId:window.currentUserId};if(customerId) await window.updateDoc(window.doc(window.db,'customers',customerId),cData);else{cData.balance=0;cData.createdAt=new Date().toISOString();await window.addDoc(window.collection(window.db,'customers'),cData);}closeModal();window.navigate('customers');}catch(e){console.error(e);alert(e.message||'Failed to save customer.');}finally{window.hideLoading('btn-save-customer');}
+}
+
+export function openCustomerDetails(customerId){
+    const c=(window.data.customers||[]).find(x=>x.id===customerId); if(!c)return alert('Customer not found.');
+    const balance=Math.max(0,Number(c.balance)||0), phone=String(c.phone||'').trim();
+    const modal=document.getElementById('modal-body');
+    modal.className='modal-content customer-detail-modal';
+    modal.innerHTML=`<div class="khata-customer-page">
+      <div class="khata-topbar"><button class="khata-back" onclick="closeModal()"><i class="fas fa-chevron-left"></i></button><div class="khata-title"><h2>${esc(c.name)} <span>Customer</span></h2><button class="khata-settings" onclick="openCustomerModal('${esc(c.id)}')">${phone?esc(phone):'Click here to view settings'}</button></div><a class="khata-call ${phone?'':'disabled'}" href="${phone?'tel:'+esc(phone):'#'}"><i class="fas fa-phone"></i></a></div>
+      ${c.address?`<div class="khata-customer-address"><i class="fas fa-map-marker-alt"></i><span>${esc(c.address)}</span></div>`:""}
+      <div class="khata-balance-card"><strong class="${balance>0?'due':'settled'}">${money(balance)}</strong><span>${balance>0?'You will get':'Settled'}</span>${c.dueDate?`<small>Due date: ${new Date(c.dueDate+'T00:00:00').toLocaleDateString()}</small>`:''}</div>
+      <div class="khata-quick-actions">
+        <button class="admin-only" onclick="openCustomerReportOptions('${esc(c.id)}')"><i class="far fa-file-alt"></i><span>Report</span></button>
+        <button onclick="openCustomerSetDate('${esc(c.id)}')"><i class="far fa-calendar-plus"></i><span>Set Date</span></button>
+        <button onclick="sendPaymentReminder('${esc(c.id)}')"><i class="fab fa-whatsapp"></i><span>Reminder</span></button>
+        <button onclick="sendCustomerSms('${esc(c.id)}')"><i class="far fa-comment-alt"></i><span>SMS</span></button>
+      </div>
+      <div class="khata-search"><i class="fas fa-search"></i><input id="customer-ledger-search" type="search" placeholder="Search" oninput="filterCustomerLedger('${esc(c.id)}')"></div>
+      <div class="khata-ledger-head"><strong>Entries</strong><strong>You Gave</strong><strong>You Got</strong></div>
+      <div id="cust-ledger-container" class="khata-ledger"></div>
+      <button class="btn btn-danger customer-delete-btn" onclick="deleteCustomer('${esc(c.id)}')"><i class="fas fa-trash"></i> Delete Customer</button><div class="khata-bottom-actions"><button class="gave" onclick="openGiveModal('${esc(c.id)}')">YOU GAVE <small>Rs</small></button><button class="got" onclick="openReceiveModal('${esc(c.id)}')">YOU GOT <small>Rs</small></button></div>
+    </div>`;
+    modal.dataset.customerId=customerId; document.getElementById('modal-overlay').classList.remove('hidden'); renderCustomerLedgerTable(customerId);
+}
+
+
 export function renderCustomerLedgerTable(customerId){
     const container=document.getElementById('cust-ledger-container'); if(!container)return;
     const query=(document.getElementById('customer-ledger-search')?.value||'').trim().toLowerCase();
