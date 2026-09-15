@@ -56,7 +56,7 @@ export async function saveCustomer(customerId) {
     try{const cData={name,phone,address,notes,dueDate,ownerId:window.currentUserId};if(customerId) await window.updateDoc(window.doc(window.db,'customers',customerId),cData);else{cData.balance=0;cData.createdAt=new Date().toISOString();await window.addDoc(window.collection(window.db,'customers'),cData);}closeModal();window.navigate('customers');}catch(e){console.error(e);alert(e.message||'Failed to save customer.');}finally{window.hideLoading('btn-save-customer');}
 }
 
-export function openCustomerDetails(customerId){
+export async function openCustomerDetails(customerId){
     const c=(window.data.customers||[]).find(x=>x.id===customerId); if(!c)return alert('Customer not found.');
     const balance=Math.max(0,Number(c.balance)||0), phone=String(c.phone||'').trim();
     const modal=document.getElementById('modal-body');
@@ -77,15 +77,19 @@ export function openCustomerDetails(customerId){
       <button class="btn btn-danger customer-delete-btn" onclick="deleteCustomer('${esc(c.id)}')"><i class="fas fa-trash"></i> Delete Customer</button><div class="khata-bottom-actions"><button class="gave" onclick="openGiveModal('${esc(c.id)}')">YOU GAVE <small>Rs</small></button><button class="got" onclick="openReceiveModal('${esc(c.id)}')">YOU GOT <small>Rs</small></button></div>
     </div>`;
     modal.dataset.customerId=customerId; document.getElementById('modal-overlay').classList.remove('hidden'); renderCustomerLedgerTable(customerId);
-    // Load ALL historical entries for this exact customer, including older records
-    // created before ownerId was added. This keeps old Khata history editable/deletable.
+    // Load the complete ledger for this customer, including legacy entries that do not
+    // have ownerId. This is intentionally customer-scoped and is only available to Admin.
     if (window.currentRole === 'admin' && window.getDocs && window.query && window.where) {
-        window.getDocs(window.query(window.collection(window.db,'customerTransactions'), window.where('customerId','==',customerId)))
-          .then(snap => {
-              const existing=new Set((window.data.customerTransactions||[]).map(t=>t.id));
-              snap.forEach(d=>{ if(!existing.has(d.id)) window.data.customerTransactions.push({id:d.id,...d.data()}); });
-              renderCustomerLedgerTable(customerId);
-          }).catch(err=>console.warn('Could not load historical customer entries:',err));
+        try {
+            const snap=await window.getDocs(window.query(window.collection(window.db,'customerTransactions'), window.where('customerId','==',customerId)));
+            const existing=new Map((window.data.customerTransactions||[]).map(t=>[t.id,t]));
+            snap.forEach(d=>existing.set(d.id,{id:d.id,...d.data()}));
+            window.data.customerTransactions=[...existing.values()];
+            renderCustomerLedgerTable(customerId);
+        } catch(err) {
+            console.warn('Could not load historical customer entries:',err);
+            window.showToast?.('Some older entries could not be loaded. Deploy the included Firestore rules.','warning');
+        }
     }
 }
 
@@ -121,9 +125,13 @@ async function recomputeCustomerLedger(customerId){
     for(let i=0;i<updates.length;i+=450){const batch=window.writeBatch(window.db);updates.slice(i,i+450).forEach(x=>batch.update(x.ref,{balanceAfter:x.balance}));await batch.commit();}
     await window.updateDoc(window.doc(window.db,'customers',customerId),{balance,updatedAt:new Date().toISOString()});
 }
-export function openCustomerEntryActions(customerId,transactionId){
+export async function openCustomerEntryActions(customerId,transactionId){
     if(window.currentRole!=='admin') return window.showToast?.('Only the Admin can edit or delete a Khata entry.','warning');
-    const t=(window.data.customerTransactions||[]).find(x=>x.id===transactionId); if(!t)return;
+    let t=(window.data.customerTransactions||[]).find(x=>x.id===transactionId);
+    if(!t && window.getDoc){
+        try { const snap=await window.getDoc(window.doc(window.db,'customerTransactions',transactionId)); if(snap.exists()) t={id:snap.id,...snap.data()}; } catch(e) { console.warn('Could not load Khata entry:',e); }
+    }
+    if(!t)return window.showToast?.('This entry could not be loaded.','error');
     const m=document.getElementById('modal-body');
     const debit=debitFor(t),credit=creditFor(t);
     m.className='modal-content';
@@ -135,13 +143,22 @@ export function openCustomerEntryActions(customerId,transactionId){
     document.getElementById('modal-overlay').classList.remove('hidden');
 }
 export async function editCustomerEntry(customerId,transactionId){
+    if(window.currentRole!=='admin') return window.showToast?.('Only the Admin can edit a Khata entry.','warning');
     const debit=Math.max(0,Number(document.getElementById('edit-entry-debit')?.value)||0),credit=Math.max(0,Number(document.getElementById('edit-entry-credit')?.value)||0),note=document.getElementById('edit-entry-note')?.value.trim()||'';
     if(debit===0&&credit===0)return alert('Enter an amount.');
     try{await window.updateDoc(window.doc(window.db,'customerTransactions',transactionId),{debitAmount:debit,creditAmount:credit,amount:debit||credit,note,updatedAt:new Date().toISOString()});await recomputeCustomerLedger(customerId);window.showToast?.('Entry updated','success');openCustomerDetails(customerId);}catch(e){console.error(e);alert(e.message||'Failed to update entry.');}
 }
 export async function deleteCustomerEntry(customerId,transactionId){
+    if(window.currentRole!=='admin') return window.showToast?.('Only the Admin can delete a Khata entry.','warning');
     if(!confirm('Delete this Khata entry? The customer balance will be recalculated.'))return;
-    try{await window.deleteDoc(window.doc(window.db,'customerTransactions',transactionId));await recomputeCustomerLedger(customerId);window.showToast?.('Entry deleted','success');openCustomerDetails(customerId);}catch(e){console.error(e);alert(e.message||'Failed to delete entry.');}
+    try{
+        await window.deleteDoc(window.doc(window.db,'customerTransactions',transactionId));
+        window.data.customerTransactions=(window.data.customerTransactions||[]).filter(t=>t.id!==transactionId);
+        try { await recomputeCustomerLedger(customerId); }
+        catch(balanceError) { console.warn('Entry deleted; balance refresh will retry from the customer ledger:',balanceError); }
+        window.showToast?.('Entry deleted','success');
+        await openCustomerDetails(customerId);
+    }catch(e){console.error(e);alert(e.message||'Failed to delete entry. Check that the latest firestore.rules are deployed.');}
 }
 
 export async function deleteCustomer(customerId){
