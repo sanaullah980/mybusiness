@@ -244,8 +244,8 @@ export async function deleteStockPurchase(id){
       const existing=purchaseSnap.data(); if(existing.ownerId!==window.currentUserId)throw new Error('Unauthorized.');
       let linkedSupplierTxnRefs=[];
       if(existing.supplierId&&Number(existing.amountDue||0)>0){
-        const tq=window.query(window.collection(window.db,'supplierTransactions'),window.where('purchaseId','==',id));
-        const ts=await window.getDocs(tq); linkedSupplierTxnRefs=ts.docs.filter(d=>d.data()?.ownerId===window.currentUserId).map(d=>d.ref);
+        const tq=window.query(window.collection(window.db,'supplierTransactions'),window.where('ownerId','==',window.currentUserId));
+        const ts=await window.getDocs(tq); linkedSupplierTxnRefs=ts.docs.filter(d=>d.data()?.ownerId===window.currentUserId && d.data()?.purchaseId===id).map(d=>d.ref);
       }
       await window.runAtomicOrOffline(async transaction=>{
         const ps=await transaction.get(purchaseRef); if(!ps.exists())throw new Error('Purchase not found.');
