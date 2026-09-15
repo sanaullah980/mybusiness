@@ -6,6 +6,8 @@ service cloud.firestore {
     function memberData(){ return get(/databases/$(database)/documents/businessMembers/$(request.auth.uid)).data; }
     function belongs(ownerId){ return member() && memberData().active == true && memberData().ownerId == ownerId; }
     function admin(ownerId){ return belongs(ownerId) && memberData().role == 'admin'; }
+    function currentAdmin(){ return member() && memberData().active == true && memberData().role == 'admin'; }
+    function adminOwnsCustomer(customerId){ return currentAdmin() && exists(/databases/$(database)/documents/customers/$(customerId)) && get(/databases/$(database)/documents/customers/$(customerId)).data.ownerId == memberData().ownerId; }
     function can(key){ return member() && memberData().active == true && (memberData().role == 'admin' || memberData().permissions[key] == true); }
     function ownSale(){ return resource.data.createdBy == request.auth.uid; }
 
@@ -43,12 +45,12 @@ service cloud.firestore {
       allow read: if belongs(resource.data.ownerId);
       allow create: if belongs(request.resource.data.ownerId) && can('customers');
       allow update: if belongs(resource.data.ownerId) && (can('customers') || can('payments')) && request.resource.data.ownerId == resource.data.ownerId;
-      allow delete: if admin(resource.data.ownerId);
+      allow delete: if admin(resource.data.ownerId) || currentAdmin() && resource.data.ownerId == memberData().ownerId;
     }
     match /customerTransactions/{id} {
-      allow read: if belongs(resource.data.ownerId);
+      allow read: if belongs(resource.data.ownerId) || adminOwnsCustomer(resource.data.customerId);
       allow create: if belongs(request.resource.data.ownerId) && can('payments');
-      allow update, delete: if admin(resource.data.ownerId);
+      allow update, delete: if admin(resource.data.ownerId) || adminOwnsCustomer(resource.data.customerId);
     }
     match /sales/{id} {
       allow read: if admin(resource.data.ownerId) || (belongs(resource.data.ownerId) && resource.data.createdBy == request.auth.uid);

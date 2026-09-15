@@ -101,9 +101,11 @@ export function filterCustomerLedger(customerId){ renderCustomerLedgerTable(cust
 
 
 async function recomputeCustomerLedger(customerId){
-    const q=window.query(window.collection(window.db,'customerTransactions'),window.where('ownerId','==',window.currentUserId));
+    // Query by customer so legacy Khata entries that predate ownerId are also included.
+    // Firestore rules authorize this query for the Admin through the customer record.
+    const q=window.query(window.collection(window.db,'customerTransactions'),window.where('customerId','==',customerId));
     const snap=await window.getDocs(q);
-    const txns=snap.docs.filter(d=>d.data()?.ownerId===window.currentUserId && d.data()?.customerId===customerId).sort((a,b)=>new Date(a.data().date)-new Date(b.data().date));
+    const txns=snap.docs.filter(d=>d.data()?.customerId===customerId && (!d.data()?.ownerId || d.data()?.ownerId===window.currentUserId)).sort((a,b)=>new Date(a.data().date)-new Date(b.data().date));
     let balance=0; const updates=[];
     txns.forEach(d=>{const t=d.data(); balance=Math.max(0,balance+debitFor(t)-creditFor(t)); updates.push({ref:d.ref,balance});});
     for(let i=0;i<updates.length;i+=450){const batch=window.writeBatch(window.db);updates.slice(i,i+450).forEach(x=>batch.update(x.ref,{balanceAfter:x.balance}));await batch.commit();}
@@ -138,9 +140,11 @@ export async function deleteCustomer(customerId){
     if(!confirm(`Delete customer "${c.name}" permanently? Their customer ledger entries will also be deleted. Sales records will remain.`)) return;
     if(!window.currentUserId) return alert('Please log in again.');
     try{
-        const q=window.query(window.collection(window.db,'customerTransactions'), window.where('ownerId','==',window.currentUserId));
+        // Query by customerId instead of ownerId so older entries without ownerId
+        // can also be removed by the Admin. Firestore rules enforce ownership.
+        const q=window.query(window.collection(window.db,'customerTransactions'), window.where('customerId','==',customerId));
         const snap=await window.getDocs(q);
-        const owned=snap.docs.filter(d=>d.data()?.ownerId===window.currentUserId && d.data()?.customerId===customerId);
+        const owned=snap.docs.filter(d=>!d.data()?.ownerId || d.data()?.ownerId===window.currentUserId);
         for(let i=0;i<owned.length;i+=450){
             const batch=window.writeBatch(window.db);
             owned.slice(i,i+450).forEach(d=>batch.delete(d.ref));
