@@ -77,6 +77,16 @@ export function openCustomerDetails(customerId){
       <button class="btn btn-danger customer-delete-btn" onclick="deleteCustomer('${esc(c.id)}')"><i class="fas fa-trash"></i> Delete Customer</button><div class="khata-bottom-actions"><button class="gave" onclick="openGiveModal('${esc(c.id)}')">YOU GAVE <small>Rs</small></button><button class="got" onclick="openReceiveModal('${esc(c.id)}')">YOU GOT <small>Rs</small></button></div>
     </div>`;
     modal.dataset.customerId=customerId; document.getElementById('modal-overlay').classList.remove('hidden'); renderCustomerLedgerTable(customerId);
+    // Load ALL historical entries for this exact customer, including older records
+    // created before ownerId was added. This keeps old Khata history editable/deletable.
+    if (window.currentRole === 'admin' && window.getDocs && window.query && window.where) {
+        window.getDocs(window.query(window.collection(window.db,'customerTransactions'), window.where('customerId','==',customerId)))
+          .then(snap => {
+              const existing=new Set((window.data.customerTransactions||[]).map(t=>t.id));
+              snap.forEach(d=>{ if(!existing.has(d.id)) window.data.customerTransactions.push({id:d.id,...d.data()}); });
+              renderCustomerLedgerTable(customerId);
+          }).catch(err=>console.warn('Could not load historical customer entries:',err));
+    }
 }
 
 

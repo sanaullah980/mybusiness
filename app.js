@@ -16,7 +16,7 @@ import { closeModal, viewSaleDetail } from './modules/modals.js';
 import { renderSuppliers, openSupplierModal, saveSupplier, deleteSupplier, openSupplierDetails, openSupplierPayModal, processSupplierPayment, openSupplierDebtModal, processSupplierDebt } from './modules/suppliers.js';
 import { renderCashBook, buildCashBookEntries, openSetOpeningBalanceModal, saveOpeningBalance, openCashEntryModal, saveCashEntry } from './modules/cashbook.js';
 import { openGlobalSearchModal, runGlobalSearch } from './modules/search.js';
-import { openInvoiceModal, downloadInvoicePdf, printInvoice, shareInvoiceWhatsApp } from './modules/invoices.js';
+import { openInvoiceModal, downloadInvoicePdf, printInvoice, shareInvoiceWhatsApp, editInvoiceItems, saveInvoiceEdits } from './modules/invoices.js';
 import { openReturnModal, processReturn } from './modules/returns.js';
 import { renderStaff, openStaffModal, saveStaff, deleteStaff, openAttendanceModal, onAttendanceDateChange, saveAttendance } from './modules/staff.js';
 import { renderReminders, openReminderModal, saveReminder, completeReminder, deleteReminder } from './modules/reminders.js';
@@ -537,7 +537,7 @@ Object.assign(window,{
     renderSettings,saveSettings,selectTheme,toggleDarkMode,openChangePasswordModal,changePassword,closeModal,viewSaleDetail,
     renderSuppliers,openSupplierModal,saveSupplier,deleteSupplier,openSupplierDetails,openSupplierPayModal,processSupplierPayment,openSupplierDebtModal,processSupplierDebt,
     renderCashBook,buildCashBookEntries,openSetOpeningBalanceModal,saveOpeningBalance,openCashEntryModal,saveCashEntry,openGlobalSearchModal,runGlobalSearch,addProductByBarcode,startBarcodeScanner,
-    openInvoiceModal,downloadInvoicePdf,printInvoice,shareInvoiceWhatsApp,openReturnModal,processReturn,
+    openInvoiceModal,downloadInvoicePdf,printInvoice,shareInvoiceWhatsApp,editInvoiceItems,saveInvoiceEdits,openReturnModal,processReturn,
     renderStaff,openStaffModal,saveStaff,deleteStaff,openAttendanceModal,onAttendanceDateChange,saveAttendance,renderReminders,openReminderModal,saveReminder,completeReminder,deleteReminder,
     renderBusinessCard,saveBusinessCard,shareBusinessCard,renderBackup,exportBusinessBackup,importBusinessBackup,renderAppLock,saveAppLock,removeAppLock,checkAppLock,renderTeam,createEmployeeInvite,cancelEmployeeInvite,toggleEmployeeActive,deleteEmployee,
     openDashboardMenu,closeDashboardMenu,navigateFromDashboardMenu,openPasswordFromDashboardMenu,openDeleteFromDashboardMenu,logoutFromDashboardMenu,deleteMyAccount

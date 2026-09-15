@@ -19,8 +19,8 @@
 export function openReturnModal(saleId) {
     const sale = window.data.sales.find(s => s.id === saleId);
     if (!sale) return alert("Sale not found.");
-    if (sale.saleType !== 'normal' || !sale.items || sale.items.length === 0) {
-        return alert("Returns are only supported for itemized (Normal Sale) purchases.");
+    if (!['normal','wholesale','retail'].includes(sale.saleType) || !sale.items || sale.items.length === 0) {
+        return alert("Returns are only supported for itemized sales.");
     }
     const returnable = sale.items.filter(i => (i.qty - (i.returnedQty || 0)) > 0);
     if (returnable.length === 0) return alert("All items from this sale have already been returned.");
