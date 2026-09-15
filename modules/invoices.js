@@ -33,7 +33,6 @@ async function ensureInvoiceNumber(saleId) {
 }
 
 function esc(v){ return (window.esc||((x)=>String(x??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]))))(v); }
-function getBusinessName(){ return (window.data.settings&&window.data.settings.name)||'My Business'; }
 function invoiceItems(sale){ return Array.isArray(sale.items)&&sale.items.length ? sale.items : [{id:null,name:sale.note||'Sale',qty:1,price:Number(sale.total)||0,cost:0}]; }
 
 export async function openInvoiceModal(saleId) {
@@ -128,6 +127,7 @@ export function removeInvoiceEditItem(index){ const saleId=window._editingInvoic
 function renderInvoiceEditDraft(saleId){ const sale=(window.data.sales||[]).find(s=>s.id===saleId),items=window._invoiceEditDraft||sale.items||[],fmt=window.formatCurrency; const holder=document.getElementById('invoice-edit-items'); if(!holder)return; holder.innerHTML=items.map((i,n)=>`<div class="invoice-edit-item" data-index="${n}"><div class="invoice-edit-item-title"><strong>${esc(i.name)}</strong><button type="button" class="btn btn-sm btn-danger" onclick="removeInvoiceEditItem(${n})">Remove</button></div><div class="form-row"><div class="form-group"><label>Quantity</label><input type="number" min="${Number(i.returnedQty||0)}" id="edit-inv-qty-${n}" value="${Number(i.qty)||0}"></div><div class="form-group"><label>Price / Rate</label><input type="number" min="0" step="0.01" id="edit-inv-price-${n}" value="${Number(i.price)||0}"></div></div><small>Cost: ${fmt(i.cost||0)}${i.returnedQty?` · Already returned: ${i.returnedQty}`:''}</small></div>`).join(''); }
 export function openInvoiceItemPicker(saleId){
     window._editingInvoiceSaleId=saleId; const sale=(window.data.sales||[]).find(s=>s.id===saleId); if(!sale)return;
+    const products=Array.isArray(window.data.products)?window.data.products:[];
     const draft=window._invoiceEditDraft||currentEditItems(sale); window._invoiceEditDraft=draft; const selected=new Map(draft.map(i=>[i.id,i])); const modal=document.getElementById('modal-body'),fmt=window.formatCurrency;
     modal.innerHTML=`<div class="modal-header"><h2>Add / Remove Items</h2><button class="close-btn" onclick="editInvoiceItems('${saleId}')">&times;</button></div><p style="color:var(--gray);font-size:13px">Select or unselect products. Each selected product has its own quantity and selling price.</p><div class="product-picker-search form-group"><input type="search" id="invoice-product-search" placeholder="Search products..." oninput="filterInvoiceItemPicker()"></div><div id="invoice-item-picker-list">${productsForInvoicePicker(products,selected,fmt)}</div><button class="btn" onclick="applyInvoiceItemPicker('${saleId}')">Apply Selected Items</button>`;
     document.getElementById('modal-overlay').classList.remove('hidden');
