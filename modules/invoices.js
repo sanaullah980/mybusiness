@@ -14,14 +14,6 @@ async function ensureInvoiceNumber(saleId) {
     const sale = (window.data.sales||[]).find(s => s.id === saleId);
     if (sale && sale.invoiceNumber !== undefined && sale.invoiceNumber !== null && sale.invoiceNumber !== '') return sale.invoiceNumber;
     let assignedNumber = null;
-    // Existing sales already receive their invoice number at sale time. If an old
-    // sale has no number, employees must still be able to open its invoice without
-    // attempting an admin-only settings write.
-    if (window.currentRole !== 'admin') {
-        const cachedNums=(window.data?.sales||[]).map(x=>parseInt(x.invoiceNumber,10)).filter(Number.isFinite);
-        assignedNumber=Math.max(1,...cachedNums)+1;
-        return assignedNumber;
-    }
     await window.runAtomicOrOffline(async (transaction) => {
         const settingsRef = window.doc(window.db, 'settings', window.currentUserId);
         const saleRef = window.doc(window.db, 'sales', saleId);
@@ -50,10 +42,10 @@ export async function openInvoiceModal(saleId) {
     const fmt=window.formatCurrency, items=invoiceItems(sale);
     const modal=document.getElementById('modal-body');
     modal.classList.add('invoice-modal');
-    modal.innerHTML=`<div class="modal-header"><h2>Invoice #${esc(invoiceNumber)}</h2><button class="close-btn" onclick="closeModal()">&times;</button></div>
+    modal.innerHTML=`<div class="modal-header"><h2>Bill #${esc(invoiceNumber)}</h2><button class="close-btn" onclick="closeModal()">&times;</button></div>
       <div class="invoice-sheet">
         <div class="invoice-business"><strong>${esc(getBusinessName())}</strong><span>${esc(window.data.settings?.phone||'')}</span><span>${esc(window.data.settings?.address||'')}</span></div>
-        <div class="invoice-title"><strong>Invoice #${esc(invoiceNumber)}</strong><span>${new Date(sale.date).toLocaleString()}</span></div>
+        <div class="invoice-title"><strong>Bill #${esc(invoiceNumber)}</strong><span>${new Date(sale.date).toLocaleString()}</span></div>
         <div class="invoice-customer"><span>Customer</span><strong>${esc(sale.customerName||'Walk-in')}</strong></div>
         ${sale.customerId ? `<div class="invoice-customer"><span>Phone</span><strong>${esc((window.data.customers||[]).find(c=>c.id===sale.customerId)?.phone||'')}</strong></div>`:''}
         <table class="invoice-table"><thead><tr><th>ITEM</th><th>Qty</th><th>RATE</th><th>AMOUNT</th></tr></thead><tbody>${items.map(i=>`<tr><td>${esc(i.name)}</td><td>${Number(i.qty)||0}</td><td>${fmt(i.price||0)}</td><td>${fmt((Number(i.price)||0)*(Number(i.qty)||0))}</td></tr>`).join('')}</tbody></table>
@@ -61,8 +53,8 @@ export async function openInvoiceModal(saleId) {
         <div class="invoice-total-row"><span>Received</span><strong>${fmt(sale.amountPaid||0)}</strong></div>
         <div class="invoice-total-row net"><span>${(sale.amountDue||0)>0?'Net Amount':'Net Amount'}</span><strong>${fmt(sale.amountDue||0)}</strong></div>
       </div>
-      <div class="invoice-actions">${window.currentRole==='admin'?`<button class="btn btn-secondary" onclick="editInvoiceItems('${saleId}')"><i class="fas fa-edit"></i> Edit Invoice</button>`:''}
-      ${items.some(i=>i.id && (Number(i.qty||0)-Number(i.returnedQty||0))>0) && ['normal','wholesale','retail'].includes(sale.saleType)?`${window.currentRole==='admin'?`<button class="btn btn-secondary" onclick="openReturnModal('${saleId}')"><i class="fas fa-undo"></i> Return / Refund</button>`:''}`:''}
+      <div class="invoice-actions"><button class="btn btn-secondary" onclick="editInvoiceItems('${saleId}')"><i class="fas fa-edit"></i> Edit Entry</button>
+      ${items.some(i=>i.id && (Number(i.qty||0)-Number(i.returnedQty||0))>0) && ['normal','wholesale','retail'].includes(sale.saleType)?`<button class="btn btn-secondary" onclick="openReturnModal('${saleId}')"><i class="fas fa-undo"></i> Return / Refund</button>`:''}
       <button class="btn" onclick="downloadInvoicePdf('${saleId}')"><i class="fas fa-file-pdf"></i> Preview / PDF</button><button class="btn btn-secondary" onclick="printInvoice('${saleId}')"><i class="fas fa-print"></i> Print</button><button class="btn" style="background:#25D366" onclick="shareInvoiceWhatsApp('${saleId}')"><i class="fab fa-whatsapp"></i> WhatsApp</button></div>`;
     document.getElementById('modal-overlay').classList.remove('hidden');
 }
@@ -75,7 +67,7 @@ function buildInvoiceDoc(sale,invoiceNumber){
     doc.setFontSize(16); doc.text(getBusinessName(),left,y); y+=18; doc.setFontSize(9);
     if(window.data.settings?.phone) {doc.text(String(window.data.settings.phone),left,y);y+=12;}
     if(window.data.settings?.address) {doc.text(String(window.data.settings.address),left,y);y+=12;}
-    y+=6; doc.setFontSize(14); doc.text(`Invoice #${invoiceNumber}`,left,y); doc.setFontSize(9); doc.text(new Date(sale.date).toLocaleString(),right,y,{align:'right'}); y+=18;
+    y+=6; doc.setFontSize(14); doc.text(`Bill #${invoiceNumber}`,left,y); doc.setFontSize(9); doc.text(new Date(sale.date).toLocaleString(),right,y,{align:'right'}); y+=18;
     doc.text(`Customer: ${sale.customerName||'Walk-in'}`,left,y); y+=15;
     doc.line(left,y,right,y);y+=14; doc.setFontSize(8); doc.text('ITEM',left,y);doc.text('QTY',250,y);doc.text('RATE',290,y);doc.text('AMOUNT',right,y,{align:'right'});y+=12;
     invoiceItems(sale).forEach(i=>{doc.text(String(i.name||''),left,y,{maxWidth:205});doc.text(String(i.qty||0),250,y);doc.text(fmt(i.price||0),290,y);doc.text(fmt((i.price||0)*(i.qty||0)),right,y,{align:'right'});y+=16;});
@@ -117,34 +109,27 @@ export async function shareInvoiceWhatsApp(saleId) {
 
 export function editInvoiceItems(saleId){
     const sale=(window.data.sales||[]).find(s=>s.id===saleId); if(!sale)return alert('Sale not found.');
-    const products=Array.isArray(window.data.products)?window.data.products:[], items=Array.isArray(sale.items)?sale.items:[]; if(!items.length)return alert('This invoice has no itemized products to edit.');
-    // Preserve any quantity/price edits already typed before opening the product picker.
-    if(window._editingInvoiceSaleId===saleId && window._invoiceEditDraft) window._invoiceEditDraft=currentEditItemsFromDraft();
-    else window._invoiceEditDraft=items.map(i=>({...i}));
+    const products=Array.isArray(window.data.products)?window.data.products:[], items=Array.isArray(sale.items)?sale.items:[]; if(!items.length)return alert('This bill has no itemized products to edit.');
     const fmt=window.formatCurrency, modal=document.getElementById('modal-body');
     modal.classList.add('invoice-edit-modal');
-    modal.innerHTML=`<div class="modal-header"><h2>Edit Invoice #${esc(sale.invoiceNumber||'')}</h2><button class="close-btn" onclick="openInvoiceModal('${saleId}')">&times;</button></div>
-      <div class="invoice-edit-head"><div class="form-row"><div class="form-group"><label>Invoice Number</label><input type="number" id="edit-inv-bill" min="1" value="${Number(sale.invoiceNumber)||1}"></div><div class="form-group"><label>Date</label><input type="date" id="edit-inv-date" value="${new Date(sale.date).toISOString().slice(0,10)}"></div></div>
+    modal.innerHTML=`<div class="modal-header"><h2>Edit Bill #${esc(sale.invoiceNumber||'')}</h2><button class="close-btn" onclick="openInvoiceModal('${saleId}')">&times;</button></div>
+      <div class="invoice-edit-head"><div class="form-row"><div class="form-group"><label>Bill Number</label><input type="number" id="edit-inv-bill" min="1" value="${Number(sale.invoiceNumber)||1}"></div><div class="form-group"><label>Date</label><input type="date" id="edit-inv-date" value="${new Date(sale.date).toISOString().slice(0,10)}"></div></div>
       <div class="form-group"><label>Customer</label><div class="readonly-field">${esc(sale.customerName||'Walk-in')}</div></div></div>
-      <div class="section-title"><h3>Items</h3><button class="btn btn-secondary btn-sm" onclick="openInvoiceItemPicker('${saleId}')"><i class="fas fa-plus"></i> Add / Remove Invoice Items</button></div>
+      <div class="section-title"><h3>Items</h3><button class="btn btn-secondary btn-sm" onclick="openInvoiceItemPicker('${saleId}')"><i class="fas fa-plus"></i> Add / Remove Items</button></div>
       <div id="invoice-edit-items">${items.map((i,n)=>`<div class="invoice-edit-item" data-index="${n}"><div class="invoice-edit-item-title"><strong>${esc(i.name)}</strong><button type="button" class="btn btn-sm btn-danger" onclick="removeInvoiceEditItem(${n})">Remove</button></div><div class="form-row"><div class="form-group"><label>Quantity</label><input type="number" min="${Number(i.returnedQty||0)}" step="1" id="edit-inv-qty-${n}" value="${Number(i.qty)||0}"></div><div class="form-group"><label>Price / Rate</label><input type="number" min="0" step="0.01" id="edit-inv-price-${n}" value="${Number(i.price)||0}"></div></div><small>Cost: ${fmt(i.cost||0)}${i.returnedQty?` · Already returned: ${i.returnedQty}`:''}</small></div>`).join('')}</div>
       <div class="form-row"><div class="form-group"><label>Discount (Rs.)</label><input type="number" id="edit-inv-discount" min="0" step="0.01" value="${Number(sale.discount)||0}"></div><div class="form-group"><label>Amount Received (Rs.)</label><input type="number" id="edit-inv-paid" min="0" step="0.01" value="${Number(sale.amountPaid)||0}"></div></div>
       <button class="btn" id="btn-save-invoice-edit" onclick="saveInvoiceEdits('${saleId}')"><i class="fas fa-save"></i> Save Changes</button>`;
     document.getElementById('modal-overlay').classList.remove('hidden');
 }
 
-function currentEditItemsFromDraft(){
-    const items=(window._invoiceEditDraft||[]).map((old,i)=>{const q=document.getElementById(`edit-inv-qty-${i}`),p=document.getElementById(`edit-inv-price-${i}`);return {...old,qty:Math.max(Number(old.returnedQty||0),parseInt(q?.value,10)||0),price:Math.max(0,parseFloat(p?.value)||0)};}).filter(i=>i.qty>0);
-    return items;
-}
 function currentEditItems(sale){ return (sale.items||[]).map((old,i)=>{const q=document.getElementById(`edit-inv-qty-${i}`),p=document.getElementById(`edit-inv-price-${i}`);return {...old,qty:Math.max(Number(old.returnedQty||0),parseInt(q?.value,10)||0),price:Math.max(0,parseFloat(p?.value)||0)};}).filter(i=>i.qty>0); }
 export function removeInvoiceEditItem(index){ const saleId=window._editingInvoiceSaleId; const sale=(window.data.sales||[]).find(s=>s.id===saleId); if(!sale)return; const items=currentEditItems(sale); if((sale.items[index]?.returnedQty||0)>0)return alert('This item has already been returned and cannot be removed completely.'); items.splice(index,1); window._invoiceEditDraft=items; renderInvoiceEditDraft(saleId); }
 function renderInvoiceEditDraft(saleId){ const sale=(window.data.sales||[]).find(s=>s.id===saleId),items=window._invoiceEditDraft||sale.items||[],fmt=window.formatCurrency; const holder=document.getElementById('invoice-edit-items'); if(!holder)return; holder.innerHTML=items.map((i,n)=>`<div class="invoice-edit-item" data-index="${n}"><div class="invoice-edit-item-title"><strong>${esc(i.name)}</strong><button type="button" class="btn btn-sm btn-danger" onclick="removeInvoiceEditItem(${n})">Remove</button></div><div class="form-row"><div class="form-group"><label>Quantity</label><input type="number" min="${Number(i.returnedQty||0)}" id="edit-inv-qty-${n}" value="${Number(i.qty)||0}"></div><div class="form-group"><label>Price / Rate</label><input type="number" min="0" step="0.01" id="edit-inv-price-${n}" value="${Number(i.price)||0}"></div></div><small>Cost: ${fmt(i.cost||0)}${i.returnedQty?` · Already returned: ${i.returnedQty}`:''}</small></div>`).join(''); }
 export function openInvoiceItemPicker(saleId){
     window._editingInvoiceSaleId=saleId; const sale=(window.data.sales||[]).find(s=>s.id===saleId); if(!sale)return;
     const products=Array.isArray(window.data.products)?window.data.products:[];
-    const draft=currentEditItems(sale); window._invoiceEditDraft=draft; const selected=new Map(draft.map(i=>[i.id,i])); const modal=document.getElementById('modal-body'),fmt=window.formatCurrency;
-    modal.innerHTML=`<div class="modal-header"><h2>Add / Remove Invoice Items</h2><button class="close-btn" onclick="editInvoiceItems('${saleId}')">&times;</button></div><p style="color:var(--gray);font-size:13px">Select or unselect products. Each selected product has its own quantity and selling price.</p><div class="product-picker-search form-group"><input type="search" id="invoice-product-search" placeholder="Search products..." oninput="filterInvoiceItemPicker()"></div><div id="invoice-item-picker-list">${productsForInvoicePicker(products,selected,fmt)}</div><button class="btn" onclick="applyInvoiceItemPicker('${saleId}')">Apply Selected Items</button>`;
+    const draft=window._invoiceEditDraft||currentEditItems(sale); window._invoiceEditDraft=draft; const selected=new Map(draft.map(i=>[i.id,i])); const modal=document.getElementById('modal-body'),fmt=window.formatCurrency;
+    modal.innerHTML=`<div class="modal-header"><h2>Add / Remove Items</h2><button class="close-btn" onclick="editInvoiceItems('${saleId}')">&times;</button></div><p style="color:var(--gray);font-size:13px">Select or unselect products. Each selected product has its own quantity and selling price.</p><div class="product-picker-search form-group"><input type="search" id="invoice-product-search" placeholder="Search products..." oninput="filterInvoiceItemPicker()"></div><div id="invoice-item-picker-list">${productsForInvoicePicker(products,selected,fmt)}</div><button class="btn" onclick="applyInvoiceItemPicker('${saleId}')">Apply Selected Items</button>`;
     document.getElementById('modal-overlay').classList.remove('hidden');
 }
 function productsForInvoicePicker(products,selected,fmt){ return products.map(p=>{const i=selected.get(p.id),checked=!!i,qty=i?.qty||1,price=i?.price??(window.activeSaleType==='retail'?p.retailPrice:p.wholesalePrice)??p.price??0;return `<div class="product-select-item-wrapper invoice-picker-row" data-name="${esc(String(p.name||'').toLowerCase())}"><button type="button" class="product-select-item" onclick="toggleInvoicePickerRow('${esc(p.id)}')"><input type="checkbox" id="inv-chk-${esc(p.id)}" ${checked?'checked':''} onclick="event.preventDefault();event.stopPropagation();toggleInvoicePickerRow('${esc(p.id)}')"><span class="product-select-main"><strong>${esc(p.name)}</strong><small>Stock: ${Number(p.stock)||0} · Price: ${fmt(price)}</small></span><i class="fas fa-chevron-right"></i></button><div id="inv-row-${esc(p.id)}" class="product-qty-row ${checked?'':'hidden'}"><label>Qty</label><input type="number" min="1" id="inv-pick-qty-${esc(p.id)}" value="${qty}" onchange="setInvoicePickerQty('${esc(p.id)}',this.value)"><label>Price</label><input type="number" min="0" step="0.01" id="inv-pick-price-${esc(p.id)}" value="${price}" onchange="setInvoicePickerPrice('${esc(p.id)}',this.value)"></div></div>`;}).join('')||'<p class="empty-state">No products found.</p>'; }
@@ -157,7 +142,7 @@ export function applyInvoiceItemPicker(saleId){const m=window._invoicePickerMap|
 
 export async function saveInvoiceEdits(saleId){
     const sale=(window.data.sales||[]).find(s=>s.id===saleId); if(!sale)return alert('Sale not found.');
-    const items=window._invoiceEditDraft||currentEditItems(sale); if(!items.length)return alert('Invoice must contain at least one item.');
+    const items=window._invoiceEditDraft||currentEditItems(sale); if(!items.length)return alert('Bill must contain at least one item.');
     const billNumber=Math.max(1,parseInt(document.getElementById('edit-inv-bill')?.value,10)||Number(sale.invoiceNumber)||1),discount=Math.max(0,parseFloat(document.getElementById('edit-inv-discount')?.value)||0),paidInput=parseFloat(document.getElementById('edit-inv-paid')?.value)||0;
     for(const old of sale.items||[]){const n=items.find(x=>x.id===old.id);if((old.returnedQty||0)>Number(n?.qty||0))return alert(`${old.name}: quantity cannot be less than already returned quantity (${old.returnedQty}).`);}
     const subtotal=items.reduce((a,i)=>a+Number(i.price||0)*Number(i.qty||0),0),appliedDiscount=Math.min(discount,subtotal),total=Math.max(0,subtotal-appliedDiscount),amountPaid=Math.min(Math.max(0,paidInput),total),amountDue=Math.max(0,total-amountPaid),totalProfit=items.reduce((a,i)=>a+(Number(i.price||0)-Number(i.cost||0))*Number(i.qty||0),0)-appliedDiscount;
@@ -172,7 +157,7 @@ export async function saveInvoiceEdits(saleId){
       const dateInput=document.getElementById('edit-inv-date')?.value;const newDate=dateInput?new Date(dateInput+'T12:00:00').toISOString():fresh.date;
       transaction.update(saleRef,{items,invoiceNumber:billNumber,date:newDate,subtotal,discount:appliedDiscount,total,amountPaid,amountDue,totalProfit,profitKnown:true});
       transaction.set(window.doc(window.db,'settings',window.currentUserId),{nextInvoiceNumber:Math.max(billNumber+1,1)},{merge:true});
-    }); window._invoiceEditDraft=null;window.showToast?.('Invoice updated successfully!','success');await openInvoiceModal(saleId);
+    }); window._invoiceEditDraft=null;window.showToast?.('Bill updated successfully!','success');await openInvoiceModal(saleId);
     }catch(e){console.error(e);alert(e.message||'Failed to update bill.');}finally{window.hideLoading('btn-save-invoice-edit');}
 }
 

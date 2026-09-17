@@ -45,6 +45,10 @@ function stockPurchaseFormHtml(values={}) {
         return p ? {...item, name:p.name, stock:Number(p.stock)||0} : null;
     }).filter(Boolean);
     const total=selectedProducts.reduce((sum,i)=>sum+(Number(i.qty)||0)*(Number(i.price)||0),0);
+    // Manual item is added below as a new inventory product when saved.
+    const manualQty=Number(values.manualQty)||1, manualPrice=Number(values.manualPrice)||0;
+    const manualName=String(values.name||'').trim();
+    const grandTotal=total+(manualName?manualQty*manualPrice:0);
     return `
       <div class="modal-header"><h2>Record Stock Purchase</h2><button class="close-btn" onclick="closeModal()">&times;</button></div>
       <div class="form-group">
@@ -63,10 +67,14 @@ function stockPurchaseFormHtml(values={}) {
             <div class="stock-purchase-item-total">Item total: <strong>${money((Number(item.qty)||0)*(Number(item.price)||0))}</strong></div>
         </div>`).join('') : '<div class="empty-state" style="padding:18px;"><i class="fas fa-box-open"></i><strong>No products selected</strong><span>Select one or multiple products above.</span></div>'}
       </div>
-      <div class="stock-purchase-total card" style="margin:12px 0;"><span>Total Purchase</span><strong id="sp-total">${money(total)}</strong></div>
+      <div class="stock-purchase-total card" style="margin:12px 0;"><span>Total Purchase</span><strong id="sp-total">${money(grandTotal)}</strong></div>
       <div class="form-group">
-        <label>Manual Product Name (Optional)</label>
-        <input type="text" id="sp-manual-name" maxlength="120" placeholder="Use this only for an item not in Inventory" value="${esc(values.name||'')}">
+        <label>Manual Product (Optional)</label>
+        <input type="text" id="sp-manual-name" maxlength="120" placeholder="Item not in Inventory" value="${esc(values.name||'')}">
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Manual Quantity</label><input type="number" id="sp-manual-qty" min="1" step="1" inputmode="numeric" value="${Number(values.manualQty)||1}"></div>
+        <div class="form-group"><label>Manual Purchase Price (Rs.)</label><input type="number" id="sp-manual-price" min="0" step="0.01" inputmode="decimal" value="${values.manualPrice!==undefined&&values.manualPrice!==''?esc(values.manualPrice):''}" placeholder="Price per unit"></div>
       </div>
       <div class="form-group"><label>Supplier</label><select id="sp-supplier">${supplierOptions}</select></div>
       <div class="form-group"><label>Date *</label><input type="date" id="sp-date" value="${esc(values.date||window.getLocalDateStr(new Date()))}"></div>
@@ -81,7 +89,9 @@ function readStockPurchaseForm() {
         supplier:document.getElementById('sp-supplier')?.value||'',
         date:document.getElementById('sp-date')?.value||window.getLocalDateStr(new Date()),
         paid:document.getElementById('sp-amount-paid')?.value||'',
-        note:document.getElementById('sp-note')?.value||''
+        note:document.getElementById('sp-note')?.value||'',
+        manualQty:document.getElementById('sp-manual-qty')?.value||'1',
+        manualPrice:document.getElementById('sp-manual-price')?.value||''
     };
 }
 
@@ -186,11 +196,14 @@ export async function saveStockPurchase() {
     const date=document.getElementById('sp-date')?.value;
     const supplierId=document.getElementById('sp-supplier')?.value||null;
     const note=document.getElementById('sp-note')?.value.trim()||'';
+    const manualQty=Math.max(1,parseInt(document.getElementById('sp-manual-qty')?.value,10)||1);
+    const manualPrice=Math.max(0,parseFloat(document.getElementById('sp-manual-price')?.value)||0);
     const paidRaw=document.getElementById('sp-amount-paid')?.value??'';
     if(!date)return alert('Date is required.');
     if(!draft.length&&!manualName)return alert('Select at least one product or enter a manual product name.');
+    if(manualName && manualPrice<=0)return alert('Enter a valid purchase price for the manual product.');
     if(draft.some(i=>!Number.isFinite(i.price)||i.price<0||i.qty<1))return alert('Enter a valid quantity and price for every selected product.');
-    const manualAmount=manualName&&!draft.length ? Math.max(0,parseFloat(document.getElementById('sp-unit-cost')?.value)||0) : 0;
+    const manualAmount=manualName ? manualQty*manualPrice : 0;
     const total=draft.reduce((sum,i)=>sum+i.qty*i.price,0)+manualAmount;
     if(total<=0)return alert('Purchase total must be greater than Rs. 0.');
     const amountPaid=paidRaw===''?total:Math.max(0,Math.min(total,parseFloat(paidRaw)||0));
@@ -208,6 +221,12 @@ export async function saveStockPurchase() {
           if(snap.data().ownerId!==window.currentUserId)throw new Error('Unauthorized.');
           productSnaps.set(item.productId,snap);
         }
+        let manualProduct=null;
+        if(manualName){
+          const manualRef=window.doc(window.collection(window.db,'products'));
+          manualProduct={id:manualRef.id,name:manualName,qty:manualQty,price:manualPrice,ref:manualRef};
+          transaction.set(manualRef,{name:manualName,barcode:'',cost:manualPrice,price:manualPrice,wholesalePrice:manualPrice,retailPrice:manualPrice,stock:manualQty,minStock:5,ownerId:window.currentUserId});
+        }
         if(supplierId){
           supplierSnap=await transaction.get(window.doc(window.db,'suppliers',supplierId));
           if(!supplierSnap.exists())throw new Error('Supplier not found.');
@@ -219,8 +238,9 @@ export async function saveStockPurchase() {
         }
         const purchaseRef=window.doc(window.collection(window.db,'stockPurchases'));
         const items=draft.map(item=>({productId:item.productId,productName:productSnaps.get(item.productId).data().name||'',qty:item.qty,unitCost:item.price,amount:item.qty*item.price}));
+        if(manualProduct) items.push({productId:manualProduct.id,productName:manualProduct.name,qty:manualProduct.qty,unitCost:manualProduct.price,amount:manualAmount,manual:true});
         const primary=items[0]||null;
-        transaction.set(purchaseRef,{ownerId:window.currentUserId,date:new Date(date).toISOString(),amount:total,amountPaid,amountDue,category:'',note,supplierId:supplierId||null,supplier:supplierName,productId:primary?.productId||null,productName:items.length>1?`${items.length} Products`:primary?.productName||manualName,qty:primary?.qty||0,unitCost:primary?.unitCost||0,items,manualProductName:manualName||null});
+        transaction.set(purchaseRef,{ownerId:window.currentUserId,date:new Date(date).toISOString(),amount:total,amountPaid,amountDue,category:'',note,supplierId:supplierId||null,supplier:supplierName,productId:primary?.productId||null,productName:items.length>1?`${items.length} Products`:primary?.productName||'',qty:primary?.qty||0,unitCost:primary?.unitCost||0,items,manualProductName:manualName||null});
         if(supplierId&&amountDue>0){
           const newBalance=Number(supplierSnap.data().balance||0)+amountDue;
           transaction.update(window.doc(window.db,'suppliers',supplierId),{balance:newBalance});

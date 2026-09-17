@@ -50,7 +50,7 @@ service cloud.firestore {
     match /customerTransactions/{id} {
       allow read: if belongs(resource.data.ownerId) || adminOwnsCustomer(resource.data.customerId);
       allow create: if belongs(request.resource.data.ownerId) && can('payments');
-      allow update, delete: if (resource.data.ownerId != null && admin(resource.data.ownerId)) || adminOwnsCustomer(resource.data.customerId);
+      allow update, delete: if admin(resource.data.ownerId) || adminOwnsCustomer(resource.data.customerId);
     }
     match /sales/{id} {
       allow read: if admin(resource.data.ownerId) || (belongs(resource.data.ownerId) && resource.data.createdBy == request.auth.uid);
