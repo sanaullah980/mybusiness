@@ -88,32 +88,38 @@ function parseProductRows(text){
     const line=raw.replace(/^[|•·-]+\s*/,'').trim();
     if(line.length<3||isExcludedProductLine(line)||likelyDate(line))continue;
     const nums=extractNumbers(line); if(nums.length<2)continue;
-    // Avoid lines dominated by long IDs/phone numbers.
     if(nums.some(n=>String(n.value).replace(/\D/g,'').length>=9))continue;
-    const useful=nums.filter(n=>n.value!==null && n.value>=0);
-    if(useful.length<2)continue;
-    // Most wholesale invoices place quantity before unit price and the unit price near the end.
-    let price=useful.at(-1).value, qtyCandidate=useful.at(-2).value;
-    // Common invoice layout: Qty × Unit Price = Line Total. If the last number
-    // looks like Qty × the previous number, use the previous number as unit price.
-    if(useful.length>=3){
-      const a=useful.at(-3).value,b=useful.at(-2).value,c=useful.at(-1).value;
-      if(a>0 && b>=0 && Math.abs(a*b-c)<=Math.max(1,Math.abs(c)*0.03)){qtyCandidate=a;price=b;}
+
+    let qty=null, price=null, qtyPos=-1, pricePos=-1;
+    // Prefer a clear Qty × Unit Price = Line Total pattern.
+    for(let k=nums.length-3;k>=0;k--){
+      const a=nums[k],b=nums[k+1],c=nums[k+2];
+      if(a.value>0 && b.value>=0 && Math.abs(a.value*b.value-c.value)<=Math.max(1,Math.abs(c.value)*0.035)){
+        qty=a.value; price=b.value; qtyPos=a.index; pricePos=b.index; break;
+      }
     }
-    if(qtyCandidate===null||qtyCandidate<=0||qtyCandidate>100000||price<0||price>100000000)continue;
-    const pricePos=useful.at(-1).index, qtyPos=useful.at(-2).index;
+    // Otherwise assume the final two numbers are quantity and unit price.
+    if(qty===null){
+      const q=nums[nums.length-2], p=nums[nums.length-1];
+      qty=q.value; price=p.value; qtyPos=q.index; pricePos=p.index;
+    }
+    if(!Number.isFinite(qty)||qty<=0||qty>100000||!Number.isFinite(price)||price<0||price>100000000)continue;
+
     let name=line.slice(0,Math.min(qtyPos,pricePos)).trim();
-    // If the OCR put quantity before the name, use the text between quantity and price.
-    const qtyRaw=String(useful.at(-2).raw); const qi=line.lastIndexOf(qtyRaw,Math.max(0,pricePos));
-    if(qi>0 && qi<pricePos) name=line.slice(0,qi).trim();
-    name=name.replace(/^\d+[.)-]\s*/,'').replace(/\s{2,}/g,' ').trim();
-    if(name.length<2||/^\d/.test(name))continue;
+    // Remove common leading item-number columns while preserving product names.
+    name=name.replace(/^\d{1,5}[.)-]\s*/,'').replace(/^[|]+\s*/,'').replace(/\s{2,}/g,' ').trim();
+    if(name.length<2||/^\d+(?:\.\d+)?$/.test(name))continue;
+
     const unit=detectUnit(name); const packSize=detectPackSize(name);
-    const confidence=Math.max(0.35,Math.min(0.96,0.5+(name.length>5?0.12:0)+(useful.length===2?0.12:0)));
-    rows.push({name,quantity:Math.round(qtyCandidate*100)/100,unit,packSize,purchasePrice:price,totalPrice:Math.round(qtyCandidate*price*100)/100,sku:detectSku(line),barcode:detectBarcode(line),ocrConfidence:confidence});
+    const confidence=Math.max(0.42,Math.min(0.97,0.56+(name.length>5?0.12:0)+(nums.length>=2?0.10:0)+(nums.length>=3?0.08:0)));
+    rows.push({name,quantity:Math.round(qty*100)/100,unit,packSize,purchasePrice:Math.round(price*100)/100,totalPrice:Math.round(qty*price*100)/100,sku:detectSku(line),barcode:detectBarcode(line),ocrConfidence:confidence});
   }
-  // De-duplicate adjacent OCR repeats.
-  const clean=[]; for(const r of rows){ const prev=clean.at(-1); if(prev&&similarity(prev.name,r.name)>0.92&&Math.abs(prev.purchasePrice-r.purchasePrice)<0.01&&Math.abs(prev.quantity-r.quantity)<0.01)continue; clean.push(r); }
+  const clean=[];
+  for(const r of rows){
+    const prev=clean.at(-1);
+    if(prev&&similarity(prev.name,r.name)>0.92&&Math.abs(prev.purchasePrice-r.purchasePrice)<0.01&&Math.abs(prev.quantity-r.quantity)<0.01)continue;
+    clean.push(r);
+  }
   return clean;
 }
 function detectUnit(s){ const x=normalizeText(s); if(/\bkg\b/.test(x))return 'kg'; if(/\bg\b/.test(x))return 'g'; if(/\bl\b/.test(x))return 'L'; if(/\bml\b/.test(x))return 'ml'; if(/\b(dozen|dz|doz)\b/.test(x))return 'dozen'; if(/\b(box|boxes)\b/.test(x))return 'box'; if(/\b(carton|cartons|ctn)\b/.test(x))return 'carton'; if(/\b(pack|pk|packs)\b/.test(x))return 'pack'; return 'piece'; }
@@ -176,14 +182,21 @@ async function loadTesseract(){ if(tessPromise)return tessPromise; tessPromise=l
 async function loadPdfJs(){ if(pdfPromise)return pdfPromise; pdfPromise=loadScript(PDFJS_URL,'pdfjsLib').then(lib=>{lib.GlobalWorkerOptions.workerSrc=PDFJS_WORKER_URL;return lib;}); return pdfPromise; }
 async function ocrCanvas(canvas,logger){
   const T=await loadTesseract();
-  let result;
+  let result=null;
   try{ result=await T.recognize(canvas,'eng',{logger}); }
-  catch(engErr){
-    console.warn('English OCR failed; retrying with Urdu OCR.',engErr);
-    result=await T.recognize(canvas,'urd',{logger});
+  catch(engErr){ console.warn('English OCR failed; retrying with Urdu OCR.',engErr); }
+  let confidence=Number(result?.data?.confidence||0);
+  let text=result?.data?.text||'';
+  // A successful OCR call can still return unusable text. Retry with Urdu when
+  // English confidence is weak so mixed English/Urdu distributor bills have a chance.
+  if(confidence<48 || text.trim().length<8){
+    try{
+      const urd=await T.recognize(canvas,'urd',{logger});
+      const uc=Number(urd?.data?.confidence||0);
+      if(uc>confidence || !text.trim()){ text=urd?.data?.text||text; confidence=uc; }
+    }catch(urdErr){ console.warn('Urdu OCR unavailable; keeping English OCR.',urdErr); }
   }
-  const confidence=Number(result?.data?.confidence||0);
-  return {text:result?.data?.text||'',confidence};
+  return {text,confidence};
 }
 async function processFile(file,progress){
   if(!file)throw new Error('No file selected.');
@@ -248,7 +261,7 @@ function syncReviewHeaderFromDom(){const d=window.billScanDraft;if(!d)return;con
 function renderBillReview(){
   syncReviewHeaderFromDom();
   const d=window.billScanDraft; if(!d)return; const m=document.getElementById('modal-body');m.classList.add('bill-review-modal');
-  const total=d.items.reduce((s,i)=>s+(Number(i.quantity)||0)*(Number(i.purchasePrice)||0),0); const billTotal=Number(d.header.grandTotal||0); const diff=billTotal?total-billTotal:0; const canConfirm=d.items.length>0&&d.items.every(i=>Number(i.quantity)>0&&Number(i.purchasePrice)>=0&&(i.selectedProductId||i.newProductConfirmed));
+  const total=d.items.reduce((s,i)=>s+(Number(i.quantity)||0)*(Number(i.purchasePrice)||0),0); const billTotal=Number(d.header.grandTotal||0); const diff=billTotal?total-billTotal:0; const canConfirm=d.items.length>0&&d.items.every(i=>String(i.name||'').trim()&&Number(i.quantity)>0&&Number(i.purchasePrice)>=0&&(i.selectedProductId||i.newProductConfirmed));
   m.innerHTML=`<div class="modal-header"><div><h2>Review Purchase</h2><small>Detected data — nothing has been added to stock.</small></div><button class="close-btn" onclick="closeModal()">&times;</button></div>
   <div class="bill-review-grid"><div class="bill-preview-panel">${d.previewUrl?`<img src="${d.previewUrl}" alt="Original bill preview">`:'<div class="bill-pdf-preview"><i class="fas fa-file-pdf"></i><strong>PDF bill</strong><span>Original file selected</span></div>'}</div>
   <div class="bill-fields-panel"><div class="bill-meta-grid"><label>Supplier<input id="bs-supplier-name" value="${esc(d.supplierName||'')}" placeholder="Supplier name" onchange="billSupplierNameChanged(this.value)"></label><label>Invoice Number<input id="bs-invoice" value="${esc(d.header.invoiceNumber||'')}"></label><label>Invoice Date<input type="date" id="bs-date" value="${esc(d.header.invoiceDate||window.getLocalDateStr(new Date()))}"></label><label>Subtotal<input type="number" id="bs-subtotal" value="${d.header.subtotal??''}"></label><label>Discount<input type="number" id="bs-discount" value="${d.header.discount??0}"></label><label>Tax<input type="number" id="bs-tax" value="${d.header.tax??0}"></label><label>Grand Total<input type="number" id="bs-grand-total" value="${d.header.grandTotal??total}"></label><label>Amount Paid Now<input type="number" id="bs-paid" min="0" value="${d.header.paid??(d.header.grandTotal??total)}"></label></div>
@@ -257,7 +270,7 @@ function renderBillReview(){
   <div class="bill-total-validation ${billTotal&&Math.abs(diff)>.01?'warning':'ok'}"><span>${billTotal&&Math.abs(diff)<=.01?'✓ Total matches':'⚠ '+(billTotal?'Calculated total does not match the bill total.':'Bill total not detected — review the items.')}</span><strong>Calculated: ${money(total)} ${billTotal?` · Bill: ${money(billTotal)}`:''}</strong></div>
   <div class="bill-items-head"><h3>Detected Products (${d.items.length})</h3><button class="btn btn-secondary btn-sm" onclick="addBillItem()">+ Add Item</button></div>
   <div class="bill-items-table"><div class="bill-table-header"><span>Product</span><span>Qty</span><span>Unit</span><span>Purchase Price</span><span>Existing Product</span><span>Status</span><span></span></div>${d.items.map((item,i)=>`<div class="bill-item-row"><input class="bill-name" value="${esc(item.name)}" onchange="updateBillItem(${i},'name',this.value)"><input type="number" min="0.01" step="0.01" value="${Number(item.quantity)||1}" onchange="updateBillItem(${i},'quantity',this.value)"><input value="${esc(item.unit||'piece')}" onchange="updateBillItem(${i},'unit',this.value)"><input type="number" min="0" step="0.01" value="${Number(item.purchasePrice)||0}" onchange="updateBillItem(${i},'purchasePrice',this.value)"><div>${productOptions(item,i)}${item.match?.suggestion&&!item.selectedProductId?`<small>Possible: ${esc(item.match.suggestion.name)}</small>`:''}</div><div>${statusBadge(item)}<small>${Math.round((item.ocrConfidence||0)*100)}% OCR</small></div><button class="btn btn-sm btn-danger" onclick="removeBillItem(${i})" aria-label="Remove item"><i class="fas fa-trash"></i></button></div>`).join('')}</div>
-  <div class="bill-review-footer"><button class="btn btn-secondary" onclick="openBillScanner()">Back</button><button class="btn" id="btn-confirm-bill" onclick="confirmScannedPurchase()" ${canConfirm?'':'disabled'}>Confirm & Add to Stock</button></div></div>`;
+  <div class="bill-review-footer"><button class="btn btn-secondary" type="button" onclick="openBillScanner()">Back</button><div class="bill-confirm-wrap"><small class="bill-confirm-hint">${canConfirm?'Review complete. Confirm to update stock.':'Select an existing product or press Create New Product for every item.'}</small><button class="btn" type="button" id="btn-confirm-bill" onclick="confirmScannedPurchase()" ${canConfirm?'':'disabled'}>Confirm & Add to Stock</button></div></div></div>`;
 }
 export function updateBillItem(index,field,value){ const d=window.billScanDraft;if(!d?.items[index])return;d.items[index][field]=(field==='quantity'||field==='purchasePrice')?Number(value)||0:value;renderBillReview(); }
 export function setBillItemProduct(index,id){ const d=window.billScanDraft;if(!d?.items[index])return;const item=d.items[index];item.selectedProductId=id;item.newProductConfirmed=false;const p=products().find(x=>x.id===id);item.selectedProductName=p?.name||'';item.status=id?(similarity(item.name,p?.name||'')>=.9?'high':'medium'):'low';renderBillReview(); }
@@ -282,7 +295,7 @@ export async function confirmScannedPurchase(){
   const d=window.billScanDraft;if(!d)return; const h=getReviewHeader();
   if(!h.date)return show('Invoice date is required.','error');
   if(!d.items.length)return show('Add at least one item.','error');
-  const invalid=d.items.find(i=>!String(i.name||'').trim()||Number(i.quantity)<=0||Number(i.purchasePrice)<0||!i.selectedProductId&&i.status!=='low'); if(invalid)return show('Review the highlighted product information before confirming.','error');
+  const invalid=d.items.find(i=>!String(i.name||'').trim()||Number(i.quantity)<=0||Number(i.purchasePrice)<0||(!i.selectedProductId&&!i.newProductConfirmed)); if(invalid)return show('Each item must be matched to an existing product or explicitly marked Create New Product.','error');
   if(d.items.some(i=>!i.selectedProductId&&!String(i.name||'').trim()))return show('Every item needs a product name.','error');
   const calc=d.items.reduce((s,i)=>s+Number(i.quantity)*Number(i.purchasePrice),0); const diff=h.grandTotal?calc-h.grandTotal:0;
   if(h.grandTotal&&Math.abs(diff)>.01&&!confirm(`Calculated total is ${money(calc)} but the bill total is ${money(h.grandTotal)}. Continue anyway?`))return;
