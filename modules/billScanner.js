@@ -4,10 +4,16 @@
  * OCR is treated as detected data only; nothing reaches Firestore until review + confirmation.
  */
 
+// Primary OCR: official PaddleOCR.js browser SDK (PP-OCRv5).
+// It runs in the browser through ONNX Runtime Web, so the bill image stays on the device.
+// Tesseract remains as a safety fallback if the Paddle runtime/model cannot be loaded.
+const PADDLE_OCR_URL = 'https://cdn.jsdelivr.net/npm/@paddleocr/paddleocr-js@0.4.2/+esm';
 const TESSERACT_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
 const PDFJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
 const PDFJS_WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 let tessPromise = null;
+let paddlePromise = null;
+let paddleEnginePromise = null;
 let pdfPromise = null;
 
 function esc(v){ return window.esc ? window.esc(v) : String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -82,7 +88,7 @@ function extractHeader(text){
   return out;
 }
 function parseProductRows(text){
-  const lines=String(text).split(/\r?\n/).map(x=>x.replace(/\t+/g,' ').replace(/\s{2,}/g,' ').trim()).filter(Boolean);
+  const lines=String(text).split(/\r?\n/).map(x=>x.replace(/\t+/g,'    ').replace(/[ ]{5,}/g,'    ').trim()).filter(Boolean);
   const rows=[];
   for(const raw of lines){
     const line=raw.replace(/^[|•·-]+\s*/,'').trim();
@@ -90,34 +96,43 @@ function parseProductRows(text){
     const nums=extractNumbers(line); if(nums.length<2)continue;
     if(nums.some(n=>String(n.value).replace(/\D/g,'').length>=9))continue;
 
-    let qty=null, price=null, qtyPos=-1, pricePos=-1;
-    // Prefer a clear Qty × Unit Price = Line Total pattern.
-    for(let k=nums.length-3;k>=0;k--){
-      const a=nums[k],b=nums[k+1],c=nums[k+2];
-      if(a.value>0 && b.value>=0 && Math.abs(a.value*b.value-c.value)<=Math.max(1,Math.abs(c.value)*0.035)){
-        qty=a.value; price=b.value; qtyPos=a.index; pricePos=b.index; break;
+    let qty=null, price=null, qtyPos=-1, pricePos=-1, total=null;
+    // Strongest signal: Qty × Unit Price = Line Total.
+    for(let k=0;k<=nums.length-3;k++){
+      const q=nums[k],p=nums[k+1],t=nums[k+2];
+      if(q.value>0&&p.value>=0&&t.value>=0&&Math.abs(q.value*p.value-t.value)<=Math.max(1,Math.abs(t.value)*0.04)){
+        qty=q.value;price=p.value;total=t.value;qtyPos=q.index;pricePos=p.index;break;
       }
     }
-    // Otherwise assume the final two numbers are quantity and unit price.
+    // Common invoice layout: [item/code] NAME QTY RATE AMOUNT.
+    if(qty===null&&nums.length>=3){
+      const q=nums[nums.length-3], p=nums[nums.length-2], t=nums[nums.length-1];
+      if(q.value>0&&p.value>=0&&t.value>=0&&Math.abs(q.value*p.value-t.value)<=Math.max(1,Math.abs(t.value)*0.06)){
+        qty=q.value;price=p.value;total=t.value;qtyPos=q.index;pricePos=p.index;
+      }
+    }
+    // Two numeric columns: QTY + RATE, with no line total.
     if(qty===null){
       const q=nums[nums.length-2], p=nums[nums.length-1];
-      qty=q.value; price=p.value; qtyPos=q.index; pricePos=p.index;
+      qty=q.value;price=p.value;qtyPos=q.index;pricePos=p.index;
+      total=qty*price;
     }
     if(!Number.isFinite(qty)||qty<=0||qty>100000||!Number.isFinite(price)||price<0||price>100000000)continue;
 
     let name=line.slice(0,Math.min(qtyPos,pricePos)).trim();
-    // Remove common leading item-number columns while preserving product names.
     name=name.replace(/^\d{1,5}[.)-]\s*/,'').replace(/^[|]+\s*/,'').replace(/\s{2,}/g,' ').trim();
+    // OCR sometimes places a product code immediately before the name.
+    name=name.replace(/^(?:item\s*)?(?:no\.?|#)?\s*[A-Z]{0,3}\d{2,10}\s+/i,'').trim();
     if(name.length<2||/^\d+(?:\.\d+)?$/.test(name))continue;
 
-    const unit=detectUnit(name); const packSize=detectPackSize(name);
-    const confidence=Math.max(0.42,Math.min(0.97,0.56+(name.length>5?0.12:0)+(nums.length>=2?0.10:0)+(nums.length>=3?0.08:0)));
-    rows.push({name,quantity:Math.round(qty*100)/100,unit,packSize,purchasePrice:Math.round(price*100)/100,totalPrice:Math.round(qty*price*100)/100,sku:detectSku(line),barcode:detectBarcode(line),ocrConfidence:confidence});
+    const unit=detectUnit(name),packSize=detectPackSize(name);
+    const confidence=Math.max(.45,Math.min(.98,.60+(name.length>5?.12:0)+(nums.length>=3?.10:0)+(Math.abs(qty*price-total)<=Math.max(1,total*.03)?.12:0)));
+    rows.push({name,quantity:Math.round(qty*100)/100,unit,packSize,purchasePrice:Math.round(price*100)/100,totalPrice:Math.round(total*100)/100,sku:detectSku(line),barcode:detectBarcode(line),ocrConfidence:confidence});
   }
   const clean=[];
   for(const r of rows){
     const prev=clean.at(-1);
-    if(prev&&similarity(prev.name,r.name)>0.92&&Math.abs(prev.purchasePrice-r.purchasePrice)<0.01&&Math.abs(prev.quantity-r.quantity)<0.01)continue;
+    if(prev&&similarity(prev.name,r.name)>.92&&Math.abs(prev.purchasePrice-r.purchasePrice)<.01&&Math.abs(prev.quantity-r.quantity)<.01)continue;
     clean.push(r);
   }
   return clean;
@@ -179,30 +194,118 @@ function preprocessImage(img,rotation=0){
 }
 async function loadScript(url,id){ if(window[id])return window[id]; const existing=document.querySelector(`script[data-mybiz-lib="${id}"]`); if(existing)return new Promise((res,rej)=>{existing.addEventListener('load',()=>res(window[id]));existing.addEventListener('error',rej);}); return new Promise((resolve,reject)=>{ const s=document.createElement('script');s.src=url;s.async=true;s.dataset.mybizLib=id;s.onload=()=>window[id]?resolve(window[id]):reject(new Error(`${id} loaded but was not available.`));s.onerror=()=>reject(new Error(`Could not load ${id}. Check your internet connection and try again.`));document.head.appendChild(s); }); }
 async function loadTesseract(){ if(tessPromise)return tessPromise; tessPromise=loadScript(TESSERACT_URL,'Tesseract'); return tessPromise; }
+
+async function loadPaddleOCR(){
+  if(paddlePromise)return paddlePromise;
+  paddlePromise=import(PADDLE_OCR_URL).then(m=>m.PaddleOCR||m.default?.PaddleOCR||m.default)
+    .catch(err=>{ paddlePromise=null; throw err; });
+  return paddlePromise;
+}
+
+async function getPaddleEngine(lang='en'){
+  const key=String(lang||'en');
+  if(!paddleEnginePromise)paddleEnginePromise=new Map();
+  if(paddleEnginePromise.has(key))return paddleEnginePromise.get(key);
+  const promise=(async()=>{
+    const PaddleOCR=await loadPaddleOCR();
+    if(!PaddleOCR||typeof PaddleOCR.create!=='function')throw new Error('PaddleOCR.js SDK could not be initialized.');
+    return PaddleOCR.create({
+      lang:key,
+      ocrVersion:'PP-OCRv5',
+      worker:true,
+      ortOptions:{
+        backend:'wasm',
+        wasmPaths:'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.0/dist/',
+        numThreads:2,
+        simd:true
+      }
+    });
+  })().catch(err=>{paddleEnginePromise.delete(key);throw err;});
+  paddleEnginePromise.set(key,promise);
+  return promise;
+}
+
+function paddleItemsToText(items){
+  const rows=(items||[]).map(it=>{
+    const poly=it.poly||it.box||[];
+    const pts=Array.isArray(poly)?poly.flat?poly.flat():poly:[];
+    let xs=[],ys=[];
+    for(let i=0;i<pts.length;i+=2){ if(Number.isFinite(Number(pts[i])))xs.push(Number(pts[i])); if(Number.isFinite(Number(pts[i+1])))ys.push(Number(pts[i+1])); }
+    const x=xs.length?Math.min(...xs):0, y=ys.length?Math.min(...ys):0, cy=ys.length?(Math.min(...ys)+Math.max(...ys))/2:0;
+    return {text:String(it.text||'').trim(),score:Number(it.score||0),x,y,cy};
+  }).filter(x=>x.text);
+  rows.sort((a,b)=>a.cy-b.cy||a.x-b.x);
+  const lines=[];
+  for(const item of rows){
+    let line=lines.find(l=>Math.abs(l.cy-item.cy)<=Math.max(10,Math.min(28,Math.abs((l.maxH||20))*0.7)));
+    if(!line){ line={cy:item.cy,maxH:20,items:[]}; lines.push(line); }
+    line.items.push(item);
+  }
+  return lines.map(l=>{
+    l.items.sort((a,b)=>a.x-b.x);
+    let out='';
+    let prevRight=null;
+    l.items.forEach((it,idx)=>{
+      if(idx===0)out=it.text;
+      else{
+        const gap=it.x-prevRight;
+        out+=(gap>28?'    ':' ')+it.text;
+      }
+      const approxW=Math.max(8,it.text.length*8);
+      prevRight=it.x+approxW;
+    });
+    return out.trim();
+  }).join('\n');
+}
+
+async function ocrWithPaddle(canvas,logger){
+  const langs=['en','ur'];
+  const results=[];
+  for(let i=0;i<langs.length;i++){
+    try{
+      logger?.({status:`PaddleOCR ${langs[i]==='ur'?'Urdu':'English'}…`,progress:0.15+(i*0.25)});
+      const engine=await getPaddleEngine(langs[i]);
+      const [res]=await engine.predict(canvas,{textRecScoreThresh:0.35});
+      const items=res?.items||[];
+      const text=paddleItemsToText(items);
+      const scores=items.map(x=>Number(x.score||0)).filter(Number.isFinite);
+      const confidence=scores.length?scores.reduce((a,b)=>a+b,0)/scores.length*100:0;
+      results.push({text,confidence,items,lang:langs[i],engine:'PaddleOCR PP-OCRv5'});
+    }catch(err){ console.warn(`PaddleOCR ${langs[i]} pass failed`,err); }
+  }
+  if(!results.length)throw new Error('PaddleOCR could not initialize. Falling back to Tesseract.');
+  // Prefer the pass that found more meaningful lines; confidence breaks ties.
+  results.sort((a,b)=>(b.text.trim().split(/\n+/).filter(Boolean).length-a.text.trim().split(/\n+/).filter(Boolean).length)||(b.confidence-a.confidence));
+  return results[0];
+}
+
 async function loadPdfJs(){ if(pdfPromise)return pdfPromise; pdfPromise=loadScript(PDFJS_URL,'pdfjsLib').then(lib=>{lib.GlobalWorkerOptions.workerSrc=PDFJS_WORKER_URL;return lib;}); return pdfPromise; }
 async function ocrCanvas(canvas,logger){
-  const T=await loadTesseract();
-  let result=null;
-  try{ result=await T.recognize(canvas,'eng',{logger}); }
-  catch(engErr){ console.warn('English OCR failed; retrying with Urdu OCR.',engErr); }
-  let confidence=Number(result?.data?.confidence||0);
-  let text=result?.data?.text||'';
-  // A successful OCR call can still return unusable text. Retry with Urdu when
-  // English confidence is weak so mixed English/Urdu distributor bills have a chance.
-  if(confidence<48 || text.trim().length<8){
-    try{
-      const urd=await T.recognize(canvas,'urd',{logger});
-      const uc=Number(urd?.data?.confidence||0);
-      if(uc>confidence || !text.trim()){ text=urd?.data?.text||text; confidence=uc; }
-    }catch(urdErr){ console.warn('Urdu OCR unavailable; keeping English OCR.',urdErr); }
+  try{
+    const paddle=await ocrWithPaddle(canvas,logger);
+    return paddle;
+  }catch(paddleErr){
+    console.warn('PaddleOCR unavailable; using Tesseract fallback.',paddleErr);
+    const T=await loadTesseract();
+    let result=null;
+    try{ result=await T.recognize(canvas,'eng',{logger}); }catch(engErr){ console.warn('English OCR failed.',engErr); }
+    let confidence=Number(result?.data?.confidence||0), text=result?.data?.text||'';
+    if(confidence<48 || text.trim().length<8){
+      try{
+        const urd=await T.recognize(canvas,'urd',{logger});
+        const uc=Number(urd?.data?.confidence||0);
+        if(uc>confidence || !text.trim()){text=urd?.data?.text||text;confidence=uc;}
+      }catch(urdErr){console.warn('Urdu Tesseract unavailable.',urdErr);}
+    }
+    return {text,confidence,items:[],engine:'Tesseract fallback'};
   }
-  return {text,confidence};
 }
+
 async function processFile(file,progress){
   if(!file)throw new Error('No file selected.');
   if(file.size>25*1024*1024)throw new Error('File is too large. Please use an image/PDF under 25 MB.');
   const isPdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name);
-  const texts=[]; let confs=[]; let previewUrl='';
+  const texts=[]; let confs=[]; let engines=[]; let previewUrl='';
   const logger=m=>{ if(typeof m?.progress==='number')progress?.(Math.round(m.progress*100),m.status||'OCR Reading…'); };
   if(isPdf){
     const pdfjs=await loadPdfJs(); progress?.(8,'Opening PDF…'); const buf=await file.arrayBuffer(); const pdf=await pdfjs.getDocument({data:buf}).promise;
@@ -210,7 +313,7 @@ async function processFile(file,progress){
     for(let i=1;i<=pdf.numPages;i++){
       progress?.(10+Math.round((i-1)/pdf.numPages*55),`Reading PDF page ${i} of ${pdf.numPages}…`);
       const page=await pdf.getPage(i); const viewport=page.getViewport({scale:2}); const canvas=document.createElement('canvas'); canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height); await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
-      if(i===1)try{previewUrl=canvas.toDataURL('image/jpeg',0.82);}catch(_){} const r=await ocrCanvas(canvas,logger);texts.push(r.text);confs.push(r.confidence);
+      if(i===1)try{previewUrl=canvas.toDataURL('image/jpeg',0.82);}catch(_){} const r=await ocrCanvas(canvas,logger);texts.push(r.text);confs.push(r.confidence);engines.push(r.engine||'PaddleOCR');
     }
   }else{
     if(!file.type.startsWith('image/'))throw new Error('Unsupported file. Please choose an image or PDF.');
@@ -219,11 +322,11 @@ async function processFile(file,progress){
     for(let i=0;i<rotations.length;i++){
       progress?.(12+i*24,`Checking orientation ${i+1} of ${rotations.length}…`); const canvas=preprocessImage(img,rotations[i]); const r=await ocrCanvas(canvas,logger); if(!best||r.confidence>best.confidence)best={...r,rotation:rotations[i]};
     }
-    texts.push(best?.text||'');confs.push(best?.confidence||0);
+    texts.push(best?.text||'');confs.push(best?.confidence||0);engines.push(best?.engine||'PaddleOCR');
   }
-  const text=texts.join('\n'); const avg=confs.length?confs.reduce((a,b)=>a+b,0)/confs.length:0; progress?.(88,'Finding products…');
+  const text=texts.join('\n'); const avg=confs.length?confs.reduce((a,b)=>a+b,0)/confs.length:0; const engine=engines.includes('PaddleOCR PP-OCRv5')?'PaddleOCR PP-OCRv5':(engines[0]||'OCR'); progress?.(88,'Finding products…');
   const header=extractHeader(text); const items=parseProductRows(text).map(item=>({...item,match:matchProduct(item)}));
-  return {text,confidence:avg,header,items,sourceFile:file,previewUrl};
+  return {text,confidence:avg,engine,header,items,sourceFile:file,previewUrl};
 }
 
 function renderScanHome(){
@@ -262,7 +365,7 @@ function renderBillReview(){
   syncReviewHeaderFromDom();
   const d=window.billScanDraft; if(!d)return; const m=document.getElementById('modal-body');m.classList.add('bill-review-modal');
   const total=d.items.reduce((s,i)=>s+(Number(i.quantity)||0)*(Number(i.purchasePrice)||0),0); const billTotal=Number(d.header.grandTotal||0); const diff=billTotal?total-billTotal:0; const canConfirm=d.items.length>0&&d.items.every(i=>String(i.name||'').trim()&&Number(i.quantity)>0&&Number(i.purchasePrice)>=0&&(i.selectedProductId||i.newProductConfirmed));
-  m.innerHTML=`<div class="modal-header"><div><h2>Review Purchase</h2><small>Detected data — nothing has been added to stock.</small></div><button class="close-btn" onclick="closeModal()">&times;</button></div>
+  m.innerHTML=`<div class="modal-header"><div><h2>Review Purchase</h2><small>Detected data — nothing has been added to stock. OCR: ${esc(d.engine||"PaddleOCR")}</small></div><button class="close-btn" onclick="closeModal()">&times;</button></div>
   <div class="bill-review-grid"><div class="bill-preview-panel">${d.previewUrl?`<img src="${d.previewUrl}" alt="Original bill preview">`:'<div class="bill-pdf-preview"><i class="fas fa-file-pdf"></i><strong>PDF bill</strong><span>Original file selected</span></div>'}</div>
   <div class="bill-fields-panel"><div class="bill-meta-grid"><label>Supplier<input id="bs-supplier-name" value="${esc(d.supplierName||'')}" placeholder="Supplier name" onchange="billSupplierNameChanged(this.value)"></label><label>Invoice Number<input id="bs-invoice" value="${esc(d.header.invoiceNumber||'')}"></label><label>Invoice Date<input type="date" id="bs-date" value="${esc(d.header.invoiceDate||window.getLocalDateStr(new Date()))}"></label><label>Subtotal<input type="number" id="bs-subtotal" value="${d.header.subtotal??''}"></label><label>Discount<input type="number" id="bs-discount" value="${d.header.discount??0}"></label><label>Tax<input type="number" id="bs-tax" value="${d.header.tax??0}"></label><label>Grand Total<input type="number" id="bs-grand-total" value="${d.header.grandTotal??total}"></label><label>Amount Paid Now<input type="number" id="bs-paid" min="0" value="${d.header.paid??(d.header.grandTotal??total)}"></label></div>
   ${d.supplierMatch?`<div class="bill-match-note"><strong>Supplier match:</strong> ${esc(d.supplierMatch.supplier.name)} <span>${Math.round(d.supplierMatch.score*100)}%</span></div>`:`<div class="bill-match-note warning">Supplier not found. You can select/create one below.</div>`}

@@ -71,7 +71,6 @@ function stockPurchaseFormHtml(values={}) {
             <div class="stock-purchase-item-total">Item total: <strong>${money((Number(item.qty)||0)*(Number(item.price)||0))}</strong></div>
         </div>`).join('') : '<div class="empty-state" style="padding:18px;"><i class="fas fa-box-open"></i><strong>No products selected</strong><span>Select one or multiple products above.</span></div>'}
       </div>
-      <div class="stock-purchase-total card" style="margin:12px 0;"><span>Total Purchase</span><strong id="sp-total">${money(grandTotal)}</strong></div>
       <div class="form-group">
         <label>Manual Products (Optional)</label>
         <div id="sp-manual-items">
@@ -87,6 +86,7 @@ function stockPurchaseFormHtml(values={}) {
         </div>
         <button type="button" class="btn btn-secondary" style="margin-top:10px;width:100%;" onclick="addStockPurchaseManualItem()"><i class="fas fa-plus"></i> Add Manual Item</button>
       </div>
+      <div class="stock-purchase-total card" style="margin:12px 0;"><span>Total Purchase</span><strong id="sp-total">${money(grandTotal)}</strong></div>
       <div class="form-group"><label>Supplier</label><select id="sp-supplier">${supplierOptions}</select></div>
       <div class="form-group"><label>Date *</label><input type="date" id="sp-date" value="${esc(values.date||window.getLocalDateStr(new Date()))}"></div>
       <div class="form-group"><label>Amount Paid Now (Rs.)</label><input type="number" id="sp-amount-paid" min="0" step="0.01" placeholder="Leave blank to mark fully paid" value="${esc(values.paid||'')}"></div>

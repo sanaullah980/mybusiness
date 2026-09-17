@@ -36,3 +36,11 @@ Some DigiKhata services depend on external commercial/platform infrastructure an
 - DigiKhata referral/reward system
 
 Those can be added later through the relevant provider APIs if you obtain the required merchant/API access.
+
+
+## Stock Bill Scanner upgrade
+- Uses the official PaddleOCR.js browser SDK (PP-OCRv5) as the primary OCR engine, with English and Urdu passes and Tesseract as a fallback.
+- OCR preserves detected line positions before converting them into invoice rows, improving quantity/rate/amount interpretation on multi-column bills.
+- Review is mandatory before inventory is changed; unmatched products must be selected or explicitly created.
+- Stock Purchase manual items are shown before the final Total Purchase calculation.
+- Retail Sale never creates customer debt; any unpaid remainder is automatically converted into an additional discount.

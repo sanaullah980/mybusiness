@@ -1,0 +1,16 @@
+MyBusiness Stock Bill Scanner – OCR upgrade
+
+Primary OCR:
+- Official PaddleOCR.js browser SDK @paddleocr/paddleocr-js 0.4.2
+- PP-OCRv5
+- English + Urdu passes
+- ONNX Runtime Web WASM
+- Browser-side processing; bill images are not uploaded to a MyBusiness server
+
+Fallback:
+- Tesseract.js English/Urdu if PaddleOCR cannot initialize.
+
+Important:
+- The first PaddleOCR model load requires internet access because this plain HTML/JS project loads the SDK/model runtime from CDN.
+- OCR results are always shown in a review step before inventory is changed.
+- No OCR system can guarantee perfect recognition on every photograph; clear, straight, well-lit bills produce the best results.
