@@ -47,7 +47,10 @@ function levenshteinRatio(a,b){
   return 1-prev[b.length]/Math.max(a.length,b.length);
 }
 function parseNumber(s){ const n=Number(String(s).replace(/,/g,'')); return Number.isFinite(n)?n:null; }
-function extractNumbers(line){ return [...String(line).matchAll(/(?:Rs\.?\s*)?(\d{1,7}(?:[,.]\d{1,2})?)/gi)].map(m=>({value:parseNumber(m[1]),raw:m[0],index:m.index})).filter(x=>x.value!==null); }
+function extractNumbers(line){
+  return [...String(line).matchAll(/(?:Rs\.?\s*)?(\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)/gi)]
+    .map(m=>({value:parseNumber(m[1]),raw:m[0],index:m.index})).filter(x=>x.value!==null);
+}
 function likelyDate(line){ return /\b(?:\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}|\d{4}[\/-]\d{1,2}[\/-]\d{1,2})\b/.test(line); }
 function parseDateText(text){
   const m=String(text).match(/\b(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})\b/);
@@ -174,8 +177,11 @@ async function loadPdfJs(){ if(pdfPromise)return pdfPromise; pdfPromise=loadScri
 async function ocrCanvas(canvas,logger){
   const T=await loadTesseract();
   let result;
-  try{ result=await T.recognize(canvas,'eng+urd',{logger}); }
-  catch(mixedErr){ console.warn('Mixed English/Urdu OCR unavailable; retrying English OCR.',mixedErr); result=await T.recognize(canvas,'eng',{logger}); }
+  try{ result=await T.recognize(canvas,'eng',{logger}); }
+  catch(engErr){
+    console.warn('English OCR failed; retrying with Urdu OCR.',engErr);
+    result=await T.recognize(canvas,'urd',{logger});
+  }
   const confidence=Number(result?.data?.confidence||0);
   return {text:result?.data?.text||'',confidence};
 }
@@ -222,7 +228,10 @@ export async function handleBillFile(file){
   if(!file)return; await renderProcessing();
   try{
     const result=await processFile(file,(pct,status)=>{document.getElementById('bill-progress-title')?.replaceChildren(document.createTextNode(status));document.getElementById('bill-progress-bar')?.style.setProperty('width',`${Math.min(100,pct)}%`);document.getElementById('bill-progress-percent')?.replaceChildren(document.createTextNode(`${Math.min(100,pct)}%`));});
-    if(result.confidence<35 || result.items.length===0){renderScanError('OCR could not reliably find product rows. Try a clearer, well-lit photo with the whole bill visible.');return;}
+    if(result.items.length===0){
+      renderScanError('No product rows were detected. Make sure the entire bill is visible, text is sharp, and the photo is taken straight-on. You can retry or use Add Purchase Manually.');
+      return;
+    }
     const h=result.header, supplierMatch=matchSupplier(h.supplier); const supplier=supplierMatch?.supplier||null;
     window.billScanDraft={...result, supplierMatch, supplierId:supplier?.id||'',supplierName:supplier?.name||h.supplier||'', previewUrl:result.previewUrl || (file.type?.startsWith('image/')?URL.createObjectURL(file):''), items:result.items.map(i=>({...i,productId:i.match?.product?.id||'',status:i.match?.level||'low',newProductConfirmed:false,selectedProductId:i.match?.product?.id||'',selectedProductName:i.match?.product?.name||''}))};
     const dup=duplicatePurchase({invoiceNumber:h.invoiceNumber,invoiceDate:h.invoiceDate,grandTotal:h.grandTotal,supplierId:supplier?.id}); window.billScanDraft.duplicate=dup||null;
@@ -280,6 +289,7 @@ export async function confirmScannedPurchase(){
   const dup=duplicatePurchase({...h,supplierId:h.supplierId,grandTotal:h.grandTotal});if(dup&&!d.duplicateConfirmed&&!confirm('This invoice may already exist. Continue anyway?'))return;
   const btn=document.getElementById('btn-confirm-bill'); if(btn){btn.disabled=true;btn.innerHTML='<span class="btn-loader"></span> Saving…';}
   try{
+    if(typeof window.commitStockPurchaseFromScanner!=='function') throw new Error('Purchase save module is not loaded. Please refresh the app once and try again.');
     const result=await window.commitStockPurchaseFromScanner({items:d.items,header:h});
     // Remember confirmed bill spellings as aliases without changing the canonical product name.
     if(result?.aliasPairs?.length){ for(const pair of result.aliasPairs)saveAliasToProduct(pair.productId,pair.alias); }

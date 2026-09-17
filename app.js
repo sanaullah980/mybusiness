@@ -154,6 +154,8 @@ async function runAtomicOrOffline(work) {
     }
 }
 window.runAtomicOrOffline = runAtomicOrOffline;
+// Expose the scanner commit function used by the review screen.
+window.commitStockPurchaseFromScanner = commitStockPurchaseFromScanner;
 
 function formatCurrency(amount) {
     if (amount === null || amount === undefined || Number.isNaN(Number(amount))) return 'Rs. 0';
