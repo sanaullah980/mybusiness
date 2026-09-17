@@ -181,16 +181,31 @@ function saveAliasToProduct(productId, alias){
 }
 function fileToImage(file){ return new Promise((resolve,reject)=>{ const u=URL.createObjectURL(file); const img=new Image(); img.onload=()=>{URL.revokeObjectURL(u);resolve(img)}; img.onerror=e=>{URL.revokeObjectURL(u);reject(new Error('The image could not be opened.'))}; img.src=u; }); }
 function preprocessImage(img,rotation=0){
-  const max=2400, scale=Math.min(1,max/Math.max(img.naturalWidth||img.width,img.naturalHeight||img.height));
-  const sw=Math.max(1,Math.round((img.naturalWidth||img.width)*scale)), sh=Math.max(1,Math.round((img.naturalHeight||img.height)*scale));
+  // One carefully prepared image is preferable to repeatedly OCR-ing several
+  // rotations/filters. Browser image decoding normally applies the camera's
+  // EXIF orientation, so rotation retries are no longer used by default.
+  const max=3000;
+  const scale=Math.min(1,max/Math.max(img.naturalWidth||img.width,img.naturalHeight||img.height));
+  const sw=Math.max(1,Math.round((img.naturalWidth||img.width)*scale));
+  const sh=Math.max(1,Math.round((img.naturalHeight||img.height)*scale));
   const canvas=document.createElement('canvas'), c=canvas.getContext('2d',{willReadFrequently:true});
-  const rad=rotation*Math.PI/180; const swap=rotation%180!==0; canvas.width=swap?sh:sw; canvas.height=swap?sw:sh;
+  const rad=rotation*Math.PI/180, swap=rotation%180!==0;
+  canvas.width=swap?sh:sw; canvas.height=swap?sw:sh;
+  c.imageSmoothingEnabled=true; c.imageSmoothingQuality='high';
   c.translate(canvas.width/2,canvas.height/2); c.rotate(rad); c.drawImage(img,-sw/2,-sh/2,sw,sh);
   const image=c.getImageData(0,0,canvas.width,canvas.height), d=image.data;
-  // Mild grayscale + contrast normalization; keeps characters readable under shadows.
-  let min=255,maxv=0; for(let i=0;i<d.length;i+=16){ const y=.299*d[i]+.587*d[i+1]+.114*d[i+2]; min=Math.min(min,y);maxv=Math.max(maxv,y); }
-  const span=Math.max(40,maxv-min); for(let i=0;i<d.length;i+=4){ let y=.299*d[i]+.587*d[i+1]+.114*d[i+2]; y=((y-min)/span)*255; y=Math.max(0,Math.min(255,(y-128)*1.18+128)); d[i]=d[i+1]=d[i+2]=y; }
-  c.putImageData(image,0,0); return canvas;
+  // Grayscale + local-ish contrast stretch + light sharpening. This helps
+  // Urdu/English print under shadows without destroying thin characters.
+  let min=255,maxv=0;
+  for(let i=0;i<d.length;i+=16){const y=.299*d[i]+.587*d[i+1]+.114*d[i+2];min=Math.min(min,y);maxv=Math.max(maxv,y);}
+  const span=Math.max(55,maxv-min);
+  for(let i=0;i<d.length;i+=4){
+    let y=.299*d[i]+.587*d[i+1]+.114*d[i+2];
+    y=((y-min)/span)*255; y=Math.max(0,Math.min(255,(y-128)*1.22+128));
+    d[i]=d[i+1]=d[i+2]=y;
+  }
+  c.putImageData(image,0,0);
+  return canvas;
 }
 async function loadScript(url,id){ if(window[id])return window[id]; const existing=document.querySelector(`script[data-mybiz-lib="${id}"]`); if(existing)return new Promise((res,rej)=>{existing.addEventListener('load',()=>res(window[id]));existing.addEventListener('error',rej);}); return new Promise((resolve,reject)=>{ const s=document.createElement('script');s.src=url;s.async=true;s.dataset.mybizLib=id;s.onload=()=>window[id]?resolve(window[id]):reject(new Error(`${id} loaded but was not available.`));s.onerror=()=>reject(new Error(`Could not load ${id}. Check your internet connection and try again.`));document.head.appendChild(s); }); }
 async function loadTesseract(){ if(tessPromise)return tessPromise; tessPromise=loadScript(TESSERACT_URL,'Tesseract'); return tessPromise; }
@@ -202,7 +217,7 @@ async function loadPaddleOCR(){
   return paddlePromise;
 }
 
-async function getPaddleEngine(lang='en'){
+async function getPaddleEngine(lang='ur'){
   const key=String(lang||'en');
   if(!paddleEnginePromise)paddleEnginePromise=new Map();
   if(paddleEnginePromise.has(key))return paddleEnginePromise.get(key);
@@ -259,26 +274,24 @@ function paddleItemsToText(items){
 }
 
 async function ocrWithPaddle(canvas,logger){
-  const langs=['en','ur'];
-  const results=[];
-  for(let i=0;i<langs.length;i++){
-    try{
-      logger?.({status:`PaddleOCR ${langs[i]==='ur'?'Urdu':'English'}…`,progress:0.15+(i*0.25)});
-      const engine=await getPaddleEngine(langs[i]);
-      const [res]=await engine.predict(canvas,{textRecScoreThresh:0.35});
-      const items=res?.items||[];
-      const text=paddleItemsToText(items);
-      const scores=items.map(x=>Number(x.score||0)).filter(Number.isFinite);
-      const confidence=scores.length?scores.reduce((a,b)=>a+b,0)/scores.length*100:0;
-      results.push({text,confidence,items,lang:langs[i],engine:'PaddleOCR PP-OCRv5'});
-    }catch(err){ console.warn(`PaddleOCR ${langs[i]} pass failed`,err); }
+  // PP-OCRv5's Arabic recognition model supports Urdu, English and numeric text.
+  // Use ONE multilingual pass instead of running English + Urdu OCR separately.
+  // This prevents the old "recognize the same bill again and again" behaviour.
+  try{
+    logger?.({status:'Loading PaddleOCR PP-OCRv5 Urdu/English model…',progress:0.10});
+    const engine=await getPaddleEngine('ur');
+    logger?.({status:'Reading Urdu + English text…',progress:0.30});
+    const [res]=await engine.predict(canvas,{textRecScoreThresh:0.30,textDetBoxThresh:0.45});
+    const items=res?.items||[];
+    const text=paddleItemsToText(items);
+    const scores=items.map(x=>Number(x.score||0)).filter(Number.isFinite);
+    const confidence=scores.length?scores.reduce((a,b)=>a+b,0)/scores.length*100:0;
+    logger?.({status:`OCR finished — ${items.length} text regions found`,progress:0.78});
+    return {text,confidence,items,lang:'ur',engine:'PaddleOCR PP-OCRv5 (Urdu + English)'};
+  }catch(err){
+    throw err;
   }
-  if(!results.length)throw new Error('PaddleOCR could not initialize. Falling back to Tesseract.');
-  // Prefer the pass that found more meaningful lines; confidence breaks ties.
-  results.sort((a,b)=>(b.text.trim().split(/\n+/).filter(Boolean).length-a.text.trim().split(/\n+/).filter(Boolean).length)||(b.confidence-a.confidence));
-  return results[0];
 }
-
 async function loadPdfJs(){ if(pdfPromise)return pdfPromise; pdfPromise=loadScript(PDFJS_URL,'pdfjsLib').then(lib=>{lib.GlobalWorkerOptions.workerSrc=PDFJS_WORKER_URL;return lib;}); return pdfPromise; }
 async function ocrCanvas(canvas,logger){
   try{
@@ -306,29 +319,44 @@ async function processFile(file,progress){
   if(file.size>25*1024*1024)throw new Error('File is too large. Please use an image/PDF under 25 MB.');
   const isPdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name);
   const texts=[]; let confs=[]; let engines=[]; let previewUrl='';
-  const logger=m=>{ if(typeof m?.progress==='number')progress?.(Math.round(m.progress*100),m.status||'OCR Reading…'); };
+  const setProgress=(pct,status)=>progress?.(Math.max(0,Math.min(100,Math.round(pct))),status);
   if(isPdf){
-    const pdfjs=await loadPdfJs(); progress?.(8,'Opening PDF…'); const buf=await file.arrayBuffer(); const pdf=await pdfjs.getDocument({data:buf}).promise;
+    const pdfjs=await loadPdfJs(); setProgress(6,'Opening PDF…');
+    const buf=await file.arrayBuffer(); const pdf=await pdfjs.getDocument({data:buf}).promise;
     if(pdf.numPages>30)throw new Error('This PDF has more than 30 pages. Please scan the relevant bill pages separately.');
     for(let i=1;i<=pdf.numPages;i++){
-      progress?.(10+Math.round((i-1)/pdf.numPages*55),`Reading PDF page ${i} of ${pdf.numPages}…`);
-      const page=await pdf.getPage(i); const viewport=page.getViewport({scale:2}); const canvas=document.createElement('canvas'); canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height); await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
-      if(i===1)try{previewUrl=canvas.toDataURL('image/jpeg',0.82);}catch(_){} const r=await ocrCanvas(canvas,logger);texts.push(r.text);confs.push(r.confidence);engines.push(r.engine||'PaddleOCR');
+      const base=8+((i-1)/pdf.numPages)*72;
+      setProgress(base,`Preparing PDF page ${i} of ${pdf.numPages}…`);
+      const page=await pdf.getPage(i); const viewport=page.getViewport({scale:2});
+      const canvas=document.createElement('canvas'); canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);
+      await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
+      if(i===1)try{previewUrl=canvas.toDataURL('image/jpeg',0.82);}catch(_){}
+      const r=await ocrCanvas(canvas,(m)=>{
+        const inner=Math.max(0,Math.min(1,Number(m?.progress)||0));
+        setProgress(base+inner*(72/pdf.numPages),`Page ${i}/${pdf.numPages}: ${m?.status||'Reading bill…'}`);
+      });
+      texts.push(r.text);confs.push(r.confidence);engines.push(r.engine||'PaddleOCR');
     }
   }else{
     if(!file.type.startsWith('image/'))throw new Error('Unsupported file. Please choose an image or PDF.');
-    const img=await fileToImage(file); progress?.(8,'Preparing bill image…');
-    const rotations=[0,90,270]; let best=null;
-    for(let i=0;i<rotations.length;i++){
-      progress?.(12+i*24,`Checking orientation ${i+1} of ${rotations.length}…`); const canvas=preprocessImage(img,rotations[i]); const r=await ocrCanvas(canvas,logger); if(!best||r.confidence>best.confidence)best={...r,rotation:rotations[i]};
-    }
-    texts.push(best?.text||'');confs.push(best?.confidence||0);engines.push(best?.engine||'PaddleOCR');
+    const img=await fileToImage(file); setProgress(8,'Preparing and enhancing bill image…');
+    // Exactly one OCR pass for normal photos. No 0°/90°/270° repeated OCR.
+    const canvas=preprocessImage(img,0); setProgress(20,'Image enhanced — starting one OCR pass…');
+    const r=await ocrCanvas(canvas,(m)=>setProgress(20+(Number(m?.progress)||0)*58,m?.status||'Reading bill…'));
+    texts.push(r.text);confs.push(r.confidence);engines.push(r.engine||'PaddleOCR');
+    try{previewUrl=canvas.toDataURL('image/jpeg',0.82);}catch(_){}
   }
-  const text=texts.join('\n'); const avg=confs.length?confs.reduce((a,b)=>a+b,0)/confs.length:0; const engine=engines.includes('PaddleOCR PP-OCRv5')?'PaddleOCR PP-OCRv5':(engines[0]||'OCR'); progress?.(88,'Finding products…');
-  const header=extractHeader(text); const items=parseProductRows(text).map(item=>({...item,match:matchProduct(item)}));
+  const text=texts.join('\n'); const avg=confs.length?confs.reduce((a,b)=>a+b,0)/confs.length:0;
+  const engine=engines.includes('PaddleOCR PP-OCRv5 (Urdu + English)')?'PaddleOCR PP-OCRv5 (Urdu + English)':(engines[0]||'OCR');
+  setProgress(84,'Interpreting bill layout and product rows…');
+  const header=extractHeader(text);
+  const items=parseProductRows(text).map(item=>({...item,match:matchProduct(item)}));
+  setProgress(94,`Validating ${items.length} detected product${items.length===1?'':'s'}…`);
+  // Give the UI a final paint opportunity so the user actually sees progress.
+  await new Promise(requestAnimationFrame);
+  setProgress(100,'Scan complete — review the detected items');
   return {text,confidence:avg,engine,header,items,sourceFile:file,previewUrl};
 }
-
 function renderScanHome(){
   const m=document.getElementById('modal-body'); if(!m)return;
   m.classList.add('bill-scanner-modal');
@@ -339,11 +367,11 @@ function renderScanHome(){
   <button class="btn btn-secondary" style="width:100%;margin-top:12px" onclick="closeModal()">Cancel</button>`;
 }
 export function openBillScanner(){ if(window.currentRole!=='admin' && !window.hasPermission?.('stockPurchases')){show('You do not have permission to create purchases.','error');return;} renderScanHome(); document.getElementById('modal-overlay')?.classList.remove('hidden'); }
-async function renderProcessing(){ const m=document.getElementById('modal-body'); m.classList.add('bill-scanner-modal'); m.innerHTML=`<div class="modal-header"><h2>Processing Bill…</h2></div><div class="bill-progress"><div class="bill-progress-ring"><i class="fas fa-magic"></i></div><h3 id="bill-progress-title">Preparing…</h3><div class="bill-progress-track"><span id="bill-progress-bar"></span></div><p id="bill-progress-percent">0%</p><small>OCR happens on this device. Keep this window open.</small></div>`; }
+async function renderProcessing(){ const m=document.getElementById('modal-body'); m.classList.add('bill-scanner-modal'); m.innerHTML=`<div class="modal-header"><h2>Processing Bill…</h2></div><div class="bill-progress"><div class="bill-progress-ring"><i class="fas fa-file-invoice"></i></div><h3 id="bill-progress-title">Preparing…</h3><div class="bill-progress-track"><span id="bill-progress-bar"></span></div><p id="bill-progress-percent">0%</p><div class="bill-progress-step"><span id="bill-progress-step">Step 1 of 4</span></div><small id="bill-progress-note">The bill is processed once. Urdu + English OCR runs in one pass on this device.</small></div>`; }
 export async function handleBillFile(file){
   if(!file)return; await renderProcessing();
   try{
-    const result=await processFile(file,(pct,status)=>{document.getElementById('bill-progress-title')?.replaceChildren(document.createTextNode(status));document.getElementById('bill-progress-bar')?.style.setProperty('width',`${Math.min(100,pct)}%`);document.getElementById('bill-progress-percent')?.replaceChildren(document.createTextNode(`${Math.min(100,pct)}%`));});
+    const result=await processFile(file,(pct,status)=>{document.getElementById('bill-progress-title')?.replaceChildren(document.createTextNode(status));document.getElementById('bill-progress-bar')?.style.setProperty('width',`${Math.min(100,pct)}%`);document.getElementById('bill-progress-percent')?.replaceChildren(document.createTextNode(`${Math.min(100,pct)}%`));const step=pct<20?'Step 1 of 4':pct<80?'Step 2 of 4':pct<95?'Step 3 of 4':'Step 4 of 4';document.getElementById('bill-progress-step')?.replaceChildren(document.createTextNode(step));});
     if(result.items.length===0){
       renderScanError('No product rows were detected. Make sure the entire bill is visible, text is sharp, and the photo is taken straight-on. You can retry or use Add Purchase Manually.');
       return;
