@@ -1,8 +1,8 @@
-const CACHE_NAME = 'mybusiness-v14';
+const CACHE_NAME = 'mybusiness-v15';
 const APP_SHELL = [
   '/', '/index.html', '/style.css', '/app.js', '/manifest.json',
   '/icon-192.png', '/icon-512.png',
-  '/modules/dashboard.js', '/modules/modals.js', '/modules/sales.js',
+  '/modules/billScanner.js', '/modules/dashboard.js', '/modules/modals.js', '/modules/sales.js',
   '/modules/invoices.js', '/modules/suppliers.js', '/modules/setting.js',
   '/modules/inventory.js', '/modules/customers.js', '/modules/returns.js',
   '/modules/cashbook.js', '/modules/stockPurchases.js', '/modules/expenses.js',
@@ -11,11 +11,14 @@ const APP_SHELL = [
   '/modules/backup.js', '/modules/appLock.js', '/modules/team.js',
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
+  'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js',
   'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js',
   'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js',
   'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js'
 ];
-const EXTERNAL_CACHE_HOSTS = new Set(['www.gstatic.com','cdnjs.cloudflare.com']);
+const EXTERNAL_CACHE_HOSTS = new Set(['www.gstatic.com','cdnjs.cloudflare.com','cdn.jsdelivr.net']);
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(async cache => {

@@ -8,7 +8,8 @@ import { renderSales, showSaleTab, renderCart, updateSaleDue, updateCartItemQty,
 import { renderInventory, openProductModal, saveProduct, deleteProduct, openStockAdjustModal, saveStockAdjustment } from './modules/inventory.js';
 import { renderCustomers, openCustomerModal, saveCustomer, openCustomerDetails, renderCustomerLedgerTable, filterCustomerLedger, deleteCustomer, openCustomerEntryActions, editCustomerEntry, deleteCustomerEntry, downloadCustomerStatementPdf, openCustomerReportOptions, sendCustomerReport, sendCustomerSms, sendPaymentReminder, openCustomerSetDate, saveCustomerDueDate, openGiveModal, processGive, openReceiveModal, processReceive } from './modules/customers.js';
 import { renderExpenses, openExpenseModal, saveExpense, deleteExpense } from './modules/expenses.js';
-import { renderStockPurchases, openStockPurchaseModal, showStockPurchaseTab, onStockPurchaseProductChange, saveStockPurchase, deleteStockPurchase } from './modules/stockPurchases.js';
+import { renderStockPurchases, openStockPurchaseModal, showStockPurchaseTab, onStockPurchaseProductChange, saveStockPurchase, deleteStockPurchase, commitStockPurchaseFromScanner } from './modules/stockPurchases.js';
+import './modules/billScanner.js';
 import { renderReports, setReportTab, changeReportMonth, resetDailyReport, calculateReportData } from './modules/report.js';
 import { renderMore, openDeleteRecordsModal, deleteCollectionData, deleteEverything } from './modules/more.js';
 import { renderSettings, saveSettings, selectTheme, toggleDarkMode, openChangePasswordModal, changePassword } from './modules/setting.js';

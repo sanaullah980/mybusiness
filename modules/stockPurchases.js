@@ -26,7 +26,7 @@ function manualItemsFromLegacy(values={}){
 
 export function renderStockPurchases(container) {
     const data=window.data, formatCurrency=window.formatCurrency;
-    container.innerHTML=`<button class="btn" style="margin-bottom:20px;" onclick="openStockPurchaseModal()">+ Record Stock Purchase</button>
+    container.innerHTML=`<div class="purchase-action-bar"><button class="btn purchase-scan-btn" style="margin-bottom:20px;" onclick="openBillScanner()"><i class="fas fa-file-invoice"></i> Scan Bill</button><button class="btn btn-secondary" style="margin-bottom:20px;" onclick="openStockPurchaseModal()"><i class="fas fa-pen"></i> Add Manually</button></div>
     <div class="card" id="purchase-list">${data.stockPurchases.length===0
         ? '<div class="empty-state"><i class="fas fa-truck-loading"></i><h3>No purchases yet</h3><p>Record your first stock purchase to update inventory.</p></div>'
         : data.stockPurchases.slice().reverse().map(p=>{
@@ -282,6 +282,68 @@ export async function saveStockPurchase() {
     finally{window.hideLoading('btn-save-sp');}
 }
 
+
+// Scanner commit path. It deliberately reuses the same transaction/stock/debt rules
+// as normal purchases, while accepting reviewed OCR items and bill metadata.
+export async function commitStockPurchaseFromScanner({items,header}){
+    if(window.currentRole!=='admin' && !window.hasPermission?.('stockPurchases')) throw new Error('You do not have permission to create purchases.');
+    const cleanItems=(items||[]).map(i=>({
+        name:String(i.name||'').trim(), productId:String(i.selectedProductId||i.productId||''),
+        qty:Number(i.quantity)||0, unit:String(i.unit||'piece').trim()||'piece', packSize:String(i.packSize||'').trim(),
+        price:Number(i.purchasePrice)||0, sku:String(i.sku||'').trim(), barcode:String(i.barcode||'').trim()
+    }));
+    if(!cleanItems.length)throw new Error('No purchase items were detected.');
+    if(cleanItems.some(i=>!i.name||i.qty<=0||i.price<0))throw new Error('Review every product name, quantity and purchase price before confirming.');
+    const total=cleanItems.reduce((s,i)=>s+i.qty*i.price,0);
+    const billTotal=Number(header?.grandTotal)||0;
+    const amountPaidRaw=header?.paid;
+    const amountPaid=amountPaidRaw===''||amountPaidRaw===undefined||amountPaidRaw===null?total:Math.max(0,Math.min(total,Number(amountPaidRaw)||0));
+    const amountDue=Math.max(0,total-amountPaid);
+    const supplierId=header?.supplierId||null;
+    if(amountDue>0&&!supplierId)throw new Error('An unpaid amount requires selecting a Supplier so the balance can be tracked.');
+    const aliasPairs=[];
+    let purchaseId='';
+    await window.runAtomicOrOffline(async transaction=>{
+        const productSnaps=new Map(), newProducts=[];
+        for(const item of cleanItems){
+            if(item.productId){
+                const ref=window.doc(window.db,'products',item.productId),snap=await transaction.get(ref);
+                if(!snap.exists())throw new Error(`Selected product not found: ${item.name}`);
+                if(snap.data().ownerId!==window.currentUserId)throw new Error('Unauthorized product access.');
+                productSnaps.set(item.productId,snap);
+            }
+        }
+        let supplierSnap=null,supplierName='';
+        if(supplierId){ supplierSnap=await transaction.get(window.doc(window.db,'suppliers',supplierId)); if(!supplierSnap.exists())throw new Error('Supplier not found.'); if(supplierSnap.data().ownerId!==window.currentUserId)throw new Error('Unauthorized supplier access.'); supplierName=supplierSnap.data().name||''; }
+        for(const item of cleanItems){
+            if(item.productId)continue;
+            const ref=window.doc(window.collection(window.db,'products')); const obj={name:item.name,barcode:item.barcode||'',sku:item.sku||'',cost:item.price,price:item.price,wholesalePrice:item.price,retailPrice:item.price,stock:item.qty,minStock:5,unit:item.unit,packSize:item.packSize,ownerId:window.currentUserId,createdAt:new Date().toISOString()};
+            transaction.set(ref,obj); item.productId=ref.id; newProducts.push({id:ref.id,...obj});
+        }
+        for(const item of cleanItems){
+            const ref=window.doc(window.db,'products',item.productId),snap=productSnaps.get(item.productId); const pd=snap?.data?.()||newProducts.find(p=>p.id===item.productId)||{};
+            if(!pd||pd.ownerId!==window.currentUserId)throw new Error(`Product not found: ${item.name}`);
+            // New products were already written with their confirmed opening stock above.
+            if(!snap)continue;
+            const patch={stock:Number(pd.stock||0)+item.qty,cost:item.price,updatedAt:new Date().toISOString()};
+            if(item.unit)patch.unit=item.unit; if(item.packSize)patch.packSize=item.packSize;
+            const aliases=Array.isArray(pd.billAliases)?pd.billAliases.slice():[];
+            if(item.name && similarityForCommit(item.name,pd.name||'')<0.94 && !aliases.some(a=>String(a).toLowerCase()===item.name.toLowerCase())){aliases.push(item.name);patch.billAliases=aliases;aliasPairs.push({productId:item.productId,alias:item.name});}
+            transaction.update(ref,patch);
+        }
+        const ref=window.doc(window.collection(window.db,'stockPurchases')); purchaseId=ref.id;
+        const purchaseItems=cleanItems.map(i=>({productId:i.productId,productName:productSnaps.get(i.productId)?.data()?.name||newProducts.find(p=>p.id===i.productId)?.name||i.name,qty:i.qty,unit:i.unit,packSize:i.packSize,unitCost:i.price,amount:i.qty*i.price,sku:i.sku||null,barcode:i.barcode||null,source:'bill_scan'}));
+        const primary=purchaseItems[0];
+        transaction.set(ref,{ownerId:window.currentUserId,date:new Date(header.date).toISOString(),amount:total,amountPaid,amountDue,category:'',note:header.note||'Bill scan',supplierId,supplier:supplierName,productId:primary?.productId||null,productName:purchaseItems.length>1?`${purchaseItems.length} Products`:primary?.productName||'',qty:primary?.qty||0,unitCost:primary?.unitCost||0,items:purchaseItems,source:'bill_scan',ocrConfidenceAverage:Number(window.billScanDraft?.confidence)||null,supplierInvoiceNumber:header.invoiceNumber||null,billDate:header.date||null,subtotal:Number(header.subtotal)||0,discount:Number(header.discount)||0,tax:Number(header.tax)||0,grandTotal:billTotal||total,createdAt:new Date().toISOString(),createdBy:window.authUserId||window.currentUserId});
+        if(supplierId&&amountDue>0){ const newBalance=Number(supplierSnap.data().balance||0)+amountDue; transaction.update(window.doc(window.db,'suppliers',supplierId),{balance:newBalance,updatedAt:new Date().toISOString()}); const txnRef=window.doc(window.collection(window.db,'supplierTransactions')); transaction.set(txnRef,{ownerId:window.currentUserId,supplierId,type:'purchase_debt',amount:amountDue,balanceAfter:newBalance,date:new Date(header.date).toISOString(),note:`Stock purchase${purchaseItems.length?` : ${purchaseItems.length} items`:''}`,purchaseId:purchaseId}); }
+    });
+    return {purchaseId,aliasPairs,total,billTotal};
+}
+function similarityForCommit(a,b){
+    const norm=v=>String(v||'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+    const aa=norm(a),bb=norm(b); if(aa===bb)return 1; const A=new Set(aa.split(/\s+/)),B=new Set(bb.split(/\s+/)); let inter=0;A.forEach(x=>{if(B.has(x))inter++;}); const j=inter/Math.max(1,A.size+B.size-inter); return j;
+}
+
 export async function deleteStockPurchase(id){
     const purchase=(window.data.stockPurchases||[]).find(x=>x.id===id); if(!purchase)return;
     if(!confirm(`Delete this stock purchase? The purchased quantity will be removed from inventory and any linked supplier debt will be reversed.`))return;
@@ -333,3 +395,5 @@ window.showStockPurchaseTab=showStockPurchaseTab;
 window.onStockPurchaseProductChange=onStockPurchaseProductChange;
 window.saveStockPurchase=saveStockPurchase;
 window.deleteStockPurchase=deleteStockPurchase;
+
+window.commitStockPurchaseFromScanner=commitStockPurchaseFromScanner;
