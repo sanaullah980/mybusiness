@@ -1,0 +1,22 @@
+{
+  "project_info": {
+    "project_number": "367002926256",
+    "project_id": "mybusinessapp-4734c",
+    "storage_bucket": "mybusinessapp-4734c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:367002926256:web:0b5139dab24d901d9c8f75",
+        "android_client_info": {
+          "package_name": "com.mybusiness.pos"
+        }
+      },
+      "api_key": [
+        { "current_key": "AIzaSyBQqnIhMCGd4_FRApjkns3HjIrqw2V1qFc" }
+      ],
+      "services": {}
+    }
+  ],
+  "configuration_version": "1"
+}

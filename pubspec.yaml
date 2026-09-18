@@ -1,0 +1,58 @@
+name: my_business
+description: "MyBusiness - offline-first shop and business management"
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+  flutter: ">=3.24.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # Persistent local-first storage
+  drift: ^2.16.0
+  sqlite3_flutter_libs: ^0.5.20
+  path_provider: ^2.1.2
+  path: ^1.9.0
+  shared_preferences: ^2.3.2
+
+  # Existing Firebase project
+  firebase_core: ^3.6.0
+  firebase_auth: ^5.3.1
+  cloud_firestore: ^5.4.4
+
+  # State / utilities
+  provider: ^6.1.2
+  intl: ^0.19.0
+  crypto: ^3.0.3
+  uuid: ^4.5.1
+  share_plus: ^10.1.2
+  file_picker: ^8.1.2
+  url_launcher: ^6.3.1
+  pdf: ^3.11.1
+  printing: ^5.13.4
+
+  # Offline Qwen runtime (Android/iOS/macOS; Web reports unsupported instead of using cloud AI)
+  flutter_mind: ^0.3.0
+  flutter_mind_local: ^0.2.1
+
+  # UI
+  font_awesome_flutter: ^10.7.0
+  google_fonts: ^6.2.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  drift_dev: ^2.16.0
+  build_runner: ^2.4.13
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/models/
+    - assets/i18n/

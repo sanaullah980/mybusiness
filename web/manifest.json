@@ -1,0 +1,9 @@
+{
+  "name": "MyBusiness",
+  "short_name": "MyBusiness",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#00897b",
+  "description": "Offline-first shop and business management"
+}

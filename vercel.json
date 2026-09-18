@@ -1,17 +1,8 @@
 {
-    "headers": [
-      {
-        "source": "/downloads/(.*)\\.apk",
-        "headers": [
-          {
-            "key": "Content-Type",
-            "value": "application/vnd.android.package-archive"
-          },
-          {
-            "key": "Content-Disposition",
-            "value": "attachment; filename=\"mybusiness.apk\""
-          }
-        ]
-      }
-    ]
-  }
+  "buildCommand": "bash scripts/vercel-build.sh",
+  "outputDirectory": "build/web",
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
