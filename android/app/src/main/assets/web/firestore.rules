@@ -1,0 +1,110 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn(){ return request.auth != null; }
+    function member(){ return signedIn() && exists(/databases/$(database)/documents/businessMembers/$(request.auth.uid)); }
+    function memberData(){ return get(/databases/$(database)/documents/businessMembers/$(request.auth.uid)).data; }
+    function belongs(ownerId){ return member() && memberData().active == true && memberData().ownerId == ownerId; }
+    function admin(ownerId){ return belongs(ownerId) && memberData().role == 'admin'; }
+    function currentAdmin(){ return member() && memberData().active == true && memberData().role == 'admin'; }
+    function adminOwnsCustomer(customerId){ return currentAdmin() && exists(/databases/$(database)/documents/customers/$(customerId)) && get(/databases/$(database)/documents/customers/$(customerId)).data.ownerId == memberData().ownerId; }
+    function can(key){ return member() && memberData().active == true && (memberData().role == 'admin' || memberData().permissions[key] == true); }
+    function ownSale(){ return resource.data.createdBy == request.auth.uid; }
+
+    match /businessMembers/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || (resource != null && admin(resource.data.ownerId)));
+      allow create: if signedIn() && request.auth.uid == uid && (
+        (request.resource.data.role == 'admin' && request.resource.data.ownerId == request.auth.uid) ||
+        (request.resource.data.role == 'employee' && request.resource.data.inviteId is string &&
+         exists(/databases/$(database)/documents/businessInvites/$(request.resource.data.inviteId)) &&
+         get(/databases/$(database)/documents/businessInvites/$(request.resource.data.inviteId)).data.status == 'pending' &&
+         request.resource.data.ownerId == get(/databases/$(database)/documents/businessInvites/$(request.resource.data.inviteId)).data.ownerId &&
+         request.resource.data.permissions == get(/databases/$(database)/documents/businessInvites/$(request.resource.data.inviteId)).data.permissions)
+      );
+      allow update: if signedIn() && admin(resource.data.ownerId);
+      // A user may remove their own membership only when permanently deleting their own account.
+      // Admins can remove employees from the business.
+      allow delete: if signedIn() && (request.auth.uid == uid || admin(resource.data.ownerId));
+    }
+
+    match /businessInvites/{id} {
+      allow create: if signedIn() && admin(request.resource.data.ownerId);
+      // Employees can read a single invite code after authenticating in order to join.
+      allow read: if signedIn() && (resource == null || resource.data.status == 'pending');
+      allow update: if signedIn() && (admin(resource.data.ownerId) || (resource.data.status == 'pending' && request.resource.data.status == 'claimed' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','claimedBy','claimedAt']) && request.resource.data.claimedBy == request.auth.uid));
+      allow delete: if signedIn() && admin(resource.data.ownerId);
+    }
+
+    match /products/{id} {
+      allow read: if belongs(resource.data.ownerId);
+      allow create: if admin(request.resource.data.ownerId);
+      allow update: if (admin(resource.data.ownerId) && request.resource.data.ownerId == resource.data.ownerId) || (belongs(resource.data.ownerId) && can('sales') && request.resource.data.ownerId == resource.data.ownerId && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stock']));
+      allow delete: if admin(resource.data.ownerId);
+    }
+    match /customers/{id} {
+      allow read: if belongs(resource.data.ownerId);
+      allow create: if belongs(request.resource.data.ownerId) && can('customers');
+      allow update: if belongs(resource.data.ownerId) && (can('customers') || can('payments')) && request.resource.data.ownerId == resource.data.ownerId;
+      allow delete: if admin(resource.data.ownerId) || currentAdmin() && resource.data.ownerId == memberData().ownerId;
+    }
+    match /customerTransactions/{id} {
+      allow read: if belongs(resource.data.ownerId) || adminOwnsCustomer(resource.data.customerId);
+      allow create: if belongs(request.resource.data.ownerId) && can('payments');
+      allow update, delete: if admin(resource.data.ownerId) || adminOwnsCustomer(resource.data.customerId);
+    }
+    match /sales/{id} {
+      allow read: if admin(resource.data.ownerId) || (belongs(resource.data.ownerId) && resource.data.createdBy == request.auth.uid);
+      allow create: if belongs(request.resource.data.ownerId) && can('sales') && request.resource.data.createdBy == request.auth.uid;
+      allow update, delete: if admin(resource.data.ownerId);
+    }
+    match /expenses/{id} {
+      allow read, delete: if admin(resource.data.ownerId);
+      allow create: if admin(request.resource.data.ownerId);
+      allow update: if admin(resource.data.ownerId) && request.resource.data.ownerId == resource.data.ownerId;
+    }
+    match /stockPurchases/{id} {
+      allow read, delete: if admin(resource.data.ownerId);
+      allow create: if admin(request.resource.data.ownerId);
+      allow update: if admin(resource.data.ownerId) && request.resource.data.ownerId == resource.data.ownerId;
+    }
+    match /stockAdjustments/{id} {
+      allow read, delete: if admin(resource.data.ownerId);
+      allow create: if belongs(request.resource.data.ownerId) && can('sales');
+      allow update: if admin(resource.data.ownerId) && request.resource.data.ownerId == resource.data.ownerId;
+    }
+    match /cashTransactions/{id} {
+      allow read, delete: if admin(resource.data.ownerId);
+      allow create: if admin(request.resource.data.ownerId);
+      allow update: if admin(resource.data.ownerId) && request.resource.data.ownerId == resource.data.ownerId;
+    }
+    match /salesReturns/{id} {
+      allow read, delete: if admin(resource.data.ownerId);
+      allow create: if admin(request.resource.data.ownerId);
+      allow update: if admin(resource.data.ownerId) && request.resource.data.ownerId == resource.data.ownerId;
+    }
+    match /suppliers/{id} { allow read: if belongs(resource.data.ownerId); allow create: if belongs(request.resource.data.ownerId) && can('suppliers'); allow update: if belongs(resource.data.ownerId) && can('suppliers') && request.resource.data.ownerId == resource.data.ownerId; allow delete: if admin(resource.data.ownerId); }
+    match /supplierTransactions/{id} {
+      allow read: if belongs(resource.data.ownerId);
+      allow delete: if admin(resource.data.ownerId);
+      allow create: if belongs(request.resource.data.ownerId) && can('suppliers');
+      allow update: if admin(resource.data.ownerId) && request.resource.data.ownerId == resource.data.ownerId;
+    }
+    match /staff/{id} {
+      allow read, delete: if admin(resource.data.ownerId);
+      allow create: if admin(request.resource.data.ownerId);
+      allow update: if admin(resource.data.ownerId) && request.resource.data.ownerId == resource.data.ownerId;
+    }
+    match /attendance/{id} {
+      allow read, delete: if admin(resource.data.ownerId);
+      allow create: if admin(request.resource.data.ownerId);
+      allow update: if admin(resource.data.ownerId) && request.resource.data.ownerId == resource.data.ownerId;
+    }
+    match /reminders/{id} { allow read: if belongs(resource.data.ownerId); allow create: if admin(request.resource.data.ownerId); allow update: if admin(resource.data.ownerId) && request.resource.data.ownerId == resource.data.ownerId; allow delete: if admin(resource.data.ownerId); }
+
+    match /settings/{ownerId} {
+      allow read: if belongs(ownerId);
+      allow create, update, delete: if admin(ownerId);
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}
