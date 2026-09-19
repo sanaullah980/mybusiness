@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mybusiness-v14';
+const CACHE_NAME = 'mybusiness-v15-ai';
 const APP_SHELL = [
   '/', '/index.html', '/style.css', '/app.js', '/manifest.json',
   '/icon-192.png', '/icon-512.png',
@@ -8,14 +8,15 @@ const APP_SHELL = [
   '/modules/cashbook.js', '/modules/stockPurchases.js', '/modules/expenses.js',
   '/modules/search.js', '/modules/report.js', '/modules/more.js',
   '/modules/staff.js', '/modules/reminders.js', '/modules/business.js',
-  '/modules/backup.js', '/modules/appLock.js', '/modules/team.js',
+  '/modules/backup.js', '/modules/appLock.js', '/modules/team.js', '/modules/aiAgent.js',
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+  'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/+esm',
   'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js',
   'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js',
   'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js'
 ];
-const EXTERNAL_CACHE_HOSTS = new Set(['www.gstatic.com','cdnjs.cloudflare.com']);
+const EXTERNAL_CACHE_HOSTS = new Set(['www.gstatic.com','cdnjs.cloudflare.com','cdn.jsdelivr.net']);
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(async cache => {
