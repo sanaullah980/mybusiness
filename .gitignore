@@ -1,7 +1,0 @@
-downloads/signing.keystore
-downloads/signing-key-info.txt
-.env
-.firebase/
-
-# Firebase local configuration (do not commit if you use a different project)
-.firebaserc
