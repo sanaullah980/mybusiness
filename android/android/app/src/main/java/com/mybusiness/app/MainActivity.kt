@@ -1,7 +1,9 @@
+```kotlin
 package com.mybusiness.app
 
 import android.annotation.SuppressLint
 import android.os.Bundle
+import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
@@ -12,7 +14,6 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import androidx.webkit.WebViewAssetLoader
 import dev.ffmpegkit.llama.Llama
 import dev.ffmpegkit.llama.LlamaConfig
 import kotlinx.coroutines.Dispatchers
@@ -40,22 +41,36 @@ class MainActivity : AppCompatActivity() {
         WebView.setWebContentsDebuggingEnabled(false)
 
         val settings = webView.settings
+
+        // JavaScript
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
         settings.databaseEnabled = true
+
+        // Security
         settings.allowFileAccess = false
         settings.allowContentAccess = false
-        settings.javaScriptCanOpenWindowsAutomatically = false
+
+        // Authentication / OAuth compatibility
+        settings.javaScriptCanOpenWindowsAutomatically = true
+        settings.setSupportMultipleWindows(true)
+
+        // Media
         settings.mediaPlaybackRequiresUserGesture = true
-        settings.setSupportMultipleWindows(false)
+
+        // Cache
         settings.cacheMode = WebSettings.LOAD_DEFAULT
 
-        val assetLoader = WebViewAssetLoader.Builder()
-            .addPathHandler(
-                "/assets/",
-                WebViewAssetLoader.AssetsPathHandler(this)
-            )
-            .build()
+        // Cookies are important for Firebase Authentication.
+        val cookieManager = CookieManager.getInstance()
+        cookieManager.setAcceptCookie(true)
+        cookieManager.setAcceptThirdPartyCookies(webView, true)
+
+        /*
+         * The APK now loads the same deployed MyBusiness application
+         * that works in your normal browser/PWA.
+         */
+        val appUrl = "https://mybusiness-green.vercel.app"
 
         webView.webViewClient = object : WebViewClient() {
 
@@ -63,7 +78,11 @@ class MainActivity : AppCompatActivity() {
                 view: WebView,
                 request: WebResourceRequest
             ): WebResourceResponse? {
-                return assetLoader.shouldInterceptRequest(request.url)
+                /*
+                 * We are loading the Vercel application directly.
+                 * Do not intercept its normal HTTPS resources.
+                 */
+                return super.shouldInterceptRequest(view, request)
             }
 
             override fun onReceivedError(
@@ -77,25 +96,46 @@ class MainActivity : AppCompatActivity() {
                         null
                     )
                 }
+
+                super.onReceivedError(view, request, error)
             }
         }
 
         webView.webChromeClient = WebChromeClient()
 
+        // Local Qwen AI bridge.
         ai = LocalAi(this, webView)
         webView.addJavascriptInterface(ai, "AndroidAI")
 
-        webView.loadUrl(
-            "https://appassets.androidplatform.net/assets/web/index.html"
-        )
+        // Load the live MyBusiness Vercel application.
+        webView.loadUrl(appUrl)
 
+        // Start local Qwen model preparation.
         ai.prepare()
     }
 
+    override fun onResume() {
+        super.onResume()
+
+        // Make sure cookies are persisted when returning from
+        // an authentication flow.
+        CookieManager.getInstance().flush()
+    }
+
+    override fun onPause() {
+        CookieManager.getInstance().flush()
+        super.onPause()
+    }
+
     override fun onDestroy() {
+        CookieManager.getInstance().flush()
+
         ai.close()
+
         webView.removeJavascriptInterface("AndroidAI")
+        webView.stopLoading()
         webView.destroy()
+
         super.onDestroy()
     }
 
@@ -107,6 +147,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 }
+
 
 class LocalAi(
     private val activity: AppCompatActivity,
@@ -517,3 +558,39 @@ class LocalAi(
         model = null
     }
 }
+```
+
+### After pasting
+
+1. **Save** `MainActivity.kt`.
+2. Android Studio should sync/build the code.
+3. Open Terminal.
+4. Run:
+
+```bat
+.\gradlew.bat clean
+```
+
+Then:
+
+```bat
+.\gradlew.bat assembleDebug
+```
+
+5. Install the newly generated:
+
+```text
+android\app\build\outputs\apk\debug\app-debug.apk
+```
+
+### One important check before testing
+
+Your Android manifest must have internet permission:
+
+```xml
+<uses-permission android:name="android.permission.INTERNET" />
+```
+
+Otherwise the Vercel site and Qwen download cannot work.
+
+After installing this APK, **first test the normal MyBusiness website/login before testing Qwen**. If Google Sign-In still gives the domain error, don't change random Firebase settings—we'll then inspect the exact Firebase `authDomain` and Android OAuth configuration.
