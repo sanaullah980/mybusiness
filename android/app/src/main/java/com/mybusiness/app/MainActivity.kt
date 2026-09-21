@@ -272,7 +272,7 @@ class LocalAi(
                         model!!,
                         prompt = prompt,
                         systemPrompt = systemPrompt,
-                        maxTokens = 384
+                        maxTokens = 256
                     )
                     notifyJs("result", JSONObject().put("id", requestId).put("ok", true).put("text", result.text).put("tokensPerSecond", result.tokensPerSecond).toString())
                     notifyJs("state", JSONObject().put("status", "ready").toString())
