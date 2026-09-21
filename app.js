@@ -11,7 +11,7 @@ import { renderExpenses, openExpenseModal, saveExpense, deleteExpense } from './
 import { renderStockPurchases, openStockPurchaseModal, showStockPurchaseTab, onStockPurchaseProductChange, saveStockPurchase, deleteStockPurchase } from './modules/stockPurchases.js';
 import { renderReports, setReportTab, changeReportMonth, resetDailyReport, calculateReportData } from './modules/report.js';
 import { renderMore, openDeleteRecordsModal, deleteCollectionData, deleteEverything } from './modules/more.js';
-import { renderAI } from './modules/ai.js';
+import { renderAI, clearAIChat } from './modules/ai.js';
 import { renderSettings, saveSettings, selectTheme, toggleDarkMode, openChangePasswordModal, changePassword } from './modules/setting.js';
 import { closeModal, viewSaleDetail } from './modules/modals.js';
 import { renderSuppliers, openSupplierModal, saveSupplier, deleteSupplier, openSupplierDetails, openSupplierPayModal, processSupplierPayment, openSupplierDebtModal, processSupplierDebt } from './modules/suppliers.js';
@@ -528,7 +528,7 @@ Object.assign(window,{
     openInvoiceModal,downloadInvoicePdf,printInvoice,shareInvoiceWhatsApp,editInvoiceItems,saveInvoiceEdits,openReturnModal,processReturn,
     renderStaff,openStaffModal,saveStaff,deleteStaff,openAttendanceModal,onAttendanceDateChange,saveAttendance,renderReminders,openReminderModal,saveReminder,completeReminder,deleteReminder,
     renderBusinessCard,saveBusinessCard,shareBusinessCard,renderBackup,exportBusinessBackup,importBusinessBackup,renderAppLock,saveAppLock,removeAppLock,checkAppLock,renderTeam,createEmployeeInvite,cancelEmployeeInvite,toggleEmployeeActive,deleteEmployee,
-    openDashboardMenu,closeDashboardMenu,navigateFromDashboardMenu,openPasswordFromDashboardMenu,openDeleteFromDashboardMenu,logoutFromDashboardMenu,deleteMyAccount
+    openDashboardMenu,closeDashboardMenu,navigateFromDashboardMenu,openPasswordFromDashboardMenu,openDeleteFromDashboardMenu,logoutFromDashboardMenu,deleteMyAccount,clearAIChat
 });
 
 // Quantity-field UX: whenever a quantity input receives focus, select its existing value
