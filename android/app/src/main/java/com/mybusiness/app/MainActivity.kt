@@ -161,7 +161,7 @@ class MainActivity : AppCompatActivity() {
                 popup.webViewClient = object : WebViewClient() {
                     override fun shouldOverrideUrlLoading(v: WebView, request: WebResourceRequest): Boolean {
                         val u = request.url.toString()
-                        return if (u.startsWith("https://accounts.google.com") || u.startsWith("https://mybusinessapp-4734.firebaseapp.com") || u.startsWith(webUrl)) false
+                        return if (u.startsWith("https://accounts.google.com") || u.startsWith("https://mybusinessapp-4734c.firebaseapp.com") || u.startsWith(webUrl)) false
                         else { try { startActivity(Intent(Intent.ACTION_VIEW, request.url)) } catch (_: Throwable) {}; true }
                     }
                 }
