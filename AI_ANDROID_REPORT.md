@@ -1,42 +1,41 @@
-# MyBusiness Android + Qwen3 0.6B report
+# MyBusiness Android + Qwen3 0.6B
 
-## Target
-Android Studio APK, without Flutter. Existing HTML/CSS/JS PWA is embedded locally in Android WebView.
+## Architecture
 
-## Local AI
-- Model: Qwen3 0.6B
-- Quantization: GGUF Q4_0
-- Model source: ggml-org/Qwen3-0.6B-GGUF
-- SHA-256: da2572f16c06133561ce56accaa822216f2391ef4d37fba427801cd6736417d4
-- Approximate model file size: 429 MB
-- Runtime: llama.cpp Android AAR 0.1.1, CPU/NEON, arm64-v8a
-- Minimum SDK: 24
-- Context: 2048 tokens initially, configurable in MainActivity
+- The existing MyBusiness frontend remains HTML/CSS/JavaScript on Vercel.
+- Android loads `https://mybusiness-green.vercel.app/` in WebView.
+- The AI screen and chat UI are implemented in the Vercel frontend.
+- Android exposes `AndroidAI` only as the native bridge for model status, manual file import, model loading and local inference.
+- The GGUF model is stored only in private Android app storage.
 
-## Model installation
-The project automatically downloads the model on first launch, supports resume when the server supplies HTTP Range, verifies SHA-256, then stores it in app-private external-files model storage. The model is loaded once and reused. Subsequent AI inference is local and does not call an AI server.
+## Model
 
-The 429 MB GGUF binary is not included in this ZIP because the current build environment could not retrieve the binary. Therefore this ZIP is the complete Android source/integration, but it is not a claim that a zero-download bundled-model APK was produced here.
+- Qwen3 0.6B Q4_0
+- File: `Qwen3-0.6B-Q4_0.gguf`
+- Expected SHA-256: `da2572f16c06133561ce56accaa822216f2391ef4d37fba427801cd6736417d4`
+- Approximate size: 429 MB
 
-## AI tools
-Implemented adapters for product/customer/supplier search and balances, low stock, sales/purchases/expenses summaries, stock summary, customer payment, customer credit, stock addition, product add/update, simple product sale, expense, supplier payment.
+## Manual installation
 
-Writes require confirmation in the AI UI. Tool arguments are validated in JavaScript before Firestore operations. Qwen never receives unrestricted Firebase access and never executes generated JavaScript.
+There is **no automatic Qwen download anywhere in the APK**.
 
-## Existing app preservation
-The original root PWA files are retained. The Android project contains a copy of the PWA under `android/app/src/main/assets/web/` and loads it with AndroidX WebViewAssetLoader.
+The user opens the AI page, taps **Get Qwen Model**, downloads the GGUF manually in the device browser, returns to MyBusiness, taps **Install Model**, and selects the file through Android's Storage Access Framework.
 
-## Testing performed here
-- Original ZIP inspected.
-- Android project structure generated.
-- AI JavaScript syntax checked with Node.js.
-- Existing app.js syntax checked with Node.js.
-- Qwen model checksum recorded from the official GGUF listing.
+The selected file is copied to a temporary private file, checked for GGUF magic, reasonable size and the expected SHA-256, and loaded before the existing model is replaced. A verified working model is therefore retained if the new import fails.
 
-## Not verified here
-- Android Studio Gradle build (Android SDK/Gradle dependencies are unavailable in this environment).
-- Physical-device WebView authentication.
-- Physical-device Qwen inference.
-- Offline Firebase behavior.
+## Runtime
 
-Do not describe those items as tested until the APK is built and installed on the target phone.
+- The main MyBusiness startup never waits for Qwen.
+- Qwen is loaded only when the AI page requests it.
+- Inference is performed locally through the existing `llama-android` dependency.
+- No cloud AI API is used.
+- Once installed, inference does not require internet access.
+
+## WebView stability
+
+- JavaScript and DOM storage remain enabled.
+- Cookies and third-party cookies remain enabled for Firebase web authentication.
+- Google popup windows are supported by a contained WebView dialog.
+- Qwen failures are isolated from the main app page.
+- Android window insets are applied to the WebView so the Vercel header does not sit underneath the status bar.
+- Vercel CSS uses safe-area-aware spacing for fixed UI.

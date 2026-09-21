@@ -536,7 +536,7 @@ class LocalAi(
                 )
             }
         }
-
+ 
         return digest.digest()
             .joinToString("") {
                 "%02x".format(it)
@@ -559,38 +559,3 @@ class LocalAi(
     }
 }
 ```
-
-### After pasting
-
-1. **Save** `MainActivity.kt`.
-2. Android Studio should sync/build the code.
-3. Open Terminal.
-4. Run:
-
-```bat
-.\gradlew.bat clean
-```
-
-Then:
-
-```bat
-.\gradlew.bat assembleDebug
-```
-
-5. Install the newly generated:
-
-```text
-android\app\build\outputs\apk\debug\app-debug.apk
-```
-
-### One important check before testing
-
-Your Android manifest must have internet permission:
-
-```xml
-<uses-permission android:name="android.permission.INTERNET" />
-```
-
-Otherwise the Vercel site and Qwen download cannot work.
-
-After installing this APK, **first test the normal MyBusiness website/login before testing Qwen**. If Google Sign-In still gives the domain error, don't change random Firebase settings—we'll then inspect the exact Firebase `authDomain` and Android OAuth configuration.
