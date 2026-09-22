@@ -590,7 +590,7 @@ function confirmationText(action) {
 
   return (
     `${action.summary}\n\n` +
-    'Confirm? Reply "yes" to perform it or "no" to cancel.'
+    'Confirm this task by choosing Yes or No.'
   );
 }
 
@@ -734,6 +734,12 @@ const ACTIONS = Object.freeze({
     purpose: 'Sell product',
     required: ['product', 'qty'],
     confirmation: true
+  },
+
+  sellProducts: {
+    purpose: 'Sell one or more products in one sale',
+    required: ['items'],
+    confirmation: true
   }
 
 });
@@ -791,6 +797,17 @@ function validateAction(action) {
         valid: false,
         error: 'Quantity must be greater than zero.'
       };
+    }
+  }
+
+  if (action.type === 'sellProducts') {
+    if (!Array.isArray(action.items) || !action.items.length) {
+      return { valid: false, error: 'At least one product is required for a sale.' };
+    }
+    for (const item of action.items) {
+      if (!item?.product?.id || !Number.isFinite(Number(item.qty)) || Number(item.qty) <= 0) {
+        return { valid: false, error: 'Each sale item must have a valid product and quantity.' };
+      }
     }
   }
 
@@ -1066,8 +1083,8 @@ async function execute(action) {
       {
         name: action.name,
         phone: action.phone || '',
-        address: '',
-        notes: '',
+        address: action.address || '',
+        notes: action.notes || '',
         dueDate: null,
         balance: 0,
         createdAt: new Date().toISOString(),
@@ -1271,265 +1288,156 @@ async function execute(action) {
 
   /*
    * ------------------------------------------------------------------------
-   * SALE
+   * SALE (single or multiple products)
    * ------------------------------------------------------------------------
+   *
+   * Retail is cash/paid sale in this agent path: it never creates customer
+   * debt. If the user does not specify a payment amount, the full calculated
+   * retail total is treated as paid. Wholesale keeps the existing customer-
+   * debt behavior when a customer is explicitly selected.
    */
 
-  if (action.type === 'sellProduct') {
-    const productRef = doc(
-      db,
-      'products',
-      action.product.id
-    );
+  if (action.type === 'sellProduct' || action.type === 'sellProducts') {
+    const items = action.type === 'sellProduct'
+      ? [{ product: action.product, qty: Number(action.qty) }]
+      : action.items.map(item => ({ product: item.product, qty: Number(item.qty) }));
 
-    const customerRef = action.customer
-      ? doc(
-          db,
-          'customers',
-          action.customer.id
-        )
+    const saleType = action.saleType === 'retail' ? 'retail' : 'wholesale';
+    const customer = action.customer || null;
+    const customerRef = saleType === 'wholesale' && customer
+      ? doc(db, 'customers', customer.id)
       : null;
-
+    const productRefs = items.map(item => doc(db, 'products', item.product.id));
+    const billNumber = Math.max(
+      0,
+      ...sales().map(x => parseInt(x.invoiceNumber, 10)).filter(Number.isFinite)
+    ) + 1;
+    const saleRef = doc(collection(db, 'sales'));
     let resultText = '';
 
     await window.runAtomicOrOffline(async tx => {
-      const productSnap =
-        await tx.get(productRef);
+      const refs = customerRef ? [...productRefs, customerRef] : productRefs;
+      const snaps = await Promise.all(refs.map(ref => tx.get(ref)));
+      const productSnapshots = items.map((item, index) => ({ item, snap: snaps[index] }));
+      const customerSnap = customerRef ? snaps.at(-1) : null;
 
-      if (!productSnap.exists()) {
-        throw new Error(
-          'Product no longer exists.'
-        );
-      }
+      let subtotal = 0;
+      let totalProfit = 0;
+      const saleItems = [];
 
-      const product = productSnap.data();
+      for (const { item, snap } of productSnapshots) {
+        if (!snap.exists()) throw new Error(`Product ${item.product.name} no longer exists.`);
+        const product = snap.data();
+        if (product.ownerId !== ownerId()) throw new Error(`Unauthorized product: ${item.product.name}.`);
 
-      if (product.ownerId !== ownerId()) {
-        throw new Error(
-          'Unauthorized product.'
-        );
-      }
-
-      const stock =
-        Number(product.stock) || 0;
-
-      if (Number(action.qty) > stock) {
-        throw new Error(
-          `Not enough stock. Available: ${stock}.`
-        );
-      }
-
-      const unit =
-        action.saleType === 'retail'
-          ? Number(
-              product.retailPrice ??
-              product.price ??
-              0
-            )
-          : Number(
-              product.wholesalePrice ??
-              product.price ??
-              0
-            );
-
-      const cost =
-        Number(product.cost) || 0;
-
-      const total =
-        unit * Number(action.qty);
-
-      const totalProfit =
-        (unit - cost) *
-        Number(action.qty);
-
-      let newBalance = 0;
-
-      if (customerRef) {
-        const customerSnap =
-          await tx.get(customerRef);
-
-        if (!customerSnap.exists()) {
-          throw new Error(
-            'Customer no longer exists.'
-          );
+        const qty = Number(item.qty);
+        const stock = Number(product.stock) || 0;
+        if (qty > stock) {
+          throw new Error(`Not enough stock for ${item.product.name}. Available: ${stock}.`);
         }
 
-        const customer =
-          customerSnap.data();
+        const unit = saleType === 'retail'
+          ? Number(product.retailPrice ?? product.price ?? 0)
+          : Number(product.wholesalePrice ?? product.price ?? 0);
+        const cost = Number(product.cost) || 0;
+        const lineTotal = unit * qty;
 
-        if (customer.ownerId !== ownerId()) {
-          throw new Error(
-            'Unauthorized customer.'
-          );
-        }
+        subtotal += lineTotal;
+        totalProfit += (unit - cost) * qty;
+        saleItems.push({
+          id: item.product.id,
+          name: product.name || item.product.name,
+          price: unit,
+          cost,
+          qty,
+          returnedQty: 0
+        });
 
-        newBalance =
-          Math.max(
-            0,
-            Number(customer.balance) || 0
-          ) + total;
+        tx.update(doc(db, 'products', item.product.id), {
+          stock: stock - qty,
+          updatedAt: new Date().toISOString()
+        });
       }
 
-      const invoiceNumbers =
-        sales()
-          .map(x =>
-            parseInt(
-              x.invoiceNumber,
-              10
-            )
-          )
-          .filter(Number.isFinite);
+      let amountPaid = saleType === 'retail'
+        ? subtotal
+        : Number(action.amountPaid || 0);
+      if (amountPaid < 0) throw new Error('Amount paid cannot be negative.');
+      if (saleType === 'retail') amountPaid = subtotal;
+      const discount = Math.max(0, Math.min(subtotal, Number(action.discount || 0)));
+      const total = Math.max(0, subtotal - discount);
+      if (saleType === 'retail') amountPaid = total;
+      const amountDue = saleType === 'retail' ? 0 : Math.max(0, total - amountPaid);
+      const currentBalance = customerSnap?.exists()
+        ? Math.max(0, Number(customerSnap.data().balance) || 0)
+        : 0;
+      const newCustomerBalance = currentBalance + amountDue;
+      const customerName = customerSnap?.exists()
+        ? customerSnap.data().name
+        : (customer?.name || 'Walk-in');
 
-      const billNumber =
-        Math.max(
-          0,
-          ...invoiceNumbers
-        ) + 1;
-
-      const saleRef =
-        doc(collection(db, 'sales'));
-
-      tx.update(productRef, {
-        stock:
-          stock -
-          Number(action.qty)
-      });
+      if (customerSnap?.exists() && customerSnap.data().ownerId !== ownerId()) {
+        throw new Error('Unauthorized customer.');
+      }
 
       tx.set(saleRef, {
         ownerId: ownerId(),
-
-        createdBy:
-          window.authUserId ||
-          window.currentUserId,
-
-        createdByName:
-          window.currentMemberName ||
-          'Business Owner',
-
-        customerId:
-          action.customer
-            ? action.customer.id
-            : null,
-
-        customerName:
-          action.customer
-            ? action.customer.name
-            : 'Walk-in',
-
-        saleType:
-          action.saleType || 'wholesale',
-
-        date:
-          new Date().toISOString(),
-
-        items: [
-          {
-            id: action.product.id,
-            name: action.product.name,
-            price: unit,
-            cost,
-            qty: Number(action.qty),
-            returnedQty: 0
-          }
-        ],
-
-        subtotal: total,
-        discount: 0,
+        createdBy: window.authUserId || window.currentUserId,
+        createdByName: window.currentMemberName || 'Business Owner',
+        customerId: customer ? customer.id : null,
+        customerName,
+        saleType,
+        date: new Date().toISOString(),
+        items: saleItems,
+        subtotal,
+        discount,
         discountType: 'amount',
         total,
-
-        amountPaid: 0,
-        amountDue: total,
-
-        totalProfit,
+        amountPaid,
+        amountDue,
+        totalProfit: totalProfit - discount,
         profitKnown: true,
-
         note: 'AI agent',
-
         returnedAmount: 0,
         returnedProfit: 0,
-
         invoiceNumber: billNumber
       });
 
-      if (customerRef) {
+      if (customerRef && amountDue > 0) {
         tx.update(customerRef, {
-          balance: newBalance,
-          updatedAt:
-            new Date().toISOString()
+          balance: newCustomerBalance,
+          updatedAt: new Date().toISOString()
         });
-
-        const transactionRef =
-          doc(
-            collection(
-              db,
-              'customerTransactions'
-            )
-          );
-
+        const transactionRef = doc(collection(db, 'customerTransactions'));
         tx.set(transactionRef, {
           ownerId: ownerId(),
-          customerId:
-            action.customer.id,
-
+          customerId: customer.id,
           type: 'sale_debt',
-
-          amount: total,
-          amountPaid: 0,
-
-          debitAmount: total,
-          creditAmount: 0,
-
-          balanceAfter: newBalance,
-
-          date:
-            new Date().toISOString(),
-
-          note:
-            `Bill No. ${billNumber}`,
-
-          billNo:
-            String(billNumber),
-
-          saleId:
-            saleRef.id,
-
-          createdBy:
-            window.authUserId ||
-            window.currentUserId
+          amount: amountDue,
+          amountPaid,
+          debitAmount: amountDue,
+          creditAmount: amountPaid,
+          balanceAfter: newCustomerBalance,
+          date: new Date().toISOString(),
+          note: `Bill No. ${billNumber}`,
+          billNo: String(billNumber),
+          saleId: saleRef.id,
+          createdBy: window.authUserId || window.currentUserId
         });
       }
 
-      tx.set(
-        doc(
-          db,
-          'settings',
-          ownerId()
-        ),
-        {
-          nextInvoiceNumber:
-            billNumber + 1
-        },
-        {
-          merge: true
-        }
-      );
+      tx.set(doc(db, 'settings', ownerId()), {
+        nextInvoiceNumber: billNumber + 1
+      }, { merge: true });
 
-      resultText =
-        `Done. Sold ${action.qty} x ` +
-        `${action.product.name} ` +
-        (
-          action.customer
-            ? `to ${action.customer.name} ` +
-              `(added ${money(total)} to their due).`
-            : `to Walk-in customer for ${money(total)}.`
-        );
+      resultText = saleType === 'retail'
+        ? `Done. Retail sale recorded: ${saleItems.map(i => `${i.qty} x ${i.name}`).join(', ')} for ${money(total)}. No customer debt was created.`
+        : `Done. Sale recorded: ${saleItems.map(i => `${i.qty} x ${i.name}`).join(', ')} for ${money(total)}${amountDue > 0 && customer ? `; ${money(amountDue)} added to ${customerName}'s due.` : '.'}`;
     });
 
     rememberContext({
-      product: action.product,
-      customer:
-        action.customer || undefined,
+      product: items.length === 1 ? items[0].product : undefined,
+      customer: customer || undefined,
       action
     });
 
@@ -1873,6 +1781,92 @@ function parseInformationCommand(input) {
 
 
 /* -------------------------------------------------------------------------- */
+/* NATURAL-LANGUAGE ENTITY HELPERS                                           */
+/* -------------------------------------------------------------------------- */
+
+function extractPhone(text) {
+  const match = String(text || '').match(
+    /(?:phone|mobile|number|no\.?|فون|موبائل|نمبر)\s*(?:is|:|=)?\s*(\+?\d[\d\s().-]{5,}\d)/i
+  );
+  return match ? match[1].replace(/[\s().-]/g, '') : '';
+}
+
+function extractLabeledField(text, labels) {
+  const label = labels.join('|');
+  const match = String(text || '').match(
+    new RegExp(`(?:${label})\\s*(?:is|:|=)?\\s*(.+?)(?=\\s+(?:and\\s+)?(?:phone|mobile|number|address|phone number|فون|موبائل|نمبر|پتہ)\\b|$)`, 'i')
+  );
+  return match ? match[1].trim().replace(/[,.،؛;]+$/, '') : '';
+}
+
+function parseCustomerFields(original) {
+  const text = norm(original);
+  let name = extractLabeledField(text, ['name', 'named', 'called', 'ka naam', 'naam', 'نام', 'کا نام']);
+  if (!name) {
+    const m = text.match(/(?:add|create|new|banao|banayen|بناؤ|بنائیں|شامل)\s+(?:a\s+)?(?:customer|client|grahak|گاہک)\s+(.+?)(?=\s+(?:and\s+)?(?:phone|mobile|number|address|نام|فون|موبائل|نمبر|پتہ)\b|$)/i);
+    if (m) name = m[1].trim();
+  }
+  name = name.replace(/\b(?:phone|mobile|number|address|فون|موبائل|نمبر|پتہ)\b.*$/i, '').trim();
+  const phone = extractPhone(original);
+  const address = extractLabeledField(original, ['address', 'addr', 'پتہ']);
+  return { name, phone, address };
+}
+
+function parseProductCreation(original) {
+  const text = norm(original);
+  const command = text.match(/^(?:please\s+)?(?:add|create|new|banao|banayen|بناؤ|بنائیں|شامل)\s+(?:a\s+)?(?:product|item|پروڈکٹ|آئٹم)\b/i);
+  if (!command) return null;
+
+  let rest = text.slice(command[0].length).trim();
+  const getNum = pattern => {
+    const m = text.match(pattern);
+    return m ? Number(m[1].replace(/,/g, '')) : NaN;
+  };
+  const cost = getNum(/(?:cost|purchase\s+price|buying\s+price|لاگت|خرید)[^0-9]*(\d+(?:\.\d+)?)/i);
+  const wholesalePrice = getNum(/(?:wholesale|wholesale\s+price)[^0-9]*(\d+(?:\.\d+)?)/i);
+  const retailPrice = getNum(/(?:retail|retail\s+price)[^0-9]*(\d+(?:\.\d+)?)/i);
+  const stock = getNum(/(?:stock|quantity|qty|pcs?|pieces?|اسٹاک|مقدار)[^0-9]*(\d+(?:\.\d+)?)/i);
+  const minStock = getNum(/(?:min(?:imum)?\s+stock|low\s+stock)[^0-9]*(\d+(?:\.\d+)?)/i);
+  const genericPrice = getNum(/(?:price|قیمت)[^0-9]*(\d+(?:\.\d+)?)/i);
+  const barcode = (text.match(/(?:barcode|bar\s*code)[^0-9]*([0-9A-Za-z-]+)/i)||[])[1] || '';
+
+  rest = rest
+    .replace(/(?:cost|purchase\s+price|buying\s+price|wholesale(?:\s+price)?|retail(?:\s+price)?|price|stock|quantity|qty|pcs?|pieces?|min(?:imum)?\s+stock|low\s+stock|barcode|bar\s*code)\s*(?:is|:|=)?\s*[0-9A-Za-z.-]+/gi, ' ')
+    .replace(/\s+(?:and|with|اور)\s+/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!rest) return { name: '', cost, wholesalePrice, retailPrice, stock, minStock, barcode };
+  const price = Number.isFinite(genericPrice) ? genericPrice : NaN;
+  const wholesale = Number.isFinite(wholesalePrice) ? wholesalePrice : price;
+  const retail = Number.isFinite(retailPrice) ? retailPrice : (Number.isFinite(price) ? price : wholesale);
+  return { name: rest, cost, wholesalePrice: wholesale, retailPrice: retail, stock, minStock, barcode };
+}
+
+function extractSaleItems(text, list) {
+  const source = norm(text);
+  const found = [];
+  for (const product of list || []) {
+    if (!product?.name) continue;
+    const name = norm(product.name);
+    const re = new RegExp(`(^|\\s)${escapeRegex(name).replace(/\s+/g, '\\s+')}(?=\\s|$)`, 'i');
+    const match = re.exec(source);
+    if (!match) continue;
+    const start = match.index + match[1].length;
+    const before = source.slice(0, start).trim();
+    const after = source.slice(start + name.length).trim();
+    const beforeQty = before.match(/(?:^|\s)(\d+(?:\.\d+)?)\s*$/);
+    const afterQty = after.match(/^(?:x\s*)?(\d+(?:\.\d+)?)(?=\s|$)/i);
+    const qty = beforeQty ? Number(beforeQty[1]) : (afterQty ? Number(afterQty[1]) : 1);
+    found.push({ product, qty: Math.max(1, Math.floor(qty)), index: start });
+  }
+  found.sort((a,b)=>a.index-b.index);
+  const unique=[]; const seen=new Set();
+  for(const item of found){ if(!seen.has(item.product.id)){seen.add(item.product.id);unique.push(item);} }
+  return unique;
+}
+
+/* -------------------------------------------------------------------------- */
 /* COMMAND PARSER                                                             */
 /* -------------------------------------------------------------------------- */
 
@@ -1888,6 +1882,36 @@ function parseCommand(input) {
 
   clearOldContext();
 
+  // Explicit "add/create product" commands must never fall through to the
+  // expense handler or stock-adjustment handler.
+  const productCreation = parseProductCreation(original);
+  if (productCreation) {
+    if (!productCreation.name) {
+      return { kind: 'clarification', text: 'What is the product name?' };
+    }
+    const existingProduct = allProducts.find(p => norm(p.name) === norm(productCreation.name));
+    if (existingProduct) {
+      return { kind: 'answer', text: `Product "${existingProduct.name}" already exists.` };
+    }
+    if (!Number.isFinite(productCreation.wholesalePrice) && !Number.isFinite(productCreation.retailPrice)) {
+      return { kind: 'clarification', text: `What is the price of ${productCreation.name}? You can say: "add product ${productCreation.name}, price 2200, stock 5".` };
+    }
+    return {
+      kind: 'confirm',
+      action: {
+        type: 'addProduct',
+        name: productCreation.name,
+        cost: Number.isFinite(productCreation.cost) ? productCreation.cost : 0,
+        wholesalePrice: Number.isFinite(productCreation.wholesalePrice) ? productCreation.wholesalePrice : productCreation.retailPrice,
+        retailPrice: Number.isFinite(productCreation.retailPrice) ? productCreation.retailPrice : productCreation.wholesalePrice,
+        stock: Number.isFinite(productCreation.stock) ? productCreation.stock : 0,
+        minStock: Number.isFinite(productCreation.minStock) ? productCreation.minStock : 5,
+        barcode: productCreation.barcode || '',
+        summary: `Create product "${productCreation.name}" with stock ${Number.isFinite(productCreation.stock) ? productCreation.stock : 0} and price ${money(Number.isFinite(productCreation.retailPrice) ? productCreation.retailPrice : productCreation.wholesalePrice)}?`
+      }
+    };
+  }
+
   /*
    * First handle pure information requests.
    */
@@ -1898,6 +1922,24 @@ function parseCommand(input) {
     return information;
   }
 
+
+  // Explicit customer creation captures all supplied fields in the same command.
+  if (rx(WORDS.addCustomer).test(text) && RX.customer.test(text)) {
+    const fields = parseCustomerFields(original);
+    if (!fields.name) return { kind: 'clarification', text: 'What is the customer name?' };
+    const duplicate = allCustomers.find(c => norm(c.name) === norm(fields.name));
+    if (duplicate) return { kind: 'answer', text: `Customer "${duplicate.name}" already exists.` };
+    return {
+      kind: 'confirm',
+      action: {
+        type: 'addCustomer',
+        name: fields.name,
+        phone: fields.phone,
+        address: fields.address,
+        summary: `Create customer "${fields.name}"${fields.phone ? ` with phone ${fields.phone}` : ''}${fields.address ? ` and address "${fields.address}"` : ''}?`
+      }
+    };
+  }
 
   /*
    * Resolve entities.
@@ -1992,8 +2034,8 @@ function parseCommand(input) {
   if (
     productResult.ambiguous &&
     (
-      hasProductVerb ||
-      RX.stock.test(text)
+      RX.stock.test(text) ||
+      (!rx(WORDS.sellProduct).test(text) && hasProductVerb)
     )
   ) {
     return {
@@ -2042,91 +2084,63 @@ function parseCommand(input) {
 
   /*
    * ------------------------------------------------------------------------
-   * SELL
+   * SELL — supports one or many products in the same command.
+   * Examples:
+   *   "sell 1 lamp"
+   *   "1 lamp 3 frame 5 gop retail pa sale karo"
+   *   "lamp becho"
    * ------------------------------------------------------------------------
    */
 
-  if (
-    productResult.found &&
-    rx(WORDS.sellProduct).test(text)
-  ) {
-    const product =
-      productResult.item;
+  if (rx(WORDS.sellProduct).test(text) || (RX.sale.test(text) && productResult.found)) {
+    const saleItems = extractSaleItems(text, allProducts);
 
-    const qty =
-      qtyFrom(text);
+    if (!saleItems.length && productResult.found) {
+      saleItems.push({ product: productResult.item, qty: qtyFrom(text) });
+    }
 
-    const stock =
-      Number(product.stock) || 0;
-
-    if (qty > stock) {
+    if (!saleItems.length) {
       return {
-        kind: 'answer',
-        text:
-          `Not enough stock for ${product.name}. ` +
-          `Available: ${stock}.`
+        kind: 'clarification',
+        text: 'Which product should I sell? You can say: "sell 1 lamp" or "1 lamp 3 frame retail sale".'
       };
     }
 
-    const saleType =
-      /(?:retail|retail sale|ریٹیل)/i.test(text)
-        ? 'retail'
-        : 'wholesale';
+    const invalid = saleItems.find(item => Number(item.qty) > (Number(item.product.stock) || 0));
+    if (invalid) {
+      return { kind: 'answer', text: `Not enough stock for ${invalid.product.name}. Available: ${Number(invalid.product.stock) || 0}.` };
+    }
 
-    const unit =
-      saleType === 'retail'
-        ? Number(
-            product.retailPrice ??
-            product.price ??
-            0
-          )
-        : Number(
-            product.wholesalePrice ??
-            product.price ??
-            0
-          );
-
-    const total =
-      unit * qty;
-
-    const customer =
-      customerResult.found
-        ? customerResult.item
-        : null;
+    const saleType = /(?:retail|retail sale|retail pa|ریٹیل)/i.test(text) ? 'retail' : 'wholesale';
+    const customer = customerResult.found ? customerResult.item : null;
+    const total = saleItems.reduce((sum, item) => {
+      const unit = saleType === 'retail'
+        ? Number(item.product.retailPrice ?? item.product.price ?? 0)
+        : Number(item.product.wholesalePrice ?? item.product.price ?? 0);
+      return sum + unit * Number(item.qty);
+    }, 0);
 
     rememberContext({
-      product,
+      product: saleItems.length === 1 ? saleItems[0].product : undefined,
       customer: customer || undefined
     });
 
     return {
       kind: 'confirm',
       action: {
-        type: 'sellProduct',
-
-        product,
-
+        type: saleItems.length === 1 ? 'sellProduct' : 'sellProducts',
+        items: saleItems.map(item => ({ product: item.product, qty: item.qty })),
+        product: saleItems.length === 1 ? saleItems[0].product : undefined,
+        qty: saleItems.length === 1 ? saleItems[0].qty : undefined,
         customer,
-
-        qty,
-
         saleType,
-
         summary:
-          `Sell ${qty} x ${product.name} ` +
-          `${
-            customer
-              ? `to ${customer.name} ` +
-                '(added to their due)'
-              : 'to Walk-in customer'
-          } ` +
-          `at ${saleType} price ` +
-          `(${money(unit)} each) = ` +
-          `${money(total)}?`
+          `${saleType === 'retail' ? 'Retail' : 'Wholesale'} sale: ` +
+          `${saleItems.map(item => `${item.qty} x ${item.product.name}`).join(', ')}` +
+          `${customer ? ` for ${customer.name}` : ''} — total ${money(total)}?`
       }
     };
   }
-
 
   /*
    * ------------------------------------------------------------------------
@@ -2485,78 +2499,6 @@ function parseCommand(input) {
 
   /*
    * ------------------------------------------------------------------------
-   * CREATE CUSTOMER
-   * ------------------------------------------------------------------------
-   */
-
-  if (
-    rx(WORDS.addCustomer).test(text) &&
-    RX.customer.test(text)
-  ) {
-    let name =
-      text
-        .replace(
-          /.*?(?:customer|گاہک)\s*/i,
-          ''
-        )
-        .replace(
-          /^(?:named|name|called|ka naam|کا نام|نام)\s*/i,
-          ''
-        )
-        .replace(
-          /(?:phone|number|فون|نمبر).*$/i,
-          ''
-        )
-        .trim();
-
-    /*
-     * Remove common command endings.
-     */
-    name =
-      name
-        .replace(
-          /\b(?:banao|banayen|create|add|please)\b.*$/i,
-          ''
-        )
-        .trim();
-
-    if (!name) {
-      return {
-        kind: 'clarification',
-        text:
-          'What is the customer name?'
-      };
-    }
-
-    const duplicate =
-      allCustomers.find(
-        customer =>
-          norm(customer.name) ===
-          norm(name)
-      );
-
-    if (duplicate) {
-      return {
-        kind: 'answer',
-        text:
-          `Customer "${duplicate.name}" already exists.`
-      };
-    }
-
-    return {
-      kind: 'confirm',
-      action: {
-        type: 'addCustomer',
-        name,
-        summary:
-          `Create customer "${name}"?`
-      }
-    };
-  }
-
-
-  /*
-   * ------------------------------------------------------------------------
    * CREATE PRODUCT
    * ------------------------------------------------------------------------
    *
@@ -2736,10 +2678,8 @@ export async function handleAgentCommand(input) {
   if (parsed?.kind === 'confirm') {
     return {
       handled: true,
-      text:
-        confirmationText(
-          parsed.action
-        )
+      text: confirmationText(parsed.action),
+      confirmation: { yes: 'Yes', no: 'No' }
     };
   }
 
