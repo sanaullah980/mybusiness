@@ -26,18 +26,7 @@ function aiStatusEl(){return document.getElementById('ai-status');} function aiP
 function setAIError(message){const s=aiStatusEl();if(s){s.textContent=message;s.dataset.state='error';}}
 function updateAIProgress(d){const p=Math.max(0,Math.min(100,Number(d.percent||0))),bar=aiProgressBar(),text=aiProgressText(),wrap=aiProgressWrap();if(bar)bar.style.width=p+'%';if(text)text.textContent=`Installing Qwen3 0.6B — ${p}% • ${fmtMb(d.bytes)} / ${fmtMb(d.total)}`;if(wrap)wrap.classList.remove('hidden');}
 function updateAIState(d){const status=d.status||'',s=aiStatusEl(),wrap=aiProgressWrap();if(!s)return;const bg=document.getElementById('ai-get-model'),bi=document.getElementById('ai-install-model'),chat=document.getElementById('ai-chat-area'),install=document.getElementById('ai-install-card');if(status==='checking')s.textContent='Checking model...';else if(status==='verifying'){s.textContent='Verifying model...';wrap?.classList.remove('hidden');}else if(status==='loading'){s.textContent='Loading Qwen AI...';wrap?.classList.remove('hidden');}else if(status==='ready'){s.textContent='AI Ready • Local / Offline';s.dataset.state='ready';wrap?.classList.add('hidden');install?.classList.add('hidden');chat?.classList.remove('hidden');if(bg)bg.textContent='Get Model Again';if(bi)bi.textContent='Reinstall Model';}else if(status==='installed'){s.textContent='Model installed • Ready to load';wrap?.classList.add('hidden');install?.classList.add('hidden');chat?.classList.remove('hidden');}else if(status==='not_installed'){s.textContent='Model not installed';s.dataset.state='warning';wrap?.classList.add('hidden');install?.classList.remove('hidden');chat?.classList.add('hidden');}else if(status==='error'){s.textContent=d.message||'AI error';s.dataset.state='error';install?.classList.remove('hidden');chat?.classList.add('hidden');}}
-function appendMessage(role,text,skipSave){const box=aiMessages();if(!box)return;box.querySelector('.ai-empty')?.remove();const row=document.createElement('div');row.className='ai-message '+role;row.innerHTML=`<div class="ai-message-bubble">${escAi(text).replace(/\n/g,'<br>')}</div>`;box.appendChild(row);box.scrollTop=box.scrollHeight;if(!skipSave){chatHistory.push({role,text});saveChatHistory();}return row;}
-function appendConfirmation(text){
-  const row=appendMessage('assistant',text);
-  if(!row)return;
-  const actions=document.createElement('div');actions.className='ai-confirm-actions';
-  const yes=document.createElement('button');yes.type='button';yes.className='btn ai-confirm-yes';yes.textContent='Yes';
-  const no=document.createElement('button');no.type='button';no.className='btn btn-secondary ai-confirm-no';no.textContent='No';
-  actions.append(yes,no);row.appendChild(actions);
-  const send=document.getElementById('ai-send');
-  const finish=async(value)=>{yes.disabled=true;no.disabled=true;actions.remove();appendMessage('user',value);if(send)send.disabled=true;try{const result=await handleAgentCommand(value);if(result?.handled)appendMessage('assistant',result.text||'');else appendMessage('assistant','Please try that command again.');}catch(e){appendMessage('assistant',`Agent error: ${e.message||e}`);}finally{if(send)send.disabled=false;}};
-  yes.onclick=()=>finish('yes');no.onclick=()=>finish('no');
-}
+function appendMessage(role,text,skipSave){const box=aiMessages();if(!box)return;box.querySelector('.ai-empty')?.remove();const row=document.createElement('div');row.className='ai-message '+role;row.innerHTML=`<div class="ai-message-bubble">${escAi(text).replace(/\n/g,'<br>')}</div>`;box.appendChild(row);box.scrollTop=box.scrollHeight;if(!skipSave){chatHistory.push({role,text});saveChatHistory();}}
 function finishAIRequest(d){const item=pending.get(d.id);if(!item)return;pending.delete(d.id);if(d.ok)appendMessage('assistant',d.text||'');else appendMessage('assistant',`Error: ${d.error||'Inference failed.'}`);const send=document.getElementById('ai-send');if(send)send.disabled=false;}
 async function sendAI(){
   const input=aiInput();if(!input)return;const text=input.value.trim();if(!text)return;input.value='';appendMessage('user',text);
@@ -46,7 +35,7 @@ async function sendAI(){
     // Deterministic agent handles common MyBusiness operations first. This is what
     // lets a 0.6B model operate the app instead of merely chatting.
     const local=await handleAgentCommand(text);
-    if(local.handled){if(local.confirmation)appendConfirmation(local.text);else appendMessage('assistant',local.text);if(send)send.disabled=false;return;}
+    if(local.handled){appendMessage('assistant',local.text);if(send)send.disabled=false;return;}
   }catch(e){appendMessage('assistant',`Agent error: ${e.message||e}`);if(send)send.disabled=false;return;}
   if(!nativeAvailable()){appendMessage('assistant','Local Qwen AI is available inside the Android app.');if(send)send.disabled=false;return;}
   const id='ai-'+(++requestSeq);pending.set(id,{busy:true});

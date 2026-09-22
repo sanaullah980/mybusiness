@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, reauthenticateWithPopup, updatePassword, deleteUser } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, reauthenticateWithPopup, updatePassword, deleteUser } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, setDoc, getDoc, onSnapshot, query, where, runTransaction, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
@@ -295,35 +295,23 @@ window.forgotPassword=async(e)=>{
     if(e)e.preventDefault(); const username=normalizeUsername(document.getElementById('login-username').value); if(!validateUsername(username)) return alert('Enter your username first.');
     alert('Password reset for username-only accounts requires a recovery email. Add an email in your profile, then reset from the recovery option.');
 };
-let googleSignInBusy=false;
 window.signInWithGoogle=async()=>{
-    if(googleSignInBusy)return;
-    googleSignInBusy=true;
-    const button=document.querySelector('.google-btn');
-    if(button){button.disabled=true;button.dataset.originalText=button.innerHTML;button.innerHTML='<i class="fas fa-spinner fa-spin"></i> Signing in…';}
     sessionStorage.setItem('mybiz-google-signin','1');
     try{
-        // The normal web/PWA path uses redirect rather than a popup. This avoids
-        // the blank/white popup page that can occur after the Google account chooser.
-        // Android WebView keeps the existing popup path because Firebase web auth
-        // redirect state is not reliable in embedded WebViews.
-        if(!window.__MYBUSINESS_ANDROID__){
-            await setPersistence(auth,browserLocalPersistence);
-            await signInWithRedirect(auth,googleProvider);
-            return;
-        }
-        await setPersistence(auth,browserLocalPersistence);
         await signInWithPopup(auth,googleProvider);
     }catch(error){
         console.error('Google Sign-In error:',error);
         const msg=String(error?.message||'');
         const storageProblem=error?.code==='auth/web-storage-unsupported' || /missing initial state|storage is inaccessible|sessionstorage/i.test(msg);
-        if(error.code==='auth/unauthorized-domain'){sessionStorage.removeItem('mybiz-google-signin');alert('This website domain is not authorized in Firebase Authentication. Add the current domain in Firebase Console → Authentication → Settings → Authorized domains.');}
-        else if(storageProblem){sessionStorage.removeItem('mybiz-google-signin');alert('Google Sign-In could not access browser session storage. Open MyBusiness in the normal Chrome/PWA browser instead of an embedded WebView.');}
-        else if(error.code!=='auth/popup-closed-by-user'){sessionStorage.removeItem('mybiz-google-signin');alert(msg||'Google Sign-In failed.');}
-    }finally{
-        googleSignInBusy=false;
-        if(button){button.disabled=false;button.innerHTML=button.dataset.originalText||'<i class="fab fa-google"></i> Continue with Google';}
+        if(error.code==='auth/popup-closed-by-user'){ sessionStorage.removeItem('mybiz-google-signin'); return; }
+        if(error.code==='auth/unauthorized-domain'){ sessionStorage.removeItem('mybiz-google-signin'); alert('This website domain is not authorized in Firebase Authentication.'); return; }
+        if(storageProblem && window.__MYBUSINESS_ANDROID__){
+            sessionStorage.removeItem('mybiz-google-signin');
+            alert('Google Sign-In cannot safely complete inside this Android WebView because Google/Firebase blocks the temporary session storage used by the web redirect. Use Email/Password in the Android app, or use Google Sign-In from the normal Chrome/PWA version. Your business data is unchanged.');
+            return;
+        }
+        sessionStorage.removeItem('mybiz-google-signin');
+        alert(msg||'Google Sign-In failed.');
     }
 };
 // Google login uses popup only. This avoids redirect/sessionStorage state errors in the Android WebView.
@@ -596,20 +584,6 @@ setupInstallPrompt();
 setupNotifications();
 applyLanguageToShell();
 
-// Complete a Google redirect if the browser returned from Google. Firebase will
-// also trigger onAuthStateChanged; this call is only for surfacing redirect errors
-// instead of leaving the page on a blank/unfinished auth state.
-if(!window.__MYBUSINESS_ANDROID__){
-    getRedirectResult(auth).catch(error=>{
-        if(error?.code){
-            console.error('Google redirect result error:',error);
-            sessionStorage.removeItem('mybiz-google-signin');
-            const el=document.getElementById('login-error');
-            if(el && error.code!=='auth/no-auth-event')el.textContent=String(error.message||'Google Sign-In failed.');
-        }
-    });
-}
-
 // Firebase Auth is the single source of truth for whether the app is ready.
 // The listener also fires after a refresh, so the app does not get stuck on the loading screen.
 onAuthStateChanged(auth, async user=>{
@@ -627,18 +601,18 @@ onAuthStateChanged(auth, async user=>{
             let pending=null; try{pending=JSON.parse(sessionStorage.getItem('mybiz-pending-profile')||'null');}catch(_){}
             const googleFirstTime=sessionStorage.getItem('mybiz-google-signin')==='1';
             if(googleFirstTime && !pending){
-                const defaultName=user.displayName||'';
-                const defaultUsername=normalizeUsername((user.email||'').split('@')[0]).replace(/[^a-z0-9._-]/g,'').slice(0,30);
-                await signOut(auth);
+                // A Google-authenticated user who has no businessMembers profile yet is a
+                // first-time owner. Do NOT sign the user out and send them back to login:
+                // that created the reported 'choose account -> back to login' loop.
+                // Create a compatible owner profile automatically, then continue through
+                // the normal auth initialization path.
+                const rawBase=normalizeUsername((user.email||'').split('@')[0]).replace(/[^a-z0-9._-]/g,'');
+                let defaultUsername=rawBase.slice(0,30);
+                if(defaultUsername.length<3) defaultUsername=`owner${user.uid.slice(0,6)}`;
+                await setDoc(memberRef,{ownerId:user.uid,role:'admin',active:true,displayName:user.displayName||user.email||'Business Owner',username:defaultUsername,email:(user.email||'').toLowerCase(),phone:'',permissions:{},createdAt:new Date().toISOString(),authProvider:'google'});
+                memberSnap=await getDoc(memberRef);
                 sessionStorage.removeItem('mybiz-google-signin');
-                document.getElementById('login-error').textContent='Google profile details were filled in. Choose a username and role to finish setup.';
-                isLoginMode=true; toggleAuthMode();
-                document.getElementById('signup-name').value=defaultName;
-                document.getElementById('login-username').value=defaultUsername;
-                document.getElementById('signup-email').value=user.email||'';
-                return;
-            }
-            if(!pending){
+            } else if(!pending){
                 // Legacy accounts remain Admins so existing business data keeps working.
                 await setDoc(memberRef,{ownerId:user.uid,role:'admin',active:true,displayName:user.displayName||user.email||'Business Owner',username:normalizeUsername((user.email||'').split('@')[0]),email:(user.email||'').toLowerCase(),phone:'',permissions:{},createdAt:new Date().toISOString()});
                 memberSnap=await getDoc(memberRef);
