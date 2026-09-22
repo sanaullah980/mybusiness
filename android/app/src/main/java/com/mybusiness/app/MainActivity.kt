@@ -3,7 +3,6 @@ package com.mybusiness.app
 import android.annotation.SuppressLint
 import android.app.Dialog
 import android.content.Intent
-import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
@@ -18,9 +17,7 @@ import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import dev.ffmpegkit.llama.Llama
 import dev.ffmpegkit.llama.LlamaConfig
@@ -54,9 +51,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        WindowCompat.setDecorFitsSystemWindows(window, false)
-        window.statusBarColor = Color.TRANSPARENT
-        window.navigationBarColor = Color.TRANSPARENT
+        WindowCompat.setDecorFitsSystemWindows(window, true)
         WindowCompat.getInsetsController(window, window.decorView).apply {
             isAppearanceLightStatusBars = true
             isAppearanceLightNavigationBars = true
@@ -67,13 +62,6 @@ class MainActivity : AppCompatActivity() {
         root.addView(webView, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
 
-        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
-            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            webView.setPadding(0, bars.top, 0, bars.bottom)
-            insets
-        }
-        ViewCompat.requestApplyInsets(root)
-
         ai = LocalAi(this, webView) { kind, payload ->
             deliverAiEvent(kind, payload)
         }
@@ -83,7 +71,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun launchModelPicker() {
-        modelPicker.launch(arrayOf("application/octet-stream", "application/gzip", "application/x-gguf", "*/*"))
+        try {
+            // A plain "*/*" is used deliberately: ".gguf" has no registered MIME type,
+            // and mixing an invented one ("application/x-gguf") into the filter array
+            // is what was confusing some OEM file pickers (Vivo/OriginOS in particular)
+            // into not responding to a tap at all. The file is still fully verified
+            // after selection (extension, GGUF magic bytes, SHA-256), so nothing is
+            // lost by not pre-filtering here.
+            modelPicker.launch(arrayOf("*/*"))
+        } catch (_: Throwable) {
+            deliverAiEvent("error", JSONObject().put("message", "No file picker app is available on this device.").toString())
+        }
     }
 
     fun openModelDownloadPage() {
@@ -160,9 +158,14 @@ class MainActivity : AppCompatActivity() {
                 CookieManager.getInstance().setAcceptThirdPartyCookies(popup, true)
                 popup.webViewClient = object : WebViewClient() {
                     override fun shouldOverrideUrlLoading(v: WebView, request: WebResourceRequest): Boolean {
-                        val u = request.url.toString()
-                        return if (u.startsWith("https://accounts.google.com") || u.startsWith("https://mybusinessapp-4734c.firebaseapp.com") || u.startsWith(webUrl)) false
-                        else { try { startActivity(Intent(Intent.ACTION_VIEW, request.url)) } catch (_: Throwable) {}; true }
+                        // This popup exists only for the Google sign-in flow and is fully
+                        // dismissible on its own. Never hand its navigation off to an
+                        // external browser/app: Google's sign-in legitimately hops across
+                        // several accounts.google.com sub-pages (and occasional extra
+                        // verification steps on some accounts), and kicking any of those
+                        // out here leaves the popup stuck on a blank page while the real
+                        // page opens elsewhere.
+                        return false
                     }
                 }
                 val dialog = Dialog(this@MainActivity)

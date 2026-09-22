@@ -19,7 +19,7 @@ const WORDS = {
   // Money received from a customer (their due goes DOWN).
   receiveCustomer: ['receive','received','receiving','collect','collected','got','get','wapas','wapis','wasool','wasol','vasol','liya','le liya',' le lia','mil gaya','mil gaye','mila','mile','aa gaya','aa gaye','paisay mil gaye','paise mil gaye','وصول','وصولی','لیا','ملا','ملے','آ گئے'],
   // Money/goods given on credit to a customer (their due goes UP).
-  giveCustomer: ['give','gave','giving','credit','add debt','owe','owes','udhaar','udhar','qarz','diya','de diya','de dia','dedo','de do','دیا','ادھار','واجب','قرض'],
+  giveCustomer: ['give','gave','giving','credit','add debt','owe','owes','udhaar','udhar','qarz','diya','de diya','de dia','da do','dado','dade','dedo','de do','دیا','ادھار','واجب','قرض'],
   // Stock increases.
   addStock: ['add','increase','increasing','put','restock','refill','dal','daal','dal do','daal do','jama','jama karo','barha do','barhao','barhado','جمع','اضافہ','شامل','بڑھاؤ'],
   // Stock decreases.
@@ -32,6 +32,8 @@ const WORDS = {
   expense: ['expense','expenses','spent','spend','cost','kharcha','kharch','kharcha kiya','kharch kiya','خرچہ','اخراجات','خرچ'],
   // New customer creation.
   addCustomer: ['add','create','new','banao','banayen','بناؤ','بنائیں','شامل'],
+  // Selling a product to a customer (or walk-in).
+  sellProduct: ['sale karo','sell karo','sale kr do','sale kro','sale kar do','becho','bech do','farokht karo','sell it','make a sale','فروخت کرو','بیچو','بیچ دو'],
 };
 
 // Roman/Urdu number words for amounts written as text instead of digits
@@ -162,6 +164,41 @@ async function execute(action){
     await window.addDoc(collection(db,'expenses'),{amount:action.amount,date:new Date().toISOString(),category:action.category||'AI expense',note:action.note||'Added by AI agent',ownerId:window.currentUserId});
     return `Expense of ${money(action.amount)} recorded${action.category?` under ${action.category}`:''}.`;
   }
+  if(action.type==='sellProduct'){
+    const productRef=doc(db,'products',action.product.id);
+    const customerRef=action.customer?doc(db,'customers',action.customer.id):null;
+    let resultText='';
+    await window.runAtomicOrOffline(async tx=>{
+      const productSnap=await tx.get(productRef);
+      if(!productSnap.exists()) throw new Error('Product no longer exists.');
+      const p=productSnap.data();
+      if(p.ownerId!==window.currentUserId) throw new Error('Unauthorized product.');
+      const stock=Number(p.stock)||0;
+      if(action.qty>stock) throw new Error(`Not enough stock. Available: ${stock}.`);
+      const unit=action.saleType==='retail'?Number(p.retailPrice??p.price??0):Number(p.wholesalePrice??p.price??0);
+      const cost=Number(p.cost||0), total=unit*action.qty, totalProfit=(unit-cost)*action.qty;
+      let newBalance=0;
+      if(customerRef){
+        const customerSnap=await tx.get(customerRef);
+        if(!customerSnap.exists()) throw new Error('Customer no longer exists.');
+        if(customerSnap.data().ownerId!==window.currentUserId) throw new Error('Unauthorized customer.');
+        newBalance=Math.max(0,Number(customerSnap.data().balance)||0)+total;
+      }
+      const nums=(window.data?.sales||[]).map(x=>parseInt(x.invoiceNumber,10)).filter(Number.isFinite);
+      const billNumber=Math.max(0,...nums)+1;
+      const saleRef=doc(collection(db,'sales'));
+      tx.update(productRef,{stock:stock-action.qty});
+      tx.set(saleRef,{ownerId:window.currentUserId,createdBy:window.authUserId||window.currentUserId,createdByName:window.currentMemberName||'Business Owner',customerId:action.customer?action.customer.id:null,customerName:action.customer?action.customer.name:'Walk-in',saleType:action.saleType,date:new Date().toISOString(),items:[{id:action.product.id,name:action.product.name,price:unit,cost,qty:action.qty,returnedQty:0}],subtotal:total,discount:0,discountType:'amount',total,amountPaid:0,amountDue:total,totalProfit,profitKnown:true,note:'AI agent',returnedAmount:0,returnedProfit:0,invoiceNumber:billNumber});
+      if(customerRef){
+        tx.update(customerRef,{balance:newBalance,updatedAt:new Date().toISOString()});
+        const txnRef=doc(collection(db,'customerTransactions'));
+        tx.set(txnRef,{ownerId:window.currentUserId,customerId:action.customer.id,type:'sale_debt',amount:total,amountPaid:0,debitAmount:total,creditAmount:0,balanceAfter:newBalance,date:new Date().toISOString(),note:`Bill No. ${billNumber}`,billNo:String(billNumber),saleId:saleRef.id,createdBy:window.authUserId||window.currentUserId});
+      }
+      tx.set(doc(db,'settings',window.currentUserId),{nextInvoiceNumber:billNumber+1},{merge:true});
+      resultText=`Sold ${action.qty} x ${action.product.name} ${action.customer?`to ${action.customer.name} (added ${money(total)} to their due)`:`to Walk-in customer for ${money(total)}`}.`;
+    });
+    return resultText;
+  }
   throw new Error('Unsupported agent action.');
 }
 
@@ -184,19 +221,41 @@ function parseCommand(input){
     return {kind:'answer',text:products.length?products.map(p=>`${p.name}: ${p.stock} in stock`).join('\n'):'No products found.'};
   }
   const mentionedCustomer=findMentioned(customers);
+  // Debt/balance question naming a specific customer directly (no amount attached,
+  // so it isn't confused with a give/receive command like "abdullah ko 500 udhaar do").
+  if(mentionedCustomer && /(?:balance|due|debt|kitna|kitne|how much|what is|واجب|کتنا|کتنے)/i.test(s) && !Number.isFinite(amountFrom(s))){
+    return {kind:'answer',text:`${mentionedCustomer.name}: due ${money(mentionedCustomer.balance||0)}.`};
+  }
   if(/(?:customer|گاہک).*(?:balance|due|debt|udhaar|ادھار|واجب)|(?:balance|due|debt|udhaar|ادھار|واجب).*(?:customer|گاہک)/i.test(s)){
     if(mentionedCustomer)return {kind:'answer',text:`${mentionedCustomer.name}: due ${money(mentionedCustomer.balance||0)}.`};
     const due=customers.filter(c=>Number(c.balance||0)>0); return {kind:'answer',text:due.length?due.map(c=>`${c.name}: ${money(c.balance)}`).join('\n'):'No customer dues found.'};
   }
+  // Compares each sale's date in LOCAL time (matching getLocalDateStr's own local
+  // getFullYear/getMonth/getDate) rather than slicing the raw UTC ISO string —
+  // otherwise anything sold after midnight local time is miscounted as "yesterday"
+  // whenever local time is ahead of UTC (e.g. Pakistan, UTC+5).
   if(/(?:sales|sale|فروخت|سیل).*(?:today|aaj|آج)|(?:today|aaj|آج).*(?:sales|sale|فروخت|سیل)/i.test(s)){
     const today=window.getLocalDateStr?window.getLocalDateStr(new Date()):new Date().toISOString().slice(0,10);
-    const rows=(data.sales||[]).filter(x=>String(x.date||'').slice(0,10)===today), total=rows.reduce((a,x)=>a+Number(x.total||0),0);
+    const localDate=x=>window.getLocalDateStr?window.getLocalDateStr(new Date(x)):String(x||'').slice(0,10);
+    const rows=(data.sales||[]).filter(x=>localDate(x.date)===today), total=rows.reduce((a,x)=>a+Number(x.total||0),0);
     return {kind:'answer',text:`Today's sales: ${rows.length} sale(s), total ${money(total)}.`};
   }
   if(/(?:profit|منافع|منافعہ).*(?:today|aaj|آج)|(?:today|aaj|آج).*(?:profit|منافع|منافعہ)/i.test(s)){
     const today=window.getLocalDateStr?window.getLocalDateStr(new Date()):new Date().toISOString().slice(0,10);
-    const rows=(data.sales||[]).filter(x=>String(x.date||'').slice(0,10)===today), profit=rows.reduce((a,x)=>a+Number(x.totalProfit||0),0);
+    const localDate=x=>window.getLocalDateStr?window.getLocalDateStr(new Date(x)):String(x||'').slice(0,10);
+    const rows=(data.sales||[]).filter(x=>localDate(x.date)===today), profit=rows.reduce((a,x)=>a+Number(x.totalProfit||0),0);
     return {kind:'answer',text:`Today's recorded profit: ${money(profit)}.`};
+  }
+
+  // Selling a product. Defaults to wholesale price and, when a customer is named,
+  // records the full amount as due (unpaid) against them — settle it later with a
+  // "received" command, same as a normal khata sale. No customer named = Walk-in.
+  if(mentionedProduct && rx(WORDS.sellProduct).test(s)){
+    const stock=Number(mentionedProduct.stock)||0;
+    if(qty>stock) return {kind:'answer',text:`Not enough stock for ${mentionedProduct.name}. Available: ${stock}.`};
+    const unit=Number(mentionedProduct.wholesalePrice ?? mentionedProduct.price ?? 0), total=unit*qty;
+    const customerPart=mentionedCustomer?`to ${mentionedCustomer.name} (added to their due)`:'to Walk-in customer';
+    return {kind:'confirm',action:{type:'sellProduct',product:mentionedProduct,customer:mentionedCustomer||null,qty,saleType:'wholesale',summary:`Sell ${qty} x ${mentionedProduct.name} ${customerPart} at wholesale price (${money(unit)} each) = ${money(total)}?`}};
   }
 
   // Stock adjustments. Resolve the product by name from the user's actual data.
