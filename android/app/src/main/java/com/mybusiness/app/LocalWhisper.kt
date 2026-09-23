@@ -38,10 +38,8 @@ class LocalWhisper(
     companion object {
         const val MODEL_NAME = "ggml-base.bin"
         const val MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin?download=true"
-        const val MODEL_SHA256 = "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe"
-        const val EXPECTED_BYTES = 147_951_465L
-        const val MIN_REASONABLE_BYTES = 140_000_000L
-        const val MAX_REASONABLE_BYTES = 155_000_000L
+        const val MIN_REASONABLE_BYTES = 100_000_000L
+        const val MAX_REASONABLE_BYTES = 200_000_000L
         const val SAMPLE_RATE = 16_000
     }
 
@@ -129,35 +127,22 @@ class LocalWhisper(
                 modelDir.mkdirs()
                 notifyJs("state", JSONObject().put("status", "checking").put("message", "Checking Whisper model...").toString())
 
-                val name = queryDisplayName(uri)
-                if (!name.equals(MODEL_NAME, ignoreCase = true)) {
-                    throw IllegalArgumentException("Please select the official $MODEL_NAME model file.")
-                }
-
                 val reportedSize = querySize(uri)
                 if (reportedSize > 0 && (reportedSize < MIN_REASONABLE_BYTES || reportedSize > MAX_REASONABLE_BYTES)) {
-                    throw IllegalArgumentException("The selected model size is not valid for Whisper base.")
+                    throw IllegalArgumentException("The selected file is not a Whisper base model (unexpected size).")
                 }
-
                 tempFile.delete()
                 copyUriToTemp(uri, reportedSize)
                 val actualSize = tempFile.length()
                 if (actualSize < MIN_REASONABLE_BYTES || actualSize > MAX_REASONABLE_BYTES) {
-                    throw IllegalArgumentException("The selected model size is not valid for Whisper base.")
+                    throw IllegalArgumentException("The selected file is not a Whisper base model (unexpected size).")
                 }
-
-                notifyJs("state", JSONObject().put("status", "verifying").put("message", "Verifying Whisper model...").toString())
-                if (actualSize != EXPECTED_BYTES) throw IllegalArgumentException("The selected Whisper model has an unexpected file size.")
-                if (!hasGgmlMagic(tempFile)) throw IllegalArgumentException("The selected file is not a valid Whisper GGML model.")
-
-                val hash = sha256(tempFile)
-                if (!hash.equals(MODEL_SHA256, true)) {
-                    throw IllegalArgumentException("The selected Whisper model failed SHA-256 verification.")
+                notifyJs("state", JSONObject().put("status", "verifying").put("message", "Verifying Whisper model with the native Whisper loader...").toString())
+                val newLoaded = try {
+                    Whisper.loadModel(activity, tempFile.absolutePath)
+                } catch (e: Throwable) {
+                    throw IllegalArgumentException("The selected file could not be loaded as a valid Whisper GGML base model.", e)
                 }
-
-                notifyJs("state", JSONObject().put("status", "loading").put("message", "Loading Whisper model into memory...").toString())
-                val newLoaded = Whisper.loadModel(activity, tempFile.absolutePath)
-
                 val backup = File(modelDir, "$MODEL_NAME.previous")
                 backup.delete()
                 val hadOld = modelFile.exists()
@@ -392,7 +377,7 @@ class LocalWhisper(
         if (!modelFile.exists() || !markerFile.exists()) return false
         val marker = runCatching { markerFile.readText() }.getOrNull() ?: return false
         return modelFile.length() in MIN_REASONABLE_BYTES..MAX_REASONABLE_BYTES &&
-            marker.startsWith(MODEL_SHA256)
+            marker.equals(sha256(modelFile), ignoreCase = true)
     }
 
     private fun hasGgmlMagic(file: File): Boolean {
