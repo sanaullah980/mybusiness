@@ -134,17 +134,20 @@ class LocalWhisper(
                     throw IllegalArgumentException("Please select the official $MODEL_NAME model file.")
                 }
 
-                val size = querySize(uri)
-                if (size < MIN_REASONABLE_BYTES || size > MAX_REASONABLE_BYTES) {
+                val reportedSize = querySize(uri)
+                if (reportedSize > 0 && (reportedSize < MIN_REASONABLE_BYTES || reportedSize > MAX_REASONABLE_BYTES)) {
                     throw IllegalArgumentException("The selected model size is not valid for Whisper base.")
                 }
 
                 tempFile.delete()
-                copyUriToTemp(uri, size)
+                copyUriToTemp(uri, reportedSize)
+                val actualSize = tempFile.length()
+                if (actualSize < MIN_REASONABLE_BYTES || actualSize > MAX_REASONABLE_BYTES) {
+                    throw IllegalArgumentException("The selected model size is not valid for Whisper base.")
+                }
 
                 notifyJs("state", JSONObject().put("status", "verifying").put("message", "Verifying Whisper model...").toString())
-                if (tempFile.length() != size) throw IllegalArgumentException("The model copy is incomplete.")
-                if (size != EXPECTED_BYTES) throw IllegalArgumentException("The selected Whisper model has an unexpected file size.")
+                if (actualSize != EXPECTED_BYTES) throw IllegalArgumentException("The selected Whisper model has an unexpected file size.")
                 if (!hasGgmlMagic(tempFile)) throw IllegalArgumentException("The selected file is not a valid Whisper GGML model.")
 
                 val hash = sha256(tempFile)
@@ -355,7 +358,7 @@ class LocalWhisper(
                     if (count < 0) break
                     output.write(buffer, 0, count)
                     copied += count
-                    val percent = ((copied * 100) / total).toInt().coerceIn(0, 100)
+                    val percent = if (total > 0) ((copied * 100) / total).toInt().coerceIn(0, 100) else -1
                     if (percent != lastPercent) {
                         lastPercent = percent
                         notifyJs("install", JSONObject().put("percent", percent).put("bytes", copied).put("total", total).toString())
