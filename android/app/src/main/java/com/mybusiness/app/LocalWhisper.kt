@@ -38,6 +38,9 @@ class LocalWhisper(
     companion object {
         const val MODEL_NAME = "ggml-base.bin"
         const val MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin?download=true"
+        // Official ggerganov/whisper.cpp ggml-base.bin: 147,951,465 bytes.
+        const val EXPECTED_BYTES = 147_951_465L
+        const val MODEL_SHA256 = "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe"
         const val MIN_REASONABLE_BYTES = 100_000_000L
         const val MAX_REASONABLE_BYTES = 200_000_000L
         const val SAMPLE_RATE = 16_000
@@ -137,6 +140,11 @@ class LocalWhisper(
                 if (actualSize < MIN_REASONABLE_BYTES || actualSize > MAX_REASONABLE_BYTES) {
                     throw IllegalArgumentException("The selected file is not a Whisper base model (unexpected size).")
                 }
+                notifyJs("state", JSONObject().put("status", "verifying").put("message", "Verifying Whisper model...").toString())
+                if (!hasGgmlMagic(tempFile)) {
+                    throw IllegalArgumentException("The selected file is not a Whisper GGML model (missing 'ggml' header).")
+                }
+
                 notifyJs("state", JSONObject().put("status", "verifying").put("message", "Verifying Whisper model with the native Whisper loader...").toString())
                 val newLoaded = try {
                     Whisper.loadModel(activity, tempFile.absolutePath)
@@ -381,13 +389,15 @@ class LocalWhisper(
     }
 
     private fun hasGgmlMagic(file: File): Boolean {
+        // ggml files are written with `struct.pack("i", 0x67676d6c)` (native/little-endian
+        // int32), so on disk the magic reads as bytes 'l','m','g','g' — NOT 'g','g','m','l'.
         file.inputStream().use { input ->
             val b = ByteArray(4)
             if (input.read(b) != 4) return false
-            return b[0] == 'g'.code.toByte() &&
-                b[1] == 'g'.code.toByte() &&
-                b[2] == 'm'.code.toByte() &&
-                b[3] == 'l'.code.toByte()
+            return b[0] == 'l'.code.toByte() &&
+                b[1] == 'm'.code.toByte() &&
+                b[2] == 'g'.code.toByte() &&
+                b[3] == 'g'.code.toByte()
         }
     }
 
