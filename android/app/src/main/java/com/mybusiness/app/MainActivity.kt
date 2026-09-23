@@ -23,6 +23,7 @@ import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialException
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.android.libraries.identity.googleid.GoogleIdTokenParsingException
 import androidx.appcompat.app.AppCompatActivity
@@ -163,16 +164,35 @@ class MainActivity : AppCompatActivity() {
             try {
                 val nonceBytes = ByteArray(32).also { SecureRandom().nextBytes(it) }
                 val nonce = Base64.encodeToString(nonceBytes, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
-                val googleIdOption = GetGoogleIdOption.Builder()
-                    .setServerClientId(getString(R.string.google_server_client_id))
-                    .setFilterByAuthorizedAccounts(false)
-                    .setAutoSelectEnabled(false)
+                // Use the explicit Sign in with Google button flow first. This is
+                // important when the device has no credential already saved for
+                // this app: GetGoogleIdOption can return NoCredentialException,
+                // while GetSignInWithGoogleOption is specifically designed to let
+                // the user choose/add a Google account from a sign-in button.
+                val signInOption = GetSignInWithGoogleOption.Builder(
+                    getString(R.string.google_server_client_id)
+                )
                     .setNonce(nonce)
                     .build()
                 val request = GetCredentialRequest.Builder()
-                    .addCredentialOption(googleIdOption)
+                    .addCredentialOption(signInOption)
                     .build()
-                val result = credentialManager.getCredential(this@MainActivity, request)
+                val result = try {
+                    credentialManager.getCredential(this@MainActivity, request)
+                } catch (noCredential: androidx.credentials.exceptions.NoCredentialException) {
+                    // Fallback for providers/devices that do not expose the
+                    // explicit button flow. Ask for any Google account.
+                    val googleIdOption = GetGoogleIdOption.Builder()
+                        .setServerClientId(getString(R.string.google_server_client_id))
+                        .setFilterByAuthorizedAccounts(false)
+                        .setAutoSelectEnabled(false)
+                        .setNonce(nonce)
+                        .build()
+                    val fallbackRequest = GetCredentialRequest.Builder()
+                        .addCredentialOption(googleIdOption)
+                        .build()
+                    credentialManager.getCredential(this@MainActivity, fallbackRequest)
+                }
                 val credential = result.credential
                 if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
                     try {

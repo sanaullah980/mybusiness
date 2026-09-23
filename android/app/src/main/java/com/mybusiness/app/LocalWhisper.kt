@@ -155,7 +155,7 @@ class LocalWhisper(
                     throw IllegalArgumentException("The selected Whisper model failed SHA-256 verification.")
                 }
 
-                notifyJs("state", JSONObject().put("status", "loading").put("message", "Loading Whisper...").toString())
+                notifyJs("state", JSONObject().put("status", "loading").put("message", "Loading Whisper model into memory...").toString())
                 val newLoaded = Whisper.loadModel(activity, tempFile.absolutePath)
 
                 val backup = File(modelDir, "$MODEL_NAME.previous")
@@ -358,7 +358,11 @@ class LocalWhisper(
                     if (count < 0) break
                     output.write(buffer, 0, count)
                     copied += count
-                    val percent = if (total > 0) ((copied * 100) / total).toInt().coerceIn(0, 100) else -1
+                    // Some Android document providers report a stale/wrong
+                    // size. Never allow the UI to show an impossible percentage.
+                    val percent = if (total > 0) {
+                        ((copied * 100L) / total).toInt().coerceIn(0, 100)
+                    } else -1
                     if (percent != lastPercent) {
                         lastPercent = percent
                         notifyJs("install", JSONObject().put("percent", percent).put("bytes", copied).put("total", total).toString())
