@@ -15,6 +15,13 @@ android {
         versionName '1.0'
     }
 
+    // Both the existing Qwen/llama AAR and the free Whisper AAR publish arm64-v8a
+    // native libraries. Restricting the APK to that ABI prevents building an APK
+    // that installs on an unsupported ABI and then fails with UnsatisfiedLinkError.
+    ndk {
+        abiFilters 'arm64-v8a'
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
@@ -55,4 +62,5 @@ dependencies {
     implementation 'androidx.webkit:webkit:1.12.1'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0'
     implementation 'dev.ffmpegkit-maintained:llama-android:0.1.1'
+    implementation 'dev.ffmpegkit-maintained:whisper-android:1.0.0'
 }

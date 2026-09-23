@@ -2,7 +2,9 @@ package com.mybusiness.app
 
 import android.annotation.SuppressLint
 import android.app.Dialog
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
@@ -35,6 +37,8 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private lateinit var ai: LocalAi
+    private lateinit var whisper: LocalWhisper
+    private var whisperLanguage = "auto"
     private val webUrl = "https://mybusiness-green.vercel.app/"
 
     private val modelPicker = registerForActivityResult(
@@ -45,6 +49,22 @@ class MainActivity : AppCompatActivity() {
         } else {
             ai.installFromUri(uri)
         }
+    }
+
+    private val whisperModelPicker = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) {
+            whisper.notifyJs("state", JSONObject().put("status", whisper.currentStatus()).put("message", "No Whisper model selected.").toString())
+        } else {
+            whisper.installFromUri(uri)
+        }
+    }
+
+    private val microphonePermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        whisper.onMicrophonePermissionResult(granted)
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -65,7 +85,11 @@ class MainActivity : AppCompatActivity() {
         ai = LocalAi(this, webView) { kind, payload ->
             deliverAiEvent(kind, payload)
         }
+        whisper = LocalWhisper(this) { kind, payload ->
+            deliverWhisperEvent(kind, payload)
+        }
         webView.addJavascriptInterface(ai, "AndroidAI")
+        webView.addJavascriptInterface(whisper, "AndroidWhisper")
         setupWebView()
         webView.loadUrl(webUrl)
     }
@@ -89,6 +113,44 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(LocalAi.MODEL_URL)))
         } catch (_: Throwable) {
             deliverAiEvent("error", JSONObject().put("message", "Could not open the model download page.").toString())
+        }
+    }
+
+    fun launchWhisperModelPicker() {
+        try {
+            whisperModelPicker.launch(arrayOf("*/*"))
+        } catch (_: Throwable) {
+            deliverWhisperEvent("error", JSONObject().put("message", "No file picker app is available on this device.").toString())
+        }
+    }
+
+    fun openWhisperModelDownloadPage() {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(LocalWhisper.MODEL_URL)))
+        } catch (_: Throwable) {
+            deliverWhisperEvent("error", JSONObject().put("message", "Could not open the Whisper model download page.").toString())
+        }
+    }
+
+    fun requestWhisperMicrophonePermission() {
+        microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+    }
+
+    fun getWhisperLanguage(): String = whisperLanguage
+
+    private fun deliverWhisperEvent(kind: String, payload: String) {
+        runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
+            val js = "window.NativeWhisper && window.NativeWhisper._event(${JSONObject.quote(kind)},${JSONObject.quote(payload)})"
+            webView.evaluateJavascript(js, null)
+        }
+    }
+
+    fun setWhisperLanguage(language: String) {
+        whisperLanguage = when (language.lowercase()) {
+            "ur", "urdu" -> "ur"
+            "en", "english" -> "en"
+            else -> "auto"
         }
     }
 
@@ -134,7 +196,7 @@ class MainActivity : AppCompatActivity() {
             override fun onPageFinished(view: WebView, url: String) {
                 super.onPageFinished(view, url)
                 view.evaluateJavascript(
-                    "window.__MYBUSINESS_ANDROID__=true;window.__MYBUSINESS_NATIVE_AI__=!!window.AndroidAI;",
+                    "window.__MYBUSINESS_ANDROID__=true;window.__MYBUSINESS_NATIVE_AI__=!!window.AndroidAI;window.__MYBUSINESS_NATIVE_WHISPER__=!!window.AndroidWhisper;",
                     null
                 )
             }
@@ -193,8 +255,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         ai.close()
+        whisper.close()
         webView.stopLoading()
         webView.removeJavascriptInterface("AndroidAI")
+        webView.removeJavascriptInterface("AndroidWhisper")
         webView.destroy()
         super.onDestroy()
     }
