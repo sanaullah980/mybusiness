@@ -447,9 +447,9 @@ export function rx(words) {
 
   return new RegExp(
     '(?:^|\\s)(?:' +
-      sorted
-        .map(word => escapeRegex(word).replace(/\s+/g, '\\s*'))
-        .join('|') +
+    sorted
+      .map(word => escapeRegex(word).replace(/\s+/g, '\\s*'))
+      .join('|') +
     ')(?=\\s|$)',
     'i'
   );
@@ -525,10 +525,10 @@ export function levenshtein(a, b) {
         left[i - 1] === right[j - 1]
           ? prev[j - 1]
           : 1 + Math.min(
-              prev[j - 1],
-              prev[j],
-              current[j - 1]
-            );
+            prev[j - 1],
+            prev[j],
+            current[j - 1]
+          );
     }
 
     for (let j = 0; j <= right.length; j++) {
@@ -1361,17 +1361,6 @@ function mergeSaleItems(items) {
 /* STOCK MULTI-ITEM PARSER                                                    */
 /* -------------------------------------------------------------------------- */
 
-/*
- * Supported examples:
- *
- * 50 lamp 300 50 frame 600 stock mein add karo
- *
- * 50 lamp price 300 and 50 frame price 600 add stock
- *
- * 50 lamp 300 20 mobile charger 800 stock add
- *
- * Unknown products are allowed because stock commands can create products.
- */
 export function parseMultiStockItems(body, allProducts) {
   const rawTokens = norm(body)
     .split(/\s+/)
@@ -1438,11 +1427,6 @@ export function parseMultiStockItems(body, allProducts) {
       productName = product.name;
       i += knownProduct.length;
     } else {
-      /*
-       * Unknown product:
-       *
-       * Gather words until the next number or command word.
-       */
       const nameTokens = [];
 
       while (i < rawTokens.length) {
@@ -1463,12 +1447,6 @@ export function parseMultiStockItems(body, allProducts) {
           isFiller(token) &&
           nameTokens.length > 0
         ) {
-          /*
-           * "lamp and 50 frame"
-           *
-           * Stop before "and" when the next token starts
-           * the next item.
-           */
           if (
             i + 1 < rawTokens.length &&
             isNumberToken(rawTokens[i + 1])
@@ -1512,9 +1490,6 @@ export function parseMultiStockItems(body, allProducts) {
         isFiller(rawTokens[i])
       )
     ) {
-      /*
-       * Do not consume "and" if it starts the next item.
-       */
       if (
         isFiller(rawTokens[i]) &&
         i + 1 < rawTokens.length &&
@@ -1532,13 +1507,6 @@ export function parseMultiStockItems(body, allProducts) {
       i < rawTokens.length &&
       isNumberToken(rawTokens[i])
     ) {
-      /*
-       * For stock format, after product the first numeric value
-       * is the price.
-       *
-       * Once one price has been captured, stop so the next number
-       * can become the next item's quantity.
-       */
       if (priceTokens.length) {
         break;
       }
@@ -1553,20 +1521,13 @@ export function parseMultiStockItems(body, allProducts) {
       price = evaluateNumberTokens(priceTokens);
     }
 
-    /*
-     * Existing product with no explicit price:
-     * preserve existing cost.
-     *
-     * New product without price:
-     * use 0.
-     */
     const finalPrice = Number.isFinite(price)
       ? price
       : (
-          product
-            ? Number(product.cost || 0)
-            : 0
-        );
+        product
+          ? Number(product.cost || 0)
+          : 0
+      );
 
     items.push({
       name: productName,
@@ -1584,33 +1545,27 @@ export function parseMultiStockItems(body, allProducts) {
 /* -------------------------------------------------------------------------- */
 
 /*
- * IMPORTANT:
+ * Supported examples:
  *
- * The old parser had this problem:
+ *   1 lamp 3 frame sale karo
  *
- *   1 gop 3 frame 4 lamp 5 soap
+ *   1 lamp and 3 frame sale karo
  *
- * It could treat "3" as the price of gop.
+ *   1 lamp 3 frame 4 charger sale karo
  *
- * This parser first checks whether the number after a product is actually
- * the quantity of the NEXT known product.
+ *   1 lamp 300 3 frame 600 sale karo
  *
- * Therefore:
+ * The important rule is:
  *
- *   1 gop 3 frame 4 lamp
+ *   NUMBER + PRODUCT + NUMBER + PRODUCT
  *
- * becomes:
- *   gop   qty 1
- *   frame qty 3
- *   lamp  qty 4
+ * means:
  *
- * While:
+ *   first NUMBER  = first product quantity
+ *   second NUMBER = next product quantity
  *
- *   1 gop 500 3 frame 700
- *
- * becomes:
- *   gop   qty 1 price 500
- *   frame qty 3 price 700
+ * unless the number is followed by no known product, in which case
+ * it is treated as the current product's custom selling price.
  */
 export function parseMultiSaleItems(body, allProducts) {
   const rawTokens = norm(body)
@@ -1622,7 +1577,7 @@ export function parseMultiSaleItems(body, allProducts) {
 
   while (i < rawTokens.length) {
     /* -------------------------------------------------------------- */
-    /* Skip fillers and sale words                                     */
+    /* Skip fillers / sale / price words                              */
     /* -------------------------------------------------------------- */
 
     while (
@@ -1636,14 +1591,15 @@ export function parseMultiSaleItems(body, allProducts) {
       i++;
     }
 
-    if (i >= rawTokens.length) break;
+    if (i >= rawTokens.length) {
+      break;
+    }
 
     /* -------------------------------------------------------------- */
     /* Quantity                                                        */
     /* -------------------------------------------------------------- */
 
     let qty = 1;
-
     const qtyTokens = [];
 
     while (
@@ -1667,7 +1623,7 @@ export function parseMultiSaleItems(body, allProducts) {
     }
 
     /* -------------------------------------------------------------- */
-    /* Known product matching                                          */
+    /* Product                                                         */
     /* -------------------------------------------------------------- */
 
     let matchedProduct = null;
@@ -1686,9 +1642,7 @@ export function parseMultiSaleItems(body, allProducts) {
       /*
        * Unknown products cannot safely be sold.
        *
-       * Gather a fallback name so the caller can return a useful
-       * "product not found" message instead of silently doing
-       * something else.
+       * Gather the product name so the caller can report it.
        */
       const nameTokens = [];
 
@@ -1752,7 +1706,7 @@ export function parseMultiSaleItems(body, allProducts) {
     }
 
     /* -------------------------------------------------------------- */
-    /* Determine whether next number is PRICE or NEXT QUANTITY         */
+    /* After product: determine PRICE or NEXT QUANTITY                */
     /* -------------------------------------------------------------- */
 
     while (
@@ -1760,11 +1714,11 @@ export function parseMultiSaleItems(body, allProducts) {
       isFiller(rawTokens[i])
     ) {
       /*
-       * Stop before:
+       * Keep:
        *
-       * "3 frame"
+       *   3 frame
        *
-       * because 3 belongs to the next product.
+       * together.
        */
       if (
         i + 1 < rawTokens.length &&
@@ -1776,10 +1730,18 @@ export function parseMultiSaleItems(body, allProducts) {
       i++;
     }
 
+    /*
+     * "price 300"
+     *
+     * explicitly means current product price.
+     */
+    let explicitPriceIndicator = false;
+
     while (
       i < rawTokens.length &&
       isPriceIndicator(rawTokens[i])
     ) {
+      explicitPriceIndicator = true;
       i++;
     }
 
@@ -1789,34 +1751,33 @@ export function parseMultiSaleItems(body, allProducts) {
       i < rawTokens.length &&
       isNumberToken(rawTokens[i])
     ) {
-      /*
-       * Look ahead.
-       *
-       * Example:
-       *
-       *   1 gop 3 frame
-       *
-       * Current number = 3.
-       * If token after 3 begins a known product, then 3 is
-       * the NEXT quantity, not gop's price.
-       */
-      const possibleNextQtyIndex = i;
+      const numberIndex = i;
 
+      /*
+       * Check whether the number starts another item:
+       *
+       *   1 lamp 3 frame
+       *
+       * number = 3
+       * product after number = frame
+       *
+       * Therefore 3 = frame quantity.
+       */
       const nextProduct =
         findProductStartingAt(
           rawTokens,
-          possibleNextQtyIndex + 1,
+          numberIndex + 1,
           allProducts
         );
 
-      if (!nextProduct) {
-        /*
-         * No known product after the number.
-         * Treat the number as a custom price.
-         */
-        const priceTokens = [rawTokens[i]];
+      if (
+        explicitPriceIndicator ||
+        !nextProduct
+      ) {
         const parsedPrice =
-          evaluateNumberTokens(priceTokens);
+          evaluateNumberTokens([
+            rawTokens[numberIndex]
+          ]);
 
         if (
           Number.isFinite(parsedPrice) &&
@@ -1828,10 +1789,10 @@ export function parseMultiSaleItems(body, allProducts) {
       }
 
       /*
-       * If a known product follows the number,
+       * If nextProduct exists and there was no explicit price word,
        * leave the number untouched.
        *
-       * The next loop will use it as quantity.
+       * The next loop will use it as the next product quantity.
        */
     }
 
@@ -1956,19 +1917,12 @@ export async function execute(action) {
   if (action.type === 'addStockBatch') {
     const results = [];
 
-    /*
-     * Re-merge here as a final safety measure.
-     */
     const mergedItems = mergeStockItems(
       action.items,
       products()
     );
 
     await window.runAtomicOrOffline(async tx => {
-      /*
-       * Maintain a local map so repeated items in the same batch
-       * cannot overwrite each other's stock.
-       */
       const productState = new Map();
 
       for (const item of mergedItems) {
@@ -2010,10 +1964,6 @@ export async function execute(action) {
             p => norm(p.name) === norm(name)
           );
 
-        /*
-         * If a product has already been created during this
-         * transaction, use that state.
-         */
         const existingKey =
           existing
             ? String(existing.id)
@@ -2077,10 +2027,6 @@ export async function execute(action) {
 
           state.stock += qty;
 
-          /*
-           * If an explicit price was supplied, update all
-           * price fields consistently.
-           */
           const updates = {
             stock: state.stock,
             updatedAt:
@@ -2126,25 +2072,16 @@ export async function execute(action) {
           );
 
         } else {
-          /*
-           * Create missing product.
-           */
           const productRef =
             doc(collection(db, 'products'));
 
           tx.set(productRef, {
             name,
             barcode: '',
-
-            /*
-             * All price fields intentionally use the
-             * supplied price for AI auto-created products.
-             */
             cost: price,
             price,
             wholesalePrice: price,
             retailPrice: price,
-
             minStock: 5,
             stock: qty,
             ownerId: ownerId(),
@@ -2169,10 +2106,6 @@ export async function execute(action) {
               'AI agent product auto-creation'
           });
 
-          /*
-           * Register newly-created item so a duplicate
-           * within the same batch cannot create another product.
-           */
           productState.set(
             `new:${norm(name)}`,
             {
@@ -2285,9 +2218,9 @@ export async function execute(action) {
       newBalance =
         action.type === 'receiveCustomer'
           ? Math.max(
-              0,
-              current - Number(action.amount)
-            )
+            0,
+            current - Number(action.amount)
+          )
           : current + Number(action.amount);
 
       tx.update(ref, {
@@ -2505,9 +2438,9 @@ export async function execute(action) {
       newBalance =
         action.type === 'supplierPayment'
           ? Math.max(
-              0,
-              current - Number(action.amount)
-            )
+            0,
+            current - Number(action.amount)
+          )
           : current + Number(action.amount);
 
       tx.update(ref, {
@@ -2619,9 +2552,6 @@ async function executeBatchSale(action) {
     );
   }
 
-  /*
-   * Merge duplicate products before execution.
-   */
   const mergedItems =
     mergeSaleItems(action.items);
 
@@ -2634,10 +2564,10 @@ async function executeBatchSale(action) {
   const customerRef =
     action.customer
       ? doc(
-          db,
-          'customers',
-          action.customer.id
-        )
+        db,
+        'customers',
+        action.customer.id
+      )
       : null;
 
   const isWholesale =
@@ -2650,12 +2580,6 @@ async function executeBatchSale(action) {
   const saleItems = [];
 
   await window.runAtomicOrOffline(async tx => {
-    /*
-     * Store all product states first.
-     *
-     * This guarantees that ALL products are checked before
-     * any business data is changed.
-     */
     const productStates = [];
 
     for (const item of mergedItems) {
@@ -2764,13 +2688,13 @@ async function executeBatchSale(action) {
       const discountPerUnit =
         !isWholesale
           ? Math.max(
-              0,
-              normalRetail - unitPrice
-            )
+            0,
+            normalRetail - unitPrice
+          )
           : Math.max(
-              0,
-              normalWholesale - unitPrice
-            );
+            0,
+            normalWholesale - unitPrice
+          );
 
       const itemDiscount =
         discountPerUnit *
@@ -2792,9 +2716,6 @@ async function executeBatchSale(action) {
       });
     }
 
-    /*
-     * Calculate totals only after every product has been validated.
-     */
     for (const state of productStates) {
       grandTotal += state.itemTotal;
       grandProfit += state.itemProfit;
@@ -2817,9 +2738,6 @@ async function executeBatchSale(action) {
       );
     }
 
-    /*
-     * Now that ALL products are valid, update their stock.
-     */
     for (const state of productStates) {
       tx.update(
         state.pRef,
@@ -2914,12 +2832,6 @@ async function executeBatchSale(action) {
         0
       );
 
-    /*
-     * Keep the existing sale structure.
-     *
-     * subtotal is the actual entered sale subtotal,
-     * total is the amount charged.
-     */
     tx.set(
       saleRef,
       {
@@ -3153,11 +3065,11 @@ export function parseInformationCommand(input) {
       kind: 'answer',
       text: low.length
         ? `Low stock: ${low
-            .map(
-              p =>
-                `${p.name} (${p.stock})`
-            )
-            .join(', ')}`
+          .map(
+            p =>
+              `${p.name} (${p.stock})`
+          )
+          .join(', ')}`
         : 'No low-stock products found.'
     };
   }
@@ -3167,11 +3079,11 @@ export function parseInformationCommand(input) {
       kind: 'answer',
       text: allProducts.length
         ? allProducts
-            .map(
-              p =>
-                `${p.name}: ${p.stock} in stock`
-            )
-            .join('\n')
+          .map(
+            p =>
+              `${p.name}: ${p.stock} in stock`
+          )
+          .join('\n')
         : 'No products found.'
     };
   }
@@ -3231,11 +3143,11 @@ export function parseInformationCommand(input) {
       kind: 'answer',
       text: due.length
         ? due
-            .map(
-              c =>
-                `${c.name}: ${money(c.balance)}`
-            )
-            .join('\n')
+          .map(
+            c =>
+              `${c.name}: ${money(c.balance)}`
+          )
+          .join('\n')
         : 'No customer dues found.'
     };
   }
@@ -3409,6 +3321,201 @@ export function parseCommand(input) {
     return info;
   }
 
+  /*
+   * IMPORTANT FIX:
+   *
+   * Multi-item sale parsing MUST happen before global product
+   * ambiguity resolution.
+   *
+   * Example:
+   *
+   *   1 lamp 3 frame sale karo
+   *
+   * resolveEntity() sees both "lamp" and "frame" and previously
+   * returned an ambiguity clarification before parseMultiSaleItems()
+   * had a chance to understand the command.
+   *
+   * We now parse the complete sale first. Each product is resolved
+   * separately by findProductStartingAt().
+   */
+  const isSaleIntent =
+    rx(WORDS.sale).test(text) &&
+    !rx(WORDS.addStock).test(text);
+
+  if (isSaleIntent) {
+    const isWholesale =
+      rx(WORDS.wholesale).test(text);
+
+    const saleType =
+      isWholesale
+        ? 'wholesale'
+        : 'retail';
+
+    let cleanBody =
+      text
+        .replace(
+          rx(WORDS.sale),
+          ' '
+        )
+        .replace(
+          rx(WORDS.wholesale),
+          ' '
+        )
+        .replace(
+          /\s+/g,
+          ' '
+        )
+        .trim();
+
+    const saleItems =
+      parseMultiSaleItems(
+        cleanBody,
+        allProducts
+      );
+
+    if (saleItems.length > 0) {
+      for (const item of saleItems) {
+        if (!item.product) {
+          return {
+            kind: 'answer',
+            text:
+              `I couldn't find the product ` +
+              `"${item.name}" in your inventory.`
+          };
+        }
+      }
+
+      /*
+       * Resolve customer only after the sale products have
+       * been parsed. This prevents product names from being
+       * globally interpreted as one ambiguous entity.
+       */
+      const customerResult =
+        resolveEntity(
+          allCustomers,
+          text,
+          'customer'
+        );
+
+      if (
+        customerResult.ambiguous &&
+        (
+          RX.customer.test(text) ||
+          RX.balance.test(text) ||
+          rx(
+            WORDS.receiveCustomer
+              .concat(WORDS.giveCustomer)
+          ).test(text)
+        )
+      ) {
+        return {
+          kind: 'clarification',
+          text: customerResult.question
+        };
+      }
+
+      let totalAmount = 0;
+      const lines = [];
+
+      for (const item of saleItems) {
+        const prod =
+          item.product;
+
+        const available =
+          Number(prod.stock) || 0;
+
+        if (item.qty > available) {
+          return {
+            kind: 'answer',
+            text:
+              `Not enough stock for ${prod.name}. ` +
+              `Available: ${available}, ` +
+              `requested: ${item.qty}.`
+          };
+        }
+
+        const normalPrice =
+          saleType === 'wholesale'
+            ? Number(
+              prod.wholesalePrice ??
+              prod.price ??
+              0
+            )
+            : Number(
+              prod.retailPrice ??
+              prod.price ??
+              0
+            );
+
+        const unit =
+          item.unitPrice !== undefined
+            ? Number(item.unitPrice)
+            : normalPrice;
+
+        if (
+          !Number.isFinite(unit) ||
+          unit < 0
+        ) {
+          return {
+            kind: 'answer',
+            text:
+              `Invalid selling price for ${prod.name}.`
+          };
+        }
+
+        const lineTotal =
+          unit * item.qty;
+
+        totalAmount += lineTotal;
+
+        lines.push(
+          `• ${item.qty} × ${prod.name} ` +
+          `at ${money(unit)} each ` +
+          `= ${money(lineTotal)}`
+        );
+      }
+
+      const customer =
+        customerResult.found &&
+        !customerResult.ambiguous
+          ? customerResult.item
+          : null;
+
+      rememberContext({
+        customer:
+          customer || undefined
+      });
+
+      return {
+        kind: 'confirm',
+
+        action: {
+          type: 'sellProductBatch',
+
+          items: saleItems,
+
+          customer,
+
+          saleType,
+
+          summary:
+            `Confirm ${saleType} sale:\n` +
+            lines.join('\n') +
+            `\nTotal: ${money(totalAmount)}` +
+            (
+              customer
+                ? ` (Customer: ${customer.name})`
+                : ' (Walk-in)'
+            )
+        }
+      };
+    }
+  }
+
+  /*
+   * Only resolve generic entities AFTER multi-item sales have had
+   * their chance to parse.
+   */
   let productResult =
     resolveEntity(
       allProducts,
@@ -3585,7 +3692,7 @@ export function parseCommand(input) {
           const pDesc =
             item.product
               ? `${item.product.name} ` +
-                `(current stock ${Number(item.product.stock) || 0})`
+              `(current stock ${Number(item.product.stock) || 0})`
               : `${item.name} (new product)`;
 
           return (
@@ -3606,154 +3713,6 @@ export function parseCommand(input) {
             `Add stock for ${stockItems.length} ` +
             `product${stockItems.length > 1 ? 's' : ''}?\n` +
             summaryItems.join('\n')
-        }
-      };
-    }
-  }
-
-  /* ------------------------------------------------------------------------ */
-  /* MULTI-ITEM SALE                                                          */
-  /* ------------------------------------------------------------------------ */
-
-  const isSaleIntent =
-    rx(WORDS.sale).test(text) &&
-    !rx(WORDS.addStock).test(text);
-
-  if (isSaleIntent) {
-    const isWholesale =
-      rx(WORDS.wholesale).test(text);
-
-    const saleType =
-      isWholesale
-        ? 'wholesale'
-        : 'retail';
-
-    let cleanBody =
-      text
-        .replace(
-          rx(WORDS.sale),
-          ' '
-        )
-        .replace(
-          rx(WORDS.wholesale),
-          ' '
-        )
-        .replace(
-          /\s+/g,
-          ' '
-        )
-        .trim();
-
-    const saleItems =
-      parseMultiSaleItems(
-        cleanBody,
-        allProducts
-      );
-
-    if (saleItems.length > 0) {
-      for (const item of saleItems) {
-        if (!item.product) {
-          return {
-            kind: 'answer',
-            text:
-              `I couldn't find the product ` +
-              `"${item.name}" in your inventory.`
-          };
-        }
-      }
-
-      let totalAmount = 0;
-      const lines = [];
-
-      for (const item of saleItems) {
-        const prod =
-          item.product;
-
-        const available =
-          Number(prod.stock) || 0;
-
-        if (item.qty > available) {
-          return {
-            kind: 'answer',
-            text:
-              `Not enough stock for ${prod.name}. ` +
-              `Available: ${available}, ` +
-              `requested: ${item.qty}.`
-          };
-        }
-
-        const normalPrice =
-          saleType === 'wholesale'
-            ? Number(
-                prod.wholesalePrice ??
-                prod.price ??
-                0
-              )
-            : Number(
-                prod.retailPrice ??
-                prod.price ??
-                0
-              );
-
-        const unit =
-          item.unitPrice !== undefined
-            ? Number(item.unitPrice)
-            : normalPrice;
-
-        if (
-          !Number.isFinite(unit) ||
-          unit < 0
-        ) {
-          return {
-            kind: 'answer',
-            text:
-              `Invalid selling price for ${prod.name}.`
-          };
-        }
-
-        const lineTotal =
-          unit * item.qty;
-
-        totalAmount += lineTotal;
-
-        lines.push(
-          `• ${item.qty} × ${prod.name} ` +
-          `at ${money(unit)} each ` +
-          `= ${money(lineTotal)}`
-        );
-      }
-
-      const customer =
-        customerResult.found
-          ? customerResult.item
-          : null;
-
-      rememberContext({
-        customer:
-          customer || undefined
-      });
-
-      return {
-        kind: 'confirm',
-
-        action: {
-          type: 'sellProductBatch',
-
-          items: saleItems,
-
-          customer,
-
-          saleType,
-
-          summary:
-            `Confirm ${saleType} sale:\n` +
-            lines.join('\n') +
-            `\nTotal: ${money(totalAmount)}` +
-            (
-              customer
-                ? ` (Customer: ${customer.name})`
-                : ' (Walk-in)'
-            )
         }
       };
     }
@@ -4097,7 +4056,7 @@ export function parseCommand(input) {
           ''
         )
         .replace(
-          /^(?:named|name|called|ka naam|کا نام|نام)\s*/i,
+          /^(?:named|name|called|ka naam|کا نام|نام)\s*/,
           ''
         )
         .replace(
@@ -4207,10 +4166,8 @@ export function splitMultiCommand(input) {
   }
 
   /*
-   * Do not split ordinary multi-product commands.
-   *
-   * Those are handled by parseMultiStockItems() and
-   * parseMultiSaleItems().
+   * Multi-product stock/sale commands are parsed as a complete command
+   * before this function is reached.
    */
   const parts =
     text
@@ -4428,45 +4385,37 @@ export function agentContext() {
   return [
     'MyBusiness local agent context:',
 
-    `Products: ${
-      data.products?.length || 0
+    `Products: ${data.products?.length || 0
     }`,
 
-    `Customers: ${
-      data.customers?.length || 0
+    `Customers: ${data.customers?.length || 0
     }`,
 
-    `Suppliers: ${
-      data.suppliers?.length || 0
+    `Suppliers: ${data.suppliers?.length || 0
     }`,
 
-    `Sales: ${
-      data.sales?.length || 0
+    `Sales: ${data.sales?.length || 0
     }`,
 
-    `Expenses: ${
-      data.expenses?.length || 0
+    `Expenses: ${data.expenses?.length || 0
     }`,
 
-    `Product names: ${
-      names(
-        data.products || [],
-        20
-      ) || 'none'
+    `Product names: ${names(
+      data.products || [],
+      20
+    ) || 'none'
     }`,
 
-    `Customer names: ${
-      names(
-        data.customers || [],
-        20
-      ) || 'none'
+    `Customer names: ${names(
+      data.customers || [],
+      20
+    ) || 'none'
     }`,
 
-    `Supplier names: ${
-      names(
-        data.suppliers || [],
-        20
-      ) || 'none'
+    `Supplier names: ${names(
+      data.suppliers || [],
+      20
+    ) || 'none'
     }`,
 
     context.product
@@ -4481,13 +4430,12 @@ export function agentContext() {
       ? `Current supplier context: ${context.supplier.name}`
       : '',
 
-    `Language: ${
-      typeof document !== 'undefined'
-        ? (
-            document.documentElement.lang ||
-            'en'
-          )
-        : 'en'
+    `Language: ${typeof document !== 'undefined'
+      ? (
+        document.documentElement.lang ||
+        'en'
+      )
+      : 'en'
     }`,
 
     'Registered actions:',
@@ -4521,9 +4469,9 @@ export function getAgentState() {
     pendingAction:
       window.__myBusinessAiPending
         ? {
-            type:
-              window.__myBusinessAiPending.type
-          }
+          type:
+            window.__myBusinessAiPending.type
+        }
         : null,
 
     context: {
