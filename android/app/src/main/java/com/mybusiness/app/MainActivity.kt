@@ -16,6 +16,14 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialException
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import com.google.android.libraries.identity.googleid.GoogleIdTokenParsingException
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
@@ -29,12 +37,15 @@ import java.io.File
 import java.io.InputStream
 import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicBoolean
+import java.security.SecureRandom
+import android.util.Base64
 import kotlin.math.max
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private lateinit var ai: LocalAi
+    private lateinit var credentialManager: CredentialManager
     private val webUrl = "https://mybusiness-green.vercel.app/"
 
     private val modelPicker = registerForActivityResult(
@@ -65,7 +76,9 @@ class MainActivity : AppCompatActivity() {
         ai = LocalAi(this, webView) { kind, payload ->
             deliverAiEvent(kind, payload)
         }
+        credentialManager = CredentialManager.create(this)
         webView.addJavascriptInterface(ai, "AndroidAI")
+        webView.addJavascriptInterface(NativeGoogleAuthBridge(this), "AndroidAuth")
         setupWebView()
         webView.loadUrl(webUrl)
     }
@@ -91,6 +104,70 @@ class MainActivity : AppCompatActivity() {
             deliverAiEvent("error", JSONObject().put("message", "Could not open the model download page.").toString())
         }
     }
+
+
+
+
+
+    fun startNativeGoogleSignInForBridge() {
+        lifecycleScope.launch {
+            try {
+                val nonceBytes = ByteArray(32).also { SecureRandom().nextBytes(it) }
+                val nonce = Base64.encodeToString(nonceBytes, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
+                // Use the explicit Sign in with Google button flow first. This is
+                // important when the device has no credential already saved for
+                // this app: GetGoogleIdOption can return NoCredentialException,
+                // while GetSignInWithGoogleOption is specifically designed to let
+                // the user choose/add a Google account from a sign-in button.
+                val signInOption = GetSignInWithGoogleOption.Builder(
+                    getString(R.string.google_server_client_id)
+                )
+                    .setNonce(nonce)
+                    .build()
+                val request = GetCredentialRequest.Builder()
+                    .addCredentialOption(signInOption)
+                    .build()
+                val result = try {
+                    credentialManager.getCredential(this@MainActivity, request)
+                } catch (noCredential: androidx.credentials.exceptions.NoCredentialException) {
+                    // Fallback for providers/devices that do not expose the
+                    // explicit button flow. Ask for any Google account.
+                    val googleIdOption = GetGoogleIdOption.Builder()
+                        .setServerClientId(getString(R.string.google_server_client_id))
+                        .setFilterByAuthorizedAccounts(false)
+                        .setAutoSelectEnabled(false)
+                        .setNonce(nonce)
+                        .build()
+                    val fallbackRequest = GetCredentialRequest.Builder()
+                        .addCredentialOption(googleIdOption)
+                        .build()
+                    credentialManager.getCredential(this@MainActivity, fallbackRequest)
+                }
+                val credential = result.credential
+                if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                    try {
+                        val googleCredential = GoogleIdTokenCredential.createFrom(credential.data)
+                        deliverAuthEvent("success", JSONObject().put("idToken", googleCredential.idToken))
+                    } catch (e: GoogleIdTokenParsingException) {
+                        deliverAuthEvent("error", JSONObject().put("message", "Google returned an invalid ID token."))
+                    }
+                } else {
+                    deliverAuthEvent("error", JSONObject().put("message", "Google sign-in returned an unsupported credential."))
+                }
+            } catch (e: GetCredentialException) {
+                deliverAuthEvent("error", JSONObject().put("message", e.message ?: "Google sign-in was cancelled or failed."))
+            } catch (e: Throwable) {
+                deliverAuthEvent("error", JSONObject().put("message", e.message ?: "Google sign-in failed."))
+            }
+        }
+    }
+
+    fun clearNativeGoogleCredentialStateForBridge() {
+        lifecycleScope.launch {
+            runCatching { credentialManager.clearCredentialState(androidx.credentials.ClearCredentialStateRequest()) }
+        }
+    }
+
 
     private fun deliverAiEvent(kind: String, payload: String) {
         runOnUiThread {
@@ -134,7 +211,7 @@ class MainActivity : AppCompatActivity() {
             override fun onPageFinished(view: WebView, url: String) {
                 super.onPageFinished(view, url)
                 view.evaluateJavascript(
-                    "window.__MYBUSINESS_ANDROID__=true;window.__MYBUSINESS_NATIVE_AI__=!!window.AndroidAI;",
+                    "window.__MYBUSINESS_ANDROID__=true;window.__MYBUSINESS_NATIVE_AI__=!!window.AndroidAI;window.__MYBUSINESS_NATIVE_AUTH__=!!window.AndroidAuth;",
                     null
                 )
             }
@@ -195,8 +272,21 @@ class MainActivity : AppCompatActivity() {
         ai.close()
         webView.stopLoading()
         webView.removeJavascriptInterface("AndroidAI")
+        webView.removeJavascriptInterface("AndroidAuth")
         webView.destroy()
         super.onDestroy()
+    }
+}
+
+class NativeGoogleAuthBridge(private val activity: MainActivity) {
+    @JavascriptInterface
+    fun signInWithGoogle() {
+        activity.runOnUiThread { activity.startNativeGoogleSignInForBridge() }
+    }
+
+    @JavascriptInterface
+    fun clearCredentialState() {
+        activity.runOnUiThread { activity.clearNativeGoogleCredentialStateForBridge() }
     }
 }
 
@@ -296,15 +386,16 @@ class LocalAi(
                 notifyJs("state", JSONObject().put("status", "checking").put("message", "Checking model...").toString())
                 val name = queryDisplayName(uri)
                 if (!name.lowercase().endsWith(".gguf")) throw IllegalArgumentException("Please select a .gguf model file.")
-                val size = querySize(uri)
-                if (size < MIN_REASONABLE_BYTES || size > MAX_REASONABLE_BYTES) throw IllegalArgumentException("The selected model size is not valid for Qwen3 0.6B Q4_0.")
+                val reportedSize = querySize(uri)
+                if (reportedSize > 0 && (reportedSize < MIN_REASONABLE_BYTES || reportedSize > MAX_REASONABLE_BYTES)) throw IllegalArgumentException("The selected model size is not valid for Qwen3 0.6B Q4_0.")
 
                 tempFile.delete()
-                copyUriToTemp(uri, size)
+                copyUriToTemp(uri, reportedSize)
+                val actualSize = tempFile.length()
+                if (actualSize < MIN_REASONABLE_BYTES || actualSize > MAX_REASONABLE_BYTES) throw IllegalArgumentException("The selected model size is not valid for Qwen3 0.6B Q4_0.")
 
                 notifyJs("state", JSONObject().put("status", "verifying").put("message", "Verifying model...").toString())
                 if (!hasGgufMagic(tempFile)) throw IllegalArgumentException("The selected file is not a valid GGUF file.")
-                if (tempFile.length() != size) throw IllegalArgumentException("The model copy is incomplete.")
                 val hash = sha256(tempFile)
                 if (!hash.equals(MODEL_SHA256, true)) throw IllegalArgumentException("The selected Qwen model failed SHA-256 verification.")
 
@@ -360,7 +451,7 @@ class LocalAi(
                     if (count < 0) break
                     output.write(buffer, 0, count)
                     copied += count
-                    val percent = ((copied * 100) / total).toInt().coerceIn(0, 100)
+                    val percent = if (total > 0) ((copied * 100) / total).toInt().coerceIn(0, 100) else -1
                     if (percent != lastPercent) {
                         lastPercent = percent
                         notifyJs("install", JSONObject().put("percent", percent).put("bytes", copied).put("total", total).toString())

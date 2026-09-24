@@ -75,7 +75,7 @@ const WORDS = {
   ],
 
   sellProduct: [
-    'sale karo','sell karo','sale kr do','sale kro',
+    'sale karo','sell karo','sel karo','sel kro','sal karo','sal kro','sale kr do','sale kro',
     'sale kar do','becho','bech do','farokht karo',
     'sell it','make a sale',
     'فروخت کرو','بیچو','بیچ دو'
@@ -117,60 +117,54 @@ function requireUser() {
 /* -------------------------------------------------------------------------- */
 
 const UNIT_WORDS = {
-  // English / Roman Urdu / common Urdu-transcription forms.
-  zero: 0, shunya: 0,
-  'صفر': 0, 'ایک': 1, 'دو': 2, 'تین': 3, 'چار': 4, 'پانچ': 5,
-  'چھ': 6, 'سات': 7, 'آٹھ': 8, 'نو': 9, 'دس': 10, 'گیارہ': 11, 'بارہ': 12,
-  'تیرہ': 13, 'چودہ': 14, 'پندرہ': 15, 'سولہ': 16, 'سترہ': 17, 'اٹھارہ': 18, 'انیس': 19,
-  'بیس': 20, 'تیس': 30, 'چالیس': 40, 'پچاس': 50, 'ساٹھ': 60, 'ستر': 70, 'اسی': 80, 'نوے': 90,
-  'سو': 100, 'ہزار': 1000, 'لاکھ': 100000,
-  ek: 1, aik: 1, one: 1, wahid: 1,
-  do: 2, two: 2, duh: 2,
-  teen: 3, three: 3,
-  char: 4, chaar: 4, four: 4,
-  panch: 5, paanch: 5, five: 5,
-  chay: 6, che: 6, chhay: 6, chhe: 6, six: 6,
-  saat: 7, sat: 7, seven: 7,
-  aath: 8, ath: 8, eight: 8,
-  nau: 9, nao: 9, nine: 9,
-  das: 10, ten: 10,
-  gyara: 11, gyarah: 11, eleven: 11,
-  barah: 12, twelve: 12,
-  terah: 13, thirteen: 13,
-  chaudah: 14, choda: 14, fourteen: 14,
-  pandra: 15, pandrah: 15, fifteen: 15,
-  solah: 16, sixteen: 16,
-  satrah: 17, seventeen: 17,
-  atharah: 18, atarah: 18, eighteen: 18,
-  unnis: 19, nineteen: 19,
-  bees: 20, bis: 20, twenty: 20,
-  ikkis: 21, bais: 22, teis: 23, chaubees: 24,
-  pachis: 25, chhabis: 26, satais: 27, athais: 28, untees: 29,
-  tees: 30, thirty: 30,
-  iktees: 31, battis: 32, tentis: 33, chauntis: 34, paintees: 35,
-  chattis: 36, saintis: 37, adtees: 38, untalis: 39,
-  chalees: 40, chalis: 40, forty: 40,
-  iktalis: 41, bayalis: 42, tetalis: 43, chawalis: 44, paintalis: 45,
-  chiyalis: 46, saintalis: 47, arhtalis: 48, unchaas: 49,
-  pachas: 50, fifty: 50,
-  ikyavan: 51, bavan: 52, tirpan: 53, chauwan: 54, pachpan: 55,
-  chhappan: 56, sattavan: 57, athavan: 58, unsath: 59,
-  saath: 60, sixty: 60,
-  iksath: 61, basath: 62, tirsath: 63, chaunsath: 64, painsath: 65,
-  chhiyasath: 66, sarsath: 67, arsath: 68, unhattar: 69,
-  sattar: 70, seventy: 70,
-  ikahattar: 71, bahattar: 72, tihattar: 73, chauhattar: 74, pachattar: 75,
-  chihattar: 76, satattar: 77, athattar: 78, unasi: 79,
-  assi: 80, eighty: 80,
-  ikyasi: 81, bayasi: 82, tirasi: 83, chaurasi: 84, pachasi: 85,
-  chhiyasi: 86, satasi: 87, athasi: 88, navasi: 89,
-  nabbe: 90, ninety: 90,
-  ikyanave: 91, baanave: 92, tiranave: 93, chauranave: 94, panchanave: 95,
-  chhiyanave: 96, sattanave: 97, athanave: 98, ninyanave: 99,
-  sau: 100, hundred: 100,
-  hazar: 1000, hazaar: 1000, thousand: 1000,
-  lakh: 100000, lac: 100000,
-  million: 1000000
+  ek: 1,
+  aik: 1,
+  one: 1,
+
+  do: 2,
+  two: 2,
+
+  teen: 3,
+  three: 3,
+
+  char: 4,
+  chaar: 4,
+  four: 4,
+
+  panch: 5,
+  paanch: 5,
+  five: 5,
+
+  chay: 6,
+  che: 6,
+  chhay: 6,
+  six: 6,
+
+  saat: 7,
+  seven: 7,
+
+  aath: 8,
+  eight: 8,
+
+  nau: 9,
+  nine: 9,
+
+  das: 10,
+  ten: 10,
+
+  gyara: 11,
+  gyarah: 11,
+
+  barah: 12,
+
+  pandra: 15,
+  pandrah: 15,
+
+  bees: 20,
+  pachas: 50,
+  sattar: 70,
+  assi: 80,
+  nabbe: 90
 };
 
 function numberFrom(value) {
@@ -185,179 +179,106 @@ function numberFrom(value) {
 
 function numberFromWords(value) {
   const text = norm(value);
+
   if (!text) return NaN;
 
   const direct = UNIT_WORDS[text];
   if (Number.isFinite(direct)) return direct;
 
-  const parts = text.split(/\s+/).filter(Boolean);
   let total = 0;
-  let current = 0;
   let matched = false;
 
-  for (const part of parts) {
-    if (UNIT_WORDS[part] == null) continue;
-    const n = UNIT_WORDS[part];
-    matched = true;
+  const thousand = text.match(
+    /(\w+)?\s*(?:hazar|hazaar|thousand)/
+  );
 
-    if (n === 100 || n === 1000 || n === 100000 || n === 1000000) {
-      current = current || 1;
-      total += current * n;
-      current = 0;
-    } else {
-      current += n;
+  if (thousand) {
+    const raw = thousand[1];
+    const n = raw
+      ? (UNIT_WORDS[raw] ?? numberFrom(raw))
+      : 1;
+
+    if (Number.isFinite(n)) {
+      total += n * 1000;
+      matched = true;
     }
   }
 
-  if (!matched) return NaN;
-  return total + current;
-}
+  const hundred = text.match(
+    /(\w+)?\s*(?:sau|hundred)/
+  );
 
-function numberTokenPattern() {
-  const words = Object.keys(UNIT_WORDS)
-    .filter(x => x !== 'zero')
-    .sort((a, b) => b.length - a.length)
-    .map(escapeRegex)
-    .join('|');
+  if (hundred) {
+    const raw = hundred[1];
+    const n = raw
+      ? (UNIT_WORDS[raw] ?? numberFrom(raw))
+      : 1;
 
-  return `(?:\\d+(?:\\.\\d+)?|${words})`;
-}
-
-function numericTokens(value) {
-  const text = norm(value);
-  const pattern = numberTokenPattern();
-  const re = new RegExp(`(?<![\\p{L}\\p{N}])${pattern}(?![\\p{L}\\p{N}])`, 'giu');
-  const rawTokens = Array.from(text.matchAll(re)).map(m => ({
-    raw: m[0],
-    value: /^\d/.test(m[0]) ? Number(m[0]) : numberFromWords(m[0]),
-    index: m.index,
-    end: m.index + m[0].length
-  })).filter(x => Number.isFinite(x.value));
-
-  // Merge adjacent Urdu/Roman-Urdu number phrases such as "teen sau" = 300
-  // and "ek hazar" = 1000, but never merge numbers separated by a product name.
-  const merged = [];
-  const multipliers = new Set([100, 1000, 100000, 1000000]);
-  for (const token of rawTokens) {
-    const previous = merged[merged.length - 1];
-    const gap = previous ? text.slice(previous.end, token.index) : '';
-    if (previous && gap.trim() === '' && multipliers.has(token.value) && !/^\d/.test(previous.raw)) {
-      const phrase = text.slice(previous.index, token.end);
-      previous.raw = phrase;
-      previous.value = numberFromWords(phrase);
-      previous.end = token.end;
-    } else {
-      merged.push({...token});
+    if (Number.isFinite(n)) {
+      total += n * 100;
+      matched = true;
     }
   }
-  return merged;
+
+  /*
+   * Simple additive Roman-Urdu numbers:
+   * "do sau pachas" -> 250
+   * "ek hazar do sau" -> 1200
+   */
+  if (!matched) {
+    const parts = text.split(/\s+/);
+
+    let smallTotal = 0;
+
+    for (const part of parts) {
+      if (Number.isFinite(UNIT_WORDS[part])) {
+        smallTotal += UNIT_WORDS[part];
+        matched = true;
+      }
+    }
+
+    if (matched) total = smallTotal;
+  }
+
+  return matched ? total : NaN;
 }
 
 function amountFrom(value) {
   const numeric = numberFrom(value);
-  if (Number.isFinite(numeric)) return numeric;
+
+  if (Number.isFinite(numeric)) {
+    return numeric;
+  }
+
   return numberFromWords(value);
 }
 
 function qtyFrom(value) {
   const text = norm(value);
 
+  /*
+   * Prefer numbers immediately associated with quantity language.
+   */
   const explicit = text.match(
-    new RegExp(`(${numberTokenPattern()})\\s*(?:x|pcs?|pieces?|piece|units?|unit|items?|item|qty|quantity|پیس|عدد)\\b`, 'i')
+    /(\d+(?:\.\d+)?)\s*(?:x|pcs?|pieces?|piece|units?|unit|items?|item|qty|quantity|پیس|عدد)\b/i
   );
 
   if (explicit) {
-    const n = /^\d/.test(explicit[1])
-      ? Number(explicit[1])
-      : numberFromWords(explicit[1]);
-    if (Number.isFinite(n)) return Math.max(1, Math.floor(n));
+    return Math.max(1, Math.floor(Number(explicit[1])));
   }
 
-  const tokens = numericTokens(text);
-  if (tokens.length) {
-    return Math.max(1, Math.floor(tokens[0].value));
+  /*
+   * Common:
+   * "10 Pepsi add"
+   * "Pepsi 10 add"
+   */
+  const digits = text.match(/\b(\d+(?:\.\d+)?)\b/);
+
+  if (digits) {
+    return Math.max(1, Math.floor(Number(digits[1])));
   }
 
   return 1;
-}
-
-function extractPrice(text) {
-  const t = norm(text);
-  const priceWords = /(?:keemat|qeemat|qimat|kimat|rate|price|daam|dam|ka price|ki price|ka rate|ki rate|کی قیمت|قیمت|ریٹ|نرخ|دام)/i;
-  const after = t.match(new RegExp(`${priceWords.source}\\s*(?:is|hai|he|=)?\\s*(${numberTokenPattern()})\\b`, 'i'));
-  if (after) {
-    const n = /^\d/.test(after[1]) ? Number(after[1]) : numberFromWords(after[1]);
-    if (Number.isFinite(n)) return n;
-  }
-
-  const tokens = numericTokens(t);
-  if (tokens.length >= 2) return tokens[1].value;
-  return NaN;
-}
-
-function stripStockCommandWords(text) {
-  return norm(text)
-    .replace(/(?:stock|inventory|stok|سٹاک|اسٹاک|ذخیرہ|ma|mein|me|main|may|میں|maen)\b/gi, ' ')
-    .replace(/(?:add|increase|put|restock|refill|dal|daal|dal do|daal do|jama|jama karo|barha do|barhao|barhado|dd|dalo|ڈالو|جمع|اضافہ|شامل|بڑھاؤ)\b/gi, ' ')
-    .replace(/(?:keemat|qeemat|qimat|kimat|rate|price|daam|dam|ka price|ki price|ka rate|ki rate|کی قیمت|قیمت|ریٹ|نرخ|دام)\b/gi, ' ')
-    .replace(/(?:قیمت|ریٹ|نرخ|دام|اسٹاک|سٹاک|میں|شامل|ڈالو|جمع)/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function parseStockAddItems(input) {
-  const text = norm(input);
-  if (!rx(WORDS.addStock).test(text) && !/(?:stock|inventory|سٹاک|اسٹاک)/i.test(text)) return [];
-
-  const tokens = numericTokens(text);
-  if (tokens.length < 2) return [];
-
-  const items = [];
-  let cursor = 0;
-
-  // Each item is quantity + product name + price. Supports:
-  // "3 gop keemat 300", "3 gop 300", "3 gop 300 4 lamp 600".
-  for (let i = 0; i + 1 < tokens.length;) {
-    const qtyToken = tokens[i];
-    const priceToken = tokens[i + 1];
-    const between = text.slice(qtyToken.end, priceToken.index).trim();
-
-    if (!between || /^(?:stock|add|ma|mein|keemat|qeemat|price|rate)$/i.test(between)) {
-      i++;
-      continue;
-    }
-
-    const cleanedName = stripStockCommandWords(between)
-      .replace(/\b(?:aur|and|phir|then)\b/gi, ' ')
-      .trim();
-
-    if (cleanedName) {
-      items.push({
-        qty: Math.max(1, Math.floor(qtyToken.value)),
-        name: cleanedName,
-        price: priceToken.value
-      });
-      i += 2;
-      cursor = priceToken.end;
-      continue;
-    }
-
-    i++;
-  }
-
-  // If there is only one numeric pair, also allow a price keyword to identify it.
-  if (!items.length) {
-    const price = extractPrice(text);
-    if (Number.isFinite(price)) {
-      const first = tokens[0];
-      const namePart = stripStockCommandWords(
-        text.slice(first.end, text.indexOf(String(tokens.find(x => x.value === price)?.raw || ''), first.end))
-      );
-      if (namePart) items.push({ qty: Math.max(1, Math.floor(first.value)), name: namePart, price });
-    }
-  }
-
-  return items;
 }
 
 
@@ -813,12 +734,6 @@ const ACTIONS = Object.freeze({
     purpose: 'Sell product',
     required: ['product', 'qty'],
     confirmation: true
-  },
-
-  addStockBatch: {
-    purpose: 'Add stock and create missing products from quantity + unit price pairs',
-    required: ['items'],
-    confirmation: true
   }
 
 });
@@ -928,62 +843,6 @@ async function execute(action) {
     throw new Error(
       'The database interface is not available.'
     );
-  }
-
-  /*
-   * ------------------------------------------------------------------------
-   * BATCH STOCK ADD / CREATE
-   * ------------------------------------------------------------------------
-   */
-  if (action.type === 'addStockBatch') {
-    const items = Array.isArray(action.items) ? action.items : [];
-    if (!items.length) throw new Error('No stock items were supplied.');
-
-    const results = [];
-
-    await window.runAtomicOrOffline(async tx => {
-      for (const item of items) {
-        const requestedName = String(item.name || '').trim();
-        const qty = Number(item.qty);
-        const price = Number(item.price);
-
-        if (!requestedName || !Number.isFinite(qty) || qty <= 0 || !Number.isFinite(price) || price < 0) {
-          throw new Error('Each stock item needs a product name, quantity, and unit price.');
-        }
-
-        const existing = products().find(p => norm(p.name) === norm(requestedName));
-
-        if (existing) {
-          const ref = doc(db, 'products', existing.id);
-          const snap = await tx.get(ref);
-          if (!snap.exists()) throw new Error(`Product "${requestedName}" no longer exists.`);
-          const data = snap.data();
-          if (data.ownerId !== ownerId()) throw new Error('Unauthorized product.');
-
-          const newStock = (Number(data.stock) || 0) + qty;
-          tx.update(ref, { stock: newStock, updatedAt: new Date().toISOString() });
-          results.push(`${requestedName}: +${qty} stock (price kept at ${money(Number(data.price ?? data.wholesalePrice ?? price))})`);
-        } else {
-          const ref = doc(collection(db, 'products'));
-          tx.set(ref, {
-            name: requestedName,
-            barcode: '',
-            cost: price,
-            price,
-            wholesalePrice: price,
-            retailPrice: price,
-            minStock: 5,
-            stock: qty,
-            ownerId: ownerId(),
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-          });
-          results.push(`${requestedName}: new product, stock ${qty}, all prices ${money(price)}`);
-        }
-      }
-    });
-
-    return `Done.\n${results.join('\n')}`;
   }
 
   /*
@@ -1460,21 +1319,28 @@ async function execute(action) {
         );
       }
 
-      const storedUnit =
+      const unit =
         action.saleType === 'retail'
-          ? Number(product.retailPrice ?? product.price ?? 0)
-          : Number(product.wholesalePrice ?? product.price ?? 0);
+          ? Number(
+              product.retailPrice ??
+              product.price ??
+              0
+            )
+          : Number(
+              product.wholesalePrice ??
+              product.price ??
+              0
+            );
 
-      const unit = Number.isFinite(Number(action.unitPrice))
-        ? Number(action.unitPrice)
-        : storedUnit;
+      const cost =
+        Number(product.cost) || 0;
 
-      const cost = Number(product.cost) || 0;
-      const qty = Number(action.qty);
-      const subtotal = storedUnit * qty;
-      const total = unit * qty;
-      const discount = Math.max(0, subtotal - total);
-      const totalProfit = (unit - cost) * qty;
+      const total =
+        unit * Number(action.qty);
+
+      const totalProfit =
+        (unit - cost) *
+        Number(action.qty);
 
       let newBalance = 0;
 
@@ -1561,15 +1427,14 @@ async function execute(action) {
             id: action.product.id,
             name: action.product.name,
             price: unit,
-            basePrice: storedUnit,
             cost,
             qty: Number(action.qty),
             returnedQty: 0
           }
         ],
 
-        subtotal,
-        discount,
+        subtotal: total,
+        discount: 0,
         discountType: 'amount',
         total,
 
@@ -1651,12 +1516,14 @@ async function execute(action) {
       );
 
       resultText =
-        `Done. Sold ${action.qty} x ${action.product.name} ` +
-        `at ${money(unit)} each for ${money(total)}` +
-        (discount > 0 ? ` with ${money(discount)} discount` : '') +
-        (action.customer
-          ? ` to ${action.customer.name} (added to their due).`
-          : ' to Walk-in customer.');
+        `Done. Sold ${action.qty} x ` +
+        `${action.product.name} ` +
+        (
+          action.customer
+            ? `to ${action.customer.name} ` +
+              `(added ${money(total)} to their due).`
+            : `to Walk-in customer for ${money(total)}.`
+        );
     });
 
     rememberContext({
@@ -2175,36 +2042,6 @@ function parseCommand(input) {
 
   /*
    * ------------------------------------------------------------------------
-   * NATURAL STOCK ADD / PRODUCT CREATE
-   * ------------------------------------------------------------------------
-   * Examples:
-   *   "3 gop keemat 300 stock ma add karo"
-   *   "3 gop 300 4 lamp 600 stock ma add karo"
-   *   "teen gop keemat teen sau stock mein add karo"
-   *
-   * If the product does not exist, create it with the supplied unit price
-   * copied to cost, wholesale and retail price. If it already exists, only
-   * increase stock; never silently overwrite its existing prices.
-   */
-  const stockItems = parseStockAddItems(original);
-  if (stockItems.length) {
-    return {
-      kind: 'confirm',
-      action: {
-        type: 'addStockBatch',
-        items: stockItems,
-        summary:
-          'Add stock:\n' +
-          stockItems
-            .map(item => `${item.qty} x ${item.name} @ ${money(item.price)} each`)
-            .join('\n') +
-          '?'
-      }
-    };
-  }
-
-  /*
-   * ------------------------------------------------------------------------
    * SELL
    * ------------------------------------------------------------------------
    */
@@ -2216,15 +2053,8 @@ function parseCommand(input) {
     const product =
       productResult.item;
 
-    const salePriceTokens = numericTokens(text);
-    const hasExplicitSalePrice =
-      salePriceTokens.length >= 1 &&
-      /(?:\bka\s+sale\b|\bki\s+sale\b|\bke\s+sale\b|\bat\b|\bfor\b|\bsale\b|\bsell\b|فروخت|سیل)/i.test(text);
-
     const qty =
-      hasExplicitSalePrice && salePriceTokens.length === 1
-        ? 1
-        : qtyFrom(text);
+      qtyFrom(text);
 
     const stock =
       Number(product.stock) || 0;
@@ -2243,26 +2073,21 @@ function parseCommand(input) {
         ? 'retail'
         : 'wholesale';
 
-    const storedUnit =
+    const unit =
       saleType === 'retail'
-        ? Number(product.retailPrice ?? product.price ?? 0)
-        : Number(product.wholesalePrice ?? product.price ?? 0);
+        ? Number(
+            product.retailPrice ??
+            product.price ??
+            0
+          )
+        : Number(
+            product.wholesalePrice ??
+            product.price ??
+            0
+          );
 
-    const priceTokens = numericTokens(text);
-    const salePricePhrase =
-      /(?:ka|ki|ke|at|for|mein|me|par)?\s*(?:sale|sell|faro|farokht|فروخت|سیل)/i.test(text);
-    const customPrice = salePricePhrase && priceTokens.length
-      ? priceTokens[priceTokens.length - 1].value
-      : NaN;
-
-    const explicitSalePrice =
-      salePricePhrase &&
-      Number.isFinite(customPrice) &&
-      !(priceTokens.length === 1 && customPrice === qty);
-
-    const unit = explicitSalePrice ? customPrice : storedUnit;
-    const discountPerUnit = Math.max(0, storedUnit - unit);
-    const total = unit * qty;
+    const total =
+      unit * qty;
 
     const customer =
       customerResult.found
@@ -2286,23 +2111,18 @@ function parseCommand(input) {
         qty,
 
         saleType,
-        unitPrice: unit,
-        baseUnitPrice: storedUnit,
-        discountPerUnit,
-        customPrice: explicitSalePrice,
 
         summary:
           `Sell ${qty} x ${product.name} ` +
           `${
             customer
-              ? `to ${customer.name} ` + '(added to their due)'
+              ? `to ${customer.name} ` +
+                '(added to their due)'
               : 'to Walk-in customer'
           } ` +
-          `at ${money(unit)} each = ${money(total)}` +
-          (discountPerUnit > 0
-            ? ` (discount ${money(discountPerUnit * qty)})`
-            : '') +
-          '?'
+          `at ${saleType} price ` +
+          `(${money(unit)} each) = ` +
+          `${money(total)}?`
       }
     };
   }
@@ -2916,6 +2736,7 @@ export async function handleAgentCommand(input) {
   if (parsed?.kind === 'confirm') {
     return {
       handled: true,
+      confirmation: true,
       text:
         confirmationText(
           parsed.action

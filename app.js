@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, reauthenticateWithPopup, updatePassword, deleteUser } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, setPersistence, browserLocalPersistence, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithCredential, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, reauthenticateWithPopup, updatePassword, deleteUser } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, setDoc, getDoc, onSnapshot, query, where, runTransaction, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
@@ -295,27 +295,52 @@ window.forgotPassword=async(e)=>{
     if(e)e.preventDefault(); const username=normalizeUsername(document.getElementById('login-username').value); if(!validateUsername(username)) return alert('Enter your username first.');
     alert('Password reset for username-only accounts requires a recovery email. Add an email in your profile, then reset from the recovery option.');
 };
+window.NativeAndroidAuth=window.NativeAndroidAuth||{};
+window.NativeAndroidAuth._event=async(kind,raw)=>{
+    let data={}; try{data=JSON.parse(raw||'{}');}catch(_){data={message:raw};}
+    if(kind==='success' && data.idToken){
+        try{
+            const credential=GoogleAuthProvider.credential(data.idToken);
+            await signInWithCredential(auth,credential);
+        }catch(error){
+            console.error('Native Google Firebase sign-in error:',error);
+            sessionStorage.removeItem('mybiz-google-signin');
+            alert(error?.message||'Google Sign-In failed.');
+        }
+        return;
+    }
+    if(kind==='error'){
+        sessionStorage.removeItem('mybiz-google-signin');
+        if(data.message && !/cancel|canceled|cancelled/i.test(String(data.message))) alert(data.message);
+    }
+};
+
 window.signInWithGoogle=async()=>{
     sessionStorage.setItem('mybiz-google-signin','1');
+    if(window.__MYBUSINESS_ANDROID__ && window.AndroidAuth){
+        try{
+            window.AndroidAuth.signInWithGoogle();
+            return;
+        }catch(error){
+            console.error('Native Google Sign-In launch error:',error);
+            sessionStorage.removeItem('mybiz-google-signin');
+            alert(error?.message||'Could not start native Google Sign-In.');
+            return;
+        }
+    }
     try{
         await signInWithPopup(auth,googleProvider);
     }catch(error){
         console.error('Google Sign-In error:',error);
         const msg=String(error?.message||'');
-        const storageProblem=error?.code==='auth/web-storage-unsupported' || /missing initial state|storage is inaccessible|sessionstorage/i.test(msg);
         if(error.code==='auth/popup-closed-by-user'){ sessionStorage.removeItem('mybiz-google-signin'); return; }
         if(error.code==='auth/unauthorized-domain'){ sessionStorage.removeItem('mybiz-google-signin'); alert('This website domain is not authorized in Firebase Authentication.'); return; }
-        if(storageProblem && window.__MYBUSINESS_ANDROID__){
-            sessionStorage.removeItem('mybiz-google-signin');
-            alert('Google Sign-In cannot safely complete inside this Android WebView because Google/Firebase blocks the temporary session storage used by the web redirect. Use Email/Password in the Android app, or use Google Sign-In from the normal Chrome/PWA version. Your business data is unchanged.');
-            return;
-        }
         sessionStorage.removeItem('mybiz-google-signin');
         alert(msg||'Google Sign-In failed.');
     }
 };
-// Google login uses popup only. This avoids redirect/sessionStorage state errors in the Android WebView.
-window.handleLogout=async()=>{if(!confirm('Log out?'))return;try{await signOut(auth);}catch(e){console.error(e);alert('Could not log out. Please try again.');}};
+// Android uses Credential Manager for native Google account selection, then hands the ID token to the existing Firebase Web Auth session.
+window.handleLogout=async()=>{if(!confirm('Log out?'))return;try{await signOut(auth);if(window.AndroidAuth?.clearCredentialState)window.AndroidAuth.clearCredentialState();}catch(e){console.error(e);alert('Could not log out. Please try again.');}};
 
 // Permanently removes the signed-in user's access profile and Firebase Auth account.
 // Business records are intentionally not deleted here; account deletion must never erase
