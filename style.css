@@ -628,3 +628,4 @@ body{padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bot
 .ai-message.assistant .ai-message-bubble{max-width:90%;}
 .ai-confirm-actions{display:flex !important;flex-direction:row !important;justify-content:flex-end !important;align-items:center !important;gap:8px !important;width:100% !important;margin-top:10px !important;}
 .ai-confirm-actions button{display:inline-flex !important;visibility:visible !important;opacity:1 !important;position:relative !important;z-index:5 !important;min-width:70px !important;min-height:38px !important;padding:8px 14px !important;cursor:pointer !important;}
+ 
