@@ -682,6 +682,12 @@ const ACTIONS = Object.freeze({
     confirmation: true
   },
 
+  addStockBatch: {
+    purpose: 'Add multiple stock items and create missing products',
+    required: ['items'],
+    confirmation: true
+  },
+
   removeStock: {
     purpose: 'Decrease product stock',
     required: ['product', 'qty'],
@@ -791,6 +797,17 @@ function validateAction(action) {
         valid: false,
         error: 'Quantity must be greater than zero.'
       };
+    }
+  }
+
+  if (action.type === 'addStockBatch') {
+    if (!Array.isArray(action.items) || !action.items.length) {
+      return { valid: false, error: 'At least one stock item is required.' };
+    }
+    for (const item of action.items) {
+      if (!String(item?.name || '').trim()) return { valid: false, error: 'Each stock item needs a product name.' };
+      if (!Number.isFinite(Number(item?.qty)) || Number(item.qty) <= 0) return { valid: false, error: 'Each stock quantity must be greater than zero.' };
+      if (!Number.isFinite(Number(item?.price)) || Number(item.price) < 0) return { valid: false, error: 'Each product price must be a valid number.' };
     }
   }
 
@@ -919,6 +936,48 @@ async function execute(action) {
       `${action.type === 'addStock' ? 'increased' : 'decreased'} ` +
       `by ${action.qty}. New stock: ${newStock}.`
     );
+  }
+
+
+  /*
+   * ------------------------------------------------------------------------
+   * BATCH STOCK ADD / CREATE PRODUCTS
+   * ------------------------------------------------------------------------
+   */
+
+  if (action.type === 'addStockBatch') {
+    const results = [];
+
+    await window.runAtomicOrOffline(async tx => {
+      for (const item of action.items) {
+        const name = String(item.name || '').trim();
+        const qty = Number(item.qty);
+        const price = Number(item.price) || 0;
+        const existing = products().find(p => norm(p.name) === norm(name));
+
+        if (existing) {
+          const ref = doc(db, 'products', existing.id);
+          const current = Number(existing.stock) || 0;
+          const newStock = current + qty;
+          tx.update(ref, { stock: newStock, updatedAt: new Date().toISOString() });
+          const adjustmentRef = doc(collection(db, 'stockAdjustments'));
+          tx.set(adjustmentRef, { ownerId: ownerId(), productId: existing.id, type: 'add', quantity: qty, date: new Date().toISOString(), note: 'AI agent batch stock add' });
+          results.push(`${name}: +${qty} stock (new stock ${newStock})`);
+        } else {
+          const productRef = doc(collection(db, 'products'));
+          tx.set(productRef, {
+            name, barcode: '', cost: price, price, wholesalePrice: price, retailPrice: price,
+            minStock: 5, stock: qty, ownerId: ownerId(),
+            createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+          });
+          const adjustmentRef = doc(collection(db, 'stockAdjustments'));
+          tx.set(adjustmentRef, { ownerId: ownerId(), productId: productRef.id, type: 'add', quantity: qty, date: new Date().toISOString(), note: 'AI agent batch product creation' });
+          results.push(`${name}: created with ${qty} stock at ${money(price)} (all prices)`);
+        }
+      }
+    });
+
+    return `Done.\n${results.join('\n')}`;
   }
 
 
@@ -2037,6 +2096,64 @@ function parseCommand(input) {
       kind: 'clarification',
       text: supplierResult.question
     };
+  }
+
+
+  /*
+   * ------------------------------------------------------------------------
+   * MULTI-ITEM STOCK ADD / CREATE
+   * ------------------------------------------------------------------------
+   * Supports:
+   * 50 lamp 300 50 frame 600 stock mein add karo
+   * 50 lamp keemat 500 50 frame qeemat 600 stock ma add karo
+   */
+  if (rx(WORDS.addStock).test(text) && RX.stock.test(text)) {
+    let body = text
+      .replace(rx(WORDS.addStock), ' ')
+      .replace(RX.stock, ' ')
+      .replace(/\b(?:mein|main|ma|me|may|please|plz)\b/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const tokens = body.match(/\d+(?:\.\d+)?|[^\s]+/g) || [];
+    const items = [];
+    let pos = 0;
+
+    while (pos < tokens.length) {
+      if (!/^\d+(?:\.\d+)?$/.test(tokens[pos])) { pos++; continue; }
+      const qty = Number(tokens[pos++]);
+      const nameParts = [];
+
+      while (pos < tokens.length &&
+             !/^\d+(?:\.\d+)?$/.test(tokens[pos]) &&
+             !/^(?:keemat|qeemat|price|rate|ki|ka|k|or|aur|ya|قیمت|ریٹ)$/i.test(tokens[pos])) {
+        nameParts.push(tokens[pos++]);
+      }
+
+      if (!nameParts.length) break;
+
+      while (pos < tokens.length && /^(?:keemat|qeemat|price|rate|ki|ka|k|or|aur|ya|قیمت|ریٹ)$/i.test(tokens[pos])) pos++;
+      if (pos >= tokens.length || !/^\d+(?:\.\d+)?$/.test(tokens[pos])) break;
+
+      const price = Number(tokens[pos++]);
+      const name = nameParts.join(' ').trim();
+      if (!name || !Number.isFinite(qty) || qty <= 0 || !Number.isFinite(price)) break;
+
+      const existing = allProducts.find(p => norm(p.name) === norm(name));
+      items.push({ name, qty: Math.floor(qty), price, product: existing || null });
+    }
+
+    if (items.length) {
+      return {
+        kind: 'confirm',
+        action: {
+          type: 'addStockBatch',
+          items,
+          summary: `Add ${items.length} stock item${items.length === 1 ? '' : 's'}?\n` +
+            items.map(item => `• ${item.name}: ${item.qty} pcs, ${money(item.price)} each (all prices${item.product ? ' unchanged for existing product' : ''})`).join('\n')
+        }
+      };
+    }
   }
 
 
