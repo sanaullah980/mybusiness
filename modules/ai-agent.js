@@ -348,10 +348,7 @@ export const MULTIPLIER_WORDS = {
 
 export function parseCompoundNumberWords(text) {
   const words = norm(text).split(/\s+/).filter(Boolean);
-
-  if (!words.length) {
-    return NaN;
-  }
+  if (!words.length) return NaN;
 
   let total = 0;
   let currentVal = 0;
@@ -389,7 +386,6 @@ export function parseCompoundNumberWords(text) {
   }
 
   total += currentVal;
-
   return hasNumber ? total : NaN;
 }
 
@@ -405,10 +401,7 @@ export function numberFrom(value) {
 
 export function amountFrom(value) {
   const numeric = numberFrom(value);
-
-  if (Number.isFinite(numeric)) {
-    return numeric;
-  }
+  if (Number.isFinite(numeric)) return numeric;
 
   return parseCompoundNumberWords(value);
 }
@@ -515,9 +508,7 @@ export function levenshtein(a, b) {
   const left = String(a || '');
   const right = String(b || '');
 
-  if (left === right) {
-    return 0;
-  }
+  if (left === right) return 0;
 
   const prev = new Array(right.length + 1);
 
@@ -527,7 +518,6 @@ export function levenshtein(a, b) {
 
   for (let i = 1; i <= left.length; i++) {
     const current = new Array(right.length + 1);
-
     current[0] = i;
 
     for (let j = 1; j <= right.length; j++) {
@@ -557,9 +547,7 @@ export function findMentionedAll(list, sentence) {
   }
 
   const exact = list.filter(item => {
-    if (!item?.name) {
-      return false;
-    }
+    if (!item?.name) return false;
 
     const name = norm(item.name);
 
@@ -579,9 +567,7 @@ export function findMentionedAll(list, sentence) {
   const candidates = [];
 
   for (const item of list) {
-    if (!item?.name) {
-      continue;
-    }
+    if (!item?.name) continue;
 
     const name = norm(item.name);
     const nameWords = name.split(/\s+/).length;
@@ -591,12 +577,9 @@ export function findMentionedAll(list, sentence) {
         .slice(i, i + nameWords)
         .join(' ');
 
-      if (!window) {
-        continue;
-      }
+      if (!window) continue;
 
       const distance = levenshtein(window, name);
-
       const limit = Math.max(
         1,
         Math.floor(name.length * 0.25)
@@ -617,8 +600,7 @@ export function findMentionedAll(list, sentence) {
     return [];
   }
 
-  const bestDistance =
-    candidates[0].distance;
+  const bestDistance = candidates[0].distance;
 
   return candidates
     .filter(x => x.distance === bestDistance)
@@ -626,8 +608,7 @@ export function findMentionedAll(list, sentence) {
 }
 
 export function resolveEntity(list, sentence, label) {
-  const matches =
-    findMentionedAll(list, sentence);
+  const matches = findMentionedAll(list, sentence);
 
   if (!matches.length) {
     return {
@@ -674,8 +655,7 @@ export function names(list, max = 30) {
 /* SHORT-TERM CONVERSATION CONTEXT                                            */
 /* -------------------------------------------------------------------------- */
 
-const CONTEXT_KEY =
-  '__myBusinessAiContext';
+const CONTEXT_KEY = '__myBusinessAiContext';
 
 export function getContext() {
   if (!window[CONTEXT_KEY]) {
@@ -697,8 +677,7 @@ export function clearOldContext() {
 
   if (
     context.timestamp &&
-    Date.now() - context.timestamp >
-      5 * 60 * 1000
+    Date.now() - context.timestamp > 5 * 60 * 1000
   ) {
     context.product = null;
     context.customer = null;
@@ -763,15 +742,9 @@ export function confirmationText(action) {
   window.__myBusinessAiPending = action;
 
   rememberContext({
-    product:
-      action.product ?? undefined,
-
-    customer:
-      action.customer ?? undefined,
-
-    supplier:
-      action.supplier ?? undefined,
-
+    product: action.product ?? undefined,
+    customer: action.customer ?? undefined,
+    supplier: action.supplier ?? undefined,
     action
   });
 
@@ -806,9 +779,7 @@ export function isNo(value) {
 export function localDate(value = new Date()) {
   if (window.getLocalDateStr) {
     return window.getLocalDateStr(
-      value instanceof Date
-        ? value
-        : new Date(value)
+      value instanceof Date ? value : new Date(value)
     );
   }
 
@@ -838,11 +809,7 @@ export function todayDate() {
 
 export function yesterdayDate() {
   const d = new Date();
-
-  d.setDate(
-    d.getDate() - 1
-  );
-
+  d.setDate(d.getDate() - 1);
   return localDate(d);
 }
 
@@ -878,90 +845,84 @@ export function expenses() {
 /* ACTION REGISTRY                                                            */
 /* -------------------------------------------------------------------------- */
 
-export const ACTIONS =
-  Object.freeze({
-    addStock: {
-      purpose: 'Increase product stock',
-      required: ['product', 'qty'],
-      confirmation: true
-    },
+export const ACTIONS = Object.freeze({
+  addStock: {
+    purpose: 'Increase product stock',
+    required: ['product', 'qty'],
+    confirmation: true
+  },
 
-    addStockBatch: {
-      purpose:
-        'Add multiple stock items and create missing products',
-      required: ['items'],
-      confirmation: true
-    },
+  addStockBatch: {
+    purpose: 'Add multiple stock items and create missing products',
+    required: ['items'],
+    confirmation: true
+  },
 
-    removeStock: {
-      purpose: 'Decrease product stock',
-      required: ['product', 'qty'],
-      confirmation: true
-    },
+  removeStock: {
+    purpose: 'Decrease product stock',
+    required: ['product', 'qty'],
+    confirmation: true
+  },
 
-    receiveCustomer: {
-      purpose: 'Receive payment from customer',
-      required: ['customer', 'amount'],
-      confirmation: true
-    },
+  receiveCustomer: {
+    purpose: 'Receive payment from customer',
+    required: ['customer', 'amount'],
+    confirmation: true
+  },
 
-    giveCustomer: {
-      purpose: 'Add customer credit/debt',
-      required: ['customer', 'amount'],
-      confirmation: true
-    },
+  giveCustomer: {
+    purpose: 'Add customer credit/debt',
+    required: ['customer', 'amount'],
+    confirmation: true
+  },
 
-    addCustomer: {
-      purpose: 'Create customer',
-      required: ['name'],
-      confirmation: true
-    },
+  addCustomer: {
+    purpose: 'Create customer',
+    required: ['name'],
+    confirmation: true
+  },
 
-    addProduct: {
-      purpose: 'Create product',
-      required: ['name'],
-      confirmation: true
-    },
+  addProduct: {
+    purpose: 'Create product',
+    required: ['name'],
+    confirmation: true
+  },
 
-    supplierPayment: {
-      purpose: 'Pay supplier',
-      required: ['supplier', 'amount'],
-      confirmation: true
-    },
+  supplierPayment: {
+    purpose: 'Pay supplier',
+    required: ['supplier', 'amount'],
+    confirmation: true
+  },
 
-    supplierDebt: {
-      purpose: 'Add supplier payable',
-      required: ['supplier', 'amount'],
-      confirmation: true
-    },
+  supplierDebt: {
+    purpose: 'Add supplier payable',
+    required: ['supplier', 'amount'],
+    confirmation: true
+  },
 
-    expense: {
-      purpose: 'Record expense',
-      required: ['amount'],
-      confirmation: true
-    },
+  expense: {
+    purpose: 'Record expense',
+    required: ['amount'],
+    confirmation: true
+  },
 
-    sellProduct: {
-      purpose: 'Sell single product',
-      required: ['product', 'qty'],
-      confirmation: true
-    },
+  sellProduct: {
+    purpose: 'Sell single product',
+    required: ['product', 'qty'],
+    confirmation: true
+  },
 
-    sellProductBatch: {
-      purpose:
-        'Sell multiple products with custom prices',
-      required: ['items'],
-      confirmation: true
-    }
-  });
+  sellProductBatch: {
+    purpose: 'Sell multiple products with custom prices',
+    required: ['items'],
+    confirmation: true
+  }
+});
 
 export function isRegisteredAction(type) {
   return Boolean(
     type &&
-    Object.prototype.hasOwnProperty.call(
-      ACTIONS,
-      type
-    )
+    Object.prototype.hasOwnProperty.call(ACTIONS, type)
   );
 }
 
@@ -970,55 +931,36 @@ export function isRegisteredAction(type) {
 /* -------------------------------------------------------------------------- */
 
 export function validateAction(action) {
-  if (
-    !action ||
-    !isRegisteredAction(action.type)
-  ) {
+  if (!action || !isRegisteredAction(action.type)) {
     return {
       valid: false,
       error: 'Unsupported agent action.'
     };
   }
 
-  if (
-    action.product &&
-    !action.product.id
-  ) {
+  if (action.product && !action.product.id) {
     return {
       valid: false,
-      error:
-        'The selected product is missing its ID.'
+      error: 'The selected product is missing its ID.'
+    };
+  }
+
+  if (action.customer && !action.customer.id) {
+    return {
+      valid: false,
+      error: 'The selected customer is missing its ID.'
+    };
+  }
+
+  if (action.supplier && !action.supplier.id) {
+    return {
+      valid: false,
+      error: 'The selected supplier is missing its ID.'
     };
   }
 
   if (
-    action.customer &&
-    !action.customer.id
-  ) {
-    return {
-      valid: false,
-      error:
-        'The selected customer is missing its ID.'
-    };
-  }
-
-  if (
-    action.supplier &&
-    !action.supplier.id
-  ) {
-    return {
-      valid: false,
-      error:
-        'The selected supplier is missing its ID.'
-    };
-  }
-
-  if (
-    [
-      'addStock',
-      'removeStock',
-      'sellProduct'
-    ].includes(action.type)
+    ['addStock', 'removeStock', 'sellProduct'].includes(action.type)
   ) {
     if (
       !Number.isFinite(Number(action.qty)) ||
@@ -1026,8 +968,7 @@ export function validateAction(action) {
     ) {
       return {
         valid: false,
-        error:
-          'Quantity must be greater than zero.'
+        error: 'Quantity must be greater than zero.'
       };
     }
   }
@@ -1039,19 +980,15 @@ export function validateAction(action) {
     ) {
       return {
         valid: false,
-        error:
-          'At least one stock item is required.'
+        error: 'At least one stock item is required.'
       };
     }
 
     for (const item of action.items) {
-      if (
-        !String(item?.name || '').trim()
-      ) {
+      if (!String(item?.name || '').trim()) {
         return {
           valid: false,
-          error:
-            'Each stock item needs a product name.'
+          error: 'Each stock item needs a product name.'
         };
       }
 
@@ -1086,16 +1023,12 @@ export function validateAction(action) {
     ) {
       return {
         valid: false,
-        error:
-          'At least one sale item is required.'
+        error: 'At least one sale item is required.'
       };
     }
 
     for (const item of action.items) {
-      if (
-        !item?.product ||
-        !item.product.id
-      ) {
+      if (!item?.product || !item.product.id) {
         return {
           valid: false,
           error:
@@ -1117,9 +1050,7 @@ export function validateAction(action) {
       if (
         item.unitPrice !== undefined &&
         (
-          !Number.isFinite(
-            Number(item.unitPrice)
-          ) ||
+          !Number.isFinite(Number(item.unitPrice)) ||
           Number(item.unitPrice) < 0
         )
       ) {
@@ -1147,8 +1078,7 @@ export function validateAction(action) {
     ) {
       return {
         valid: false,
-        error:
-          'Amount must be greater than zero.'
+        error: 'Amount must be greater than zero.'
       };
     }
   }
@@ -1162,86 +1092,80 @@ export function validateAction(action) {
 /* MULTI-ITEM NORMALIZATION HELPERS                                           */
 /* -------------------------------------------------------------------------- */
 
-const FILLER_AND_LINK_WORDS =
-  new Set([
-    'aur',
-    'or',
-    'and',
-    'اور',
+const FILLER_AND_LINK_WORDS = new Set([
+  'aur',
+  'or',
+  'and',
+  'اور',
 
-    'mein',
-    'me',
-    'main',
-    'ma',
-    'میں',
+  'mein',
+  'me',
+  'main',
+  'ma',
+  'میں',
 
-    'ka',
-    'ki',
-    'ke',
-    'kay',
-    'kaa',
-    'کا',
-    'کی',
-    'کے',
+  'ka',
+  'ki',
+  'ke',
+  'kay',
+  'kaa',
+  'کا',
+  'کی',
+  'کے',
 
-    'ko',
-    'سے',
-    'se',
-    'کو',
+  'ko',
+  'سے',
+  'se',
+  'کو',
 
-    'karo',
-    'kro',
-    'kar',
-    'kr',
-    'krdo',
-    'kardo',
-    'کرو',
-    'کر',
-    'دو',
+  'karo',
+  'kro',
+  'kar',
+  'kr',
+  'krdo',
+  'kardo',
+  'کرو',
+  'کر',
+  'دو',
 
-    'hai',
-    'he',
-    'hy',
-    'hain',
-    'ہے',
-    'ہیں',
+  'hai',
+  'he',
+  'hy',
+  'hain',
+  'ہے',
+  'ہیں',
 
-    'bhai',
-    'yaar',
-    'please',
-    'plz',
-    'zara',
-    'ab',
+  'bhai',
+  'yaar',
+  'please',
+  'plz',
+  'zara',
+  'ab',
 
-    'it',
-    'itna',
-    'bas',
-    'just',
+  'it',
+  'itna',
+  'bas',
+  'just',
 
-    'do'
-  ]);
+  'do'
+]);
 
-const PRICE_INDICATOR_WORDS =
-  new Set(
-    WORDS.price.map(w => norm(w))
-  );
+const PRICE_INDICATOR_WORDS = new Set(
+  WORDS.price.map(w => norm(w))
+);
 
-const SALE_WORDS_SET =
-  new Set(
-    WORDS.sale.map(w => norm(w))
-  );
+const SALE_WORDS_SET = new Set(
+  WORDS.sale.map(w => norm(w))
+);
 
-const STOCK_ACTION_WORDS_SET =
-  new Set(
-    WORDS.addStock
-      .concat(WORDS.removeStock)
-      .map(w => norm(w))
-  );
+const STOCK_ACTION_WORDS_SET = new Set(
+  WORDS.addStock
+    .concat(WORDS.removeStock)
+    .map(w => norm(w))
+);
 
 function isNumberToken(token) {
-  if (!token) {
-    return false;
-  }
+  if (!token) return false;
 
   if (/^\d+(?:\.\d+)?$/.test(token)) {
     return true;
@@ -1254,10 +1178,7 @@ function isNumberToken(token) {
 }
 
 function evaluateNumberTokens(tokens) {
-  if (
-    !Array.isArray(tokens) ||
-    !tokens.length
-  ) {
+  if (!Array.isArray(tokens) || !tokens.length) {
     return NaN;
   }
 
@@ -1267,79 +1188,50 @@ function evaluateNumberTokens(tokens) {
 }
 
 function isSaleWord(token) {
-  return SALE_WORDS_SET.has(
-    norm(token)
-  );
+  return SALE_WORDS_SET.has(norm(token));
 }
 
 function isStockActionWord(token) {
-  return STOCK_ACTION_WORDS_SET.has(
-    norm(token)
-  );
+  return STOCK_ACTION_WORDS_SET.has(norm(token));
 }
 
 function isFiller(token) {
-  return FILLER_AND_LINK_WORDS.has(
-    norm(token)
-  );
+  return FILLER_AND_LINK_WORDS.has(norm(token));
 }
 
 function isPriceIndicator(token) {
-  return PRICE_INDICATOR_WORDS.has(
-    norm(token)
-  );
+  return PRICE_INDICATOR_WORDS.has(norm(token));
 }
 
 /*
- * Returns the longest exact product-name match
- * starting at index.
+ * Returns the longest exact product-name match starting at index.
  *
- * Example:
+ * This is important for multi-item sales:
  *
  *   1 mobile charger 3 photo frame 2 lamp
  *
- * "mobile charger" is treated as one product.
+ * It makes "mobile charger" one product instead of two words.
  */
-function findProductStartingAt(
-  tokens,
-  index,
-  allProducts
-) {
-  if (
-    !Array.isArray(allProducts) ||
-    !allProducts.length
-  ) {
+function findProductStartingAt(tokens, index, allProducts) {
+  if (!Array.isArray(allProducts) || !allProducts.length) {
     return null;
   }
 
-  const maxWords =
-    Math.min(
-      12,
-      tokens.length - index
+  const maxWords = Math.min(
+    12,
+    tokens.length - index
+  );
+
+  for (let len = maxWords; len >= 1; len--) {
+    const candidate = tokens
+      .slice(index, index + len)
+      .join(' ');
+
+    const normalizedCandidate = norm(candidate);
+
+    const found = allProducts.find(
+      p => norm(p?.name) === normalizedCandidate
     );
-
-  for (
-    let len = maxWords;
-    len >= 1;
-    len--
-  ) {
-    const candidate =
-      tokens
-        .slice(
-          index,
-          index + len
-        )
-        .join(' ');
-
-    const normalizedCandidate =
-      norm(candidate);
-
-    const found =
-      allProducts.find(
-        p =>
-          norm(p?.name) ===
-          normalizedCandidate
-      );
 
     if (found) {
       return {
@@ -1352,11 +1244,11 @@ function findProductStartingAt(
   return null;
 }
 
-function nextKnownProduct(
-  tokens,
-  index,
-  allProducts
-) {
+/*
+ * Find whether tokens beginning at index represent a known product
+ * after an optional quantity.
+ */
+function nextKnownProduct(tokens, index, allProducts) {
   let start = index;
 
   while (
@@ -1374,125 +1266,91 @@ function nextKnownProduct(
 }
 
 /*
- * Remove repeated/duplicate product items
- * from a stock batch.
+ * Remove repeated/duplicate product items from a batch.
+ *
+ * Example:
+ *   2 lamp 3 lamp stock add
+ *
+ * becomes:
+ *   lamp qty = 5
  */
-function mergeStockItems(
-  items,
-  allProducts
-) {
+function mergeStockItems(items, allProducts) {
   const map = new Map();
 
   for (const item of items) {
-    const key =
-      norm(
-        item.product?.name ||
-        item.name
-      );
+    const key = norm(
+      item.product?.name || item.name
+    );
 
-    if (!key) {
-      continue;
-    }
+    if (!key) continue;
 
     if (!map.has(key)) {
       map.set(key, {
         ...item
       });
     } else {
-      const existing =
-        map.get(key);
+      const existing = map.get(key);
 
       existing.qty =
         Number(existing.qty || 0) +
         Number(item.qty || 0);
 
+      /*
+       * If a later item explicitly gives a price,
+       * use that price.
+       */
       if (
-        Number.isFinite(
-          Number(item.price)
-        ) &&
+        Number.isFinite(Number(item.price)) &&
         Number(item.price) >= 0
       ) {
-        existing.price =
-          Number(item.price);
+        existing.price = Number(item.price);
       }
     }
   }
 
-  return [...map.values()].map(
-    item => {
-      if (!item.product) {
-        const found =
-          allProducts.find(
-            p =>
-              norm(p.name) ===
-              norm(item.name)
-          );
+  return [...map.values()].map(item => {
+    if (!item.product) {
+      const found = allProducts.find(
+        p => norm(p.name) === norm(item.name)
+      );
 
-        if (found) {
-          item.product = found;
-          item.name = found.name;
-        }
+      if (found) {
+        item.product = found;
+        item.name = found.name;
       }
-
-      return item;
     }
-  );
+
+    return item;
+  });
 }
 
-/*
- * Merge duplicate sale products while NEVER
- * losing an explicitly supplied selling price.
- */
 function mergeSaleItems(items) {
   const map = new Map();
 
   for (const item of items) {
-    if (
-      !item?.product?.id
-    ) {
-      continue;
-    }
+    if (!item?.product?.id) continue;
 
-    const key =
-      String(item.product.id);
+    const key = String(item.product.id);
 
     if (!map.has(key)) {
       map.set(key, {
-        ...item,
-
-        /*
-         * Normalize the custom price into a real Number
-         * while preserving "undefined" when no custom price
-         * was supplied.
-         */
-        unitPrice:
-          item.unitPrice !== undefined
-            ? Number(item.unitPrice)
-            : undefined
+        ...item
       });
-
       continue;
     }
 
-    const existing =
-      map.get(key);
+    const existing = map.get(key);
 
     existing.qty =
       Number(existing.qty || 0) +
       Number(item.qty || 0);
 
     /*
-     * A later explicit custom price must override
-     * the earlier one.
+     * If the second occurrence has a custom price,
+     * retain that explicit price.
      */
-    if (
-      item.unitPrice !== undefined &&
-      Number.isFinite(
-        Number(item.unitPrice)
-      )
-    ) {
-      existing.unitPrice =
-        Number(item.unitPrice);
+    if (item.unitPrice !== undefined) {
+      existing.unitPrice = Number(item.unitPrice);
     }
   }
 
@@ -1503,21 +1361,16 @@ function mergeSaleItems(items) {
 /* STOCK MULTI-ITEM PARSER                                                    */
 /* -------------------------------------------------------------------------- */
 
-export function parseMultiStockItems(
-  body,
-  allProducts
-) {
-  const rawTokens =
-    norm(body)
-      .split(/\s+/)
-      .filter(Boolean);
+export function parseMultiStockItems(body, allProducts) {
+  const rawTokens = norm(body)
+    .split(/\s+/)
+    .filter(Boolean);
 
   const items = [];
   let i = 0;
 
-  while (
-    i < rawTokens.length
-  ) {
+  while (i < rawTokens.length) {
+    /* Skip command/filler words */
     while (
       i < rawTokens.length &&
       (
@@ -1529,22 +1382,19 @@ export function parseMultiStockItems(
       i++;
     }
 
-    if (
-      i >= rawTokens.length
-    ) {
-      break;
-    }
+    if (i >= rawTokens.length) break;
 
-    /* Quantity */
+    /* -------------------------------------------------------------- */
+    /* Quantity                                                        */
+    /* -------------------------------------------------------------- */
+
     const qtyTokens = [];
 
     while (
       i < rawTokens.length &&
       isNumberToken(rawTokens[i])
     ) {
-      qtyTokens.push(
-        rawTokens[i]
-      );
+      qtyTokens.push(rawTokens[i]);
       i++;
     }
 
@@ -1553,50 +1403,36 @@ export function parseMultiStockItems(
       continue;
     }
 
-    const qty =
-      evaluateNumberTokens(
-        qtyTokens
-      );
+    const qty = evaluateNumberTokens(qtyTokens);
 
-    if (
-      !Number.isFinite(qty) ||
-      qty <= 0
-    ) {
+    if (!Number.isFinite(qty) || qty <= 0) {
       return [];
     }
 
-    /* Product */
-    const knownProduct =
-      findProductStartingAt(
-        rawTokens,
-        i,
-        allProducts
-      );
+    /* -------------------------------------------------------------- */
+    /* Product name                                                    */
+    /* -------------------------------------------------------------- */
+
+    const knownProduct = findProductStartingAt(
+      rawTokens,
+      i,
+      allProducts
+    );
 
     let product = null;
     let productName = '';
 
     if (knownProduct) {
-      product =
-        knownProduct.product;
-
-      productName =
-        product.name;
-
-      i +=
-        knownProduct.length;
+      product = knownProduct.product;
+      productName = product.name;
+      i += knownProduct.length;
     } else {
       const nameTokens = [];
 
-      while (
-        i < rawTokens.length
-      ) {
-        const token =
-          rawTokens[i];
+      while (i < rawTokens.length) {
+        const token = rawTokens[i];
 
-        if (
-          isNumberToken(token)
-        ) {
+        if (isNumberToken(token)) {
           break;
         }
 
@@ -1612,11 +1448,8 @@ export function parseMultiStockItems(
           nameTokens.length > 0
         ) {
           if (
-            i + 1 <
-              rawTokens.length &&
-            isNumberToken(
-              rawTokens[i + 1]
-            )
+            i + 1 < rawTokens.length &&
+            isNumberToken(rawTokens[i + 1])
           ) {
             break;
           }
@@ -1626,24 +1459,19 @@ export function parseMultiStockItems(
         i++;
       }
 
-      productName =
-        nameTokens.join(' ').trim();
+      productName = nameTokens.join(' ').trim();
 
       if (!productName) {
         break;
       }
 
-      const exact =
-        allProducts.find(
-          p =>
-            norm(p.name) ===
-            norm(productName)
-        );
+      const exact = allProducts.find(
+        p => norm(p.name) === norm(productName)
+      );
 
       if (exact) {
         product = exact;
-        productName =
-          exact.name;
+        productName = exact.name;
       }
     }
 
@@ -1651,7 +1479,10 @@ export function parseMultiStockItems(
       break;
     }
 
-    /* Price */
+    /* -------------------------------------------------------------- */
+    /* Price                                                           */
+    /* -------------------------------------------------------------- */
+
     while (
       i < rawTokens.length &&
       (
@@ -1661,11 +1492,8 @@ export function parseMultiStockItems(
     ) {
       if (
         isFiller(rawTokens[i]) &&
-        i + 1 <
-          rawTokens.length &&
-        isNumberToken(
-          rawTokens[i + 1]
-        )
+        i + 1 < rawTokens.length &&
+        isNumberToken(rawTokens[i + 1])
       ) {
         break;
       }
@@ -1683,49 +1511,33 @@ export function parseMultiStockItems(
         break;
       }
 
-      priceTokens.push(
-        rawTokens[i]
-      );
-
+      priceTokens.push(rawTokens[i]);
       i++;
     }
 
     let price = NaN;
 
     if (priceTokens.length) {
-      price =
-        evaluateNumberTokens(
-          priceTokens
-        );
+      price = evaluateNumberTokens(priceTokens);
     }
 
-    const finalPrice =
-      Number.isFinite(price)
-        ? price
-        : (
-          product
-            ? Number(product.cost || 0)
-            : 0
-        );
+    const finalPrice = Number.isFinite(price)
+      ? price
+      : (
+        product
+          ? Number(product.cost || 0)
+          : 0
+      );
 
     items.push({
       name: productName,
-      product:
-        product || null,
-      qty:
-        Math.floor(qty),
-      price:
-        Math.max(
-          0,
-          Number(finalPrice) || 0
-        )
+      product: product || null,
+      qty: Math.floor(qty),
+      price: Math.max(0, Number(finalPrice) || 0)
     });
   }
 
-  return mergeStockItems(
-    items,
-    allProducts
-  );
+  return mergeStockItems(items, allProducts);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1733,76 +1545,53 @@ export function parseMultiStockItems(
 /* -------------------------------------------------------------------------- */
 
 /*
- * IMPORTANT:
- *
- * The parser below deliberately separates:
- *
- *   quantity
- *   product
- *   custom selling price
- *   next product quantity
- *
- * Examples:
- *
- *   1 lamp 1000 ka sale karo
- *
- *     quantity = 1
- *     product  = lamp
- *     price    = 1000
+ * Supported examples:
  *
  *   1 lamp 3 frame sale karo
  *
- *     quantity = 1
- *     product  = lamp
- *     3        = next quantity
- *     product  = frame
+ *   1 lamp and 3 frame sale karo
  *
- *   1 lamp 1000 ka aur 3 frame 600 ka sale karo
+ *   1 lamp 3 frame 4 charger sale karo
  *
- *     lamp  = 1 @ 1000
- *     frame = 3 @ 600
+ *   1 lamp 300 3 frame 600 sale karo
  *
- * The key rule is:
+ * The important rule is:
  *
- *   NUMBER after product
+ *   NUMBER + PRODUCT + NUMBER + PRODUCT
  *
- * is a custom price ONLY when that number is NOT
- * followed by another known product.
+ * means:
+ *
+ *   first NUMBER  = first product quantity
+ *   second NUMBER = next product quantity
+ *
+ * unless the number is followed by no known product, in which case
+ * it is treated as the current product's custom selling price.
  */
-
-export function parseMultiSaleItems(
-  body,
-  allProducts
-) {
-  const rawTokens =
-    norm(body)
-      .split(/\s+/)
-      .filter(Boolean);
+export function parseMultiSaleItems(body, allProducts) {
+  const rawTokens = norm(body)
+    .split(/\s+/)
+    .filter(Boolean);
 
   const items = [];
   let i = 0;
 
-  while (
-    i < rawTokens.length
-  ) {
+  while (i < rawTokens.length) {
     /* -------------------------------------------------------------- */
-    /* Skip command words                                              */
+    /* Skip fillers / sale / price words                              */
     /* -------------------------------------------------------------- */
 
     while (
       i < rawTokens.length &&
       (
+        isFiller(rawTokens[i]) ||
         isSaleWord(rawTokens[i]) ||
-        isPriceIndicator(rawTokens[i]) ||
-        isFiller(rawTokens[i])
+        isPriceIndicator(rawTokens[i])
       )
     ) {
       i++;
     }
 
-    if (
-      i >= rawTokens.length
-    ) {
+    if (i >= rawTokens.length) {
       break;
     }
 
@@ -1811,32 +1600,25 @@ export function parseMultiSaleItems(
     /* -------------------------------------------------------------- */
 
     let qty = 1;
-
     const qtyTokens = [];
 
     while (
       i < rawTokens.length &&
       isNumberToken(rawTokens[i])
     ) {
-      qtyTokens.push(
-        rawTokens[i]
-      );
-
+      qtyTokens.push(rawTokens[i]);
       i++;
     }
 
     if (qtyTokens.length) {
       const parsedQty =
-        evaluateNumberTokens(
-          qtyTokens
-        );
+        evaluateNumberTokens(qtyTokens);
 
       if (
         Number.isFinite(parsedQty) &&
         parsedQty > 0
       ) {
-        qty =
-          Math.floor(parsedQty);
+        qty = Math.floor(parsedQty);
       }
     }
 
@@ -1854,27 +1636,20 @@ export function parseMultiSaleItems(
       );
 
     if (productMatch) {
-      matchedProduct =
-        productMatch.product;
-
-      i +=
-        productMatch.length;
+      matchedProduct = productMatch.product;
+      i += productMatch.length;
     } else {
       /*
        * Unknown products cannot safely be sold.
-       * Collect their name so caller can report it.
+       *
+       * Gather the product name so the caller can report it.
        */
       const nameTokens = [];
 
-      while (
-        i < rawTokens.length
-      ) {
-        const token =
-          rawTokens[i];
+      while (i < rawTokens.length) {
+        const token = rawTokens[i];
 
-        if (
-          isNumberToken(token)
-        ) {
+        if (isNumberToken(token)) {
           break;
         }
 
@@ -1885,21 +1660,13 @@ export function parseMultiSaleItems(
           break;
         }
 
-        /*
-         * If a filler is followed by a number,
-         * it normally separates this product from
-         * another item's quantity.
-         */
         if (
           isFiller(token) &&
           nameTokens.length > 0
         ) {
           if (
-            i + 1 <
-              rawTokens.length &&
-            isNumberToken(
-              rawTokens[i + 1]
-            )
+            i + 1 < rawTokens.length &&
+            isNumberToken(rawTokens[i + 1])
           ) {
             break;
           }
@@ -1916,12 +1683,9 @@ export function parseMultiSaleItems(
         break;
       }
 
-      const exact =
-        allProducts.find(
-          p =>
-            norm(p.name) ===
-            norm(fallbackName)
-        );
+      const exact = allProducts.find(
+        p => norm(p.name) === norm(fallbackName)
+      );
 
       if (exact) {
         matchedProduct = exact;
@@ -1942,139 +1706,65 @@ export function parseMultiSaleItems(
     }
 
     /* -------------------------------------------------------------- */
-    /* AFTER PRODUCT                                                   */
+    /* After product: determine PRICE or NEXT QUANTITY                */
     /* -------------------------------------------------------------- */
 
-    /*
-     * We DO NOT blindly remove every filler here.
-     *
-     * Example:
-     *
-     *   lamp 1000 ka
-     *
-     * "ka" must be ignored so 1000 can be recognized
-     * as the price.
-     *
-     * But:
-     *
-     *   lamp 3 frame
-     *
-     * has "3" immediately after lamp and therefore
-     * it must remain available as the next quantity.
-     */
-
-    let cursor = i;
-
-    /*
-     * Detect an explicit price word anywhere immediately
-     * around the price:
-     *
-     *   lamp price 1000
-     *   lamp rate 1000
-     *   lamp qeemat 1000
-     */
-    let explicitPriceIndicator = false;
-
     while (
-      cursor < rawTokens.length &&
-      isFiller(rawTokens[cursor])
+      i < rawTokens.length &&
+      isFiller(rawTokens[i])
     ) {
       /*
-       * CRITICAL:
+       * Keep:
        *
-       * If the filler is directly before a number,
-       * keep the number for the price/next-item test.
+       *   3 frame
        *
-       * Example:
-       *   lamp ka 1000
-       *
-       * We don't consume 1000 here.
+       * together.
        */
       if (
-        cursor + 1 <
-          rawTokens.length &&
-        isNumberToken(
-          rawTokens[cursor + 1]
-        )
+        i + 1 < rawTokens.length &&
+        isNumberToken(rawTokens[i + 1])
       ) {
         break;
       }
 
-      cursor++;
+      i++;
     }
 
     /*
-     * If "price/rate/qeemat" occurs before the number,
-     * this is definitely a custom price.
+     * "price 300"
+     *
+     * explicitly means current product price.
      */
+    let explicitPriceIndicator = false;
+
     while (
-      cursor < rawTokens.length &&
-      isPriceIndicator(
-        rawTokens[cursor]
-      )
+      i < rawTokens.length &&
+      isPriceIndicator(rawTokens[i])
     ) {
       explicitPriceIndicator = true;
-      cursor++;
-
-      /*
-       * Allow:
-       *
-       * price of 1000
-       * price ka 1000
-       * rate mein 1000
-       */
-      while (
-        cursor < rawTokens.length &&
-        isFiller(rawTokens[cursor])
-      ) {
-        if (
-          cursor + 1 <
-            rawTokens.length &&
-          isNumberToken(
-            rawTokens[cursor + 1]
-          )
-        ) {
-          break;
-        }
-
-        cursor++;
-      }
+      i++;
     }
 
-    /*
-     * After the product there may be:
-     *
-     *   lamp 1000
-     *   lamp ka 1000
-     *   lamp 1000 ka
-     *   lamp price 1000
-     *
-     * All of these should use 1000 as custom price.
-     */
+    let customUnitPrice;
+
     if (
-      cursor < rawTokens.length &&
-      isNumberToken(
-        rawTokens[cursor]
-      )
+      i < rawTokens.length &&
+      isNumberToken(rawTokens[i])
     ) {
-      const numberIndex =
-        cursor;
+      const numberIndex = i;
 
       /*
-       * Check if this number is followed by
-       * a known product.
+       * Check whether the number starts another item:
        *
        *   1 lamp 3 frame
        *
-       * 3 + frame = next item.
+       * number = 3
+       * product after number = frame
        *
-       *   1 lamp 1000 ka
-       *
-       * 1000 + ka = NOT another product,
-       * therefore 1000 = custom price.
+       * Therefore 3 = frame quantity.
        */
       const nextProduct =
-        nextKnownProduct(
+        findProductStartingAt(
           rawTokens,
           numberIndex + 1,
           allProducts
@@ -2093,118 +1783,24 @@ export function parseMultiSaleItems(
           Number.isFinite(parsedPrice) &&
           parsedPrice >= 0
         ) {
-          items.push({
-            name:
-              matchedProduct.name,
-
-            product:
-              matchedProduct,
-
-            qty,
-
-            /*
-             * THIS is the important value.
-             * It is carried all the way into
-             * executeBatchSale().
-             */
-            unitPrice:
-              parsedPrice
-          });
-
-          /*
-           * Consume the price.
-           */
-          i =
-            numberIndex + 1;
-
-          /*
-           * Consume trailing filler words belonging
-           * to this price phrase:
-           *
-           *   1000 ka sale karo
-           *
-           * but STOP if the filler leads directly
-           * to another quantity.
-           */
-          while (
-            i < rawTokens.length &&
-            isFiller(rawTokens[i])
-          ) {
-            if (
-              i + 1 <
-                rawTokens.length &&
-              isNumberToken(
-                rawTokens[i + 1]
-              )
-            ) {
-              break;
-            }
-
-            i++;
-          }
-
-          continue;
+          customUnitPrice = parsedPrice;
+          i++;
         }
       }
 
       /*
-       * If nextProduct exists and there was no explicit
-       * price indicator, the number remains unconsumed.
+       * If nextProduct exists and there was no explicit price word,
+       * leave the number untouched.
        *
-       * This means:
-       *
-       *   1 lamp 3 frame
-       *
-       * becomes:
-       *
-       *   lamp qty 1
-       *   frame qty 3
+       * The next loop will use it as the next product quantity.
        */
-      i =
-        numberIndex;
-
-    } else {
-      /*
-       * No custom price.
-       *
-       * Use normal product price later.
-       */
-      i = cursor;
-
-      items.push({
-        name:
-          matchedProduct.name,
-
-        product:
-          matchedProduct,
-
-        qty,
-
-        unitPrice:
-          undefined
-      });
-
-      continue;
     }
 
-    /*
-     * If we reached here, there was a number after the
-     * product but it was determined to be the next
-     * item's quantity.
-     *
-     * Add current item WITHOUT a custom price.
-     */
     items.push({
-      name:
-        matchedProduct.name,
-
-      product:
-        matchedProduct,
-
+      name: matchedProduct.name,
+      product: matchedProduct,
       qty,
-
-      unitPrice:
-        undefined
+      unitPrice: customUnitPrice
     });
   }
 
@@ -2218,25 +1814,17 @@ export function parseMultiSaleItems(
 export async function execute(action) {
   requireUser();
 
-  const validation =
-    validateAction(action);
+  const validation = validateAction(action);
 
   if (!validation.valid) {
-    throw new Error(
-      validation.error
-    );
+    throw new Error(validation.error);
   }
 
   const db = window.db;
   const doc = window.doc;
-  const collection =
-    window.collection;
+  const collection = window.collection;
 
-  if (
-    !db ||
-    !doc ||
-    !collection
-  ) {
+  if (!db || !doc || !collection) {
     throw new Error(
       'The database interface is not available.'
     );
@@ -2250,444 +1838,295 @@ export async function execute(action) {
     action.type === 'addStock' ||
     action.type === 'removeStock'
   ) {
-    const ref =
-      doc(
-        db,
-        'products',
-        action.product.id
-      );
+    const ref = doc(
+      db,
+      'products',
+      action.product.id
+    );
 
     let newStock = 0;
 
-    await window.runAtomicOrOffline(
-      async tx => {
-        const snap =
-          await tx.get(ref);
+    await window.runAtomicOrOffline(async tx => {
+      const snap = await tx.get(ref);
 
-        if (!snap.exists()) {
-          throw new Error(
-            'Product no longer exists.'
-          );
-        }
-
-        const data =
-          snap.data();
-
-        if (
-          data.ownerId !==
-          ownerId()
-        ) {
-          throw new Error(
-            'Unauthorized product.'
-          );
-        }
-
-        const current =
-          Number(data.stock) || 0;
-
-        newStock =
-          action.type === 'addStock'
-            ? current +
-              Number(action.qty)
-            : current -
-              Number(action.qty);
-
-        if (newStock < 0) {
-          throw new Error(
-            `Not enough stock. Available: ${current}, requested: ${action.qty}.`
-          );
-        }
-
-        tx.update(
-          ref,
-          {
-            stock: newStock,
-            updatedAt:
-              new Date().toISOString()
-          }
-        );
-
-        const adjustmentRef =
-          doc(
-            collection(
-              db,
-              'stockAdjustments'
-            )
-          );
-
-        tx.set(
-          adjustmentRef,
-          {
-            ownerId:
-              ownerId(),
-
-            productId:
-              action.product.id,
-
-            type:
-              action.type === 'addStock'
-                ? 'add'
-                : 'remove',
-
-            quantity:
-              Number(action.qty),
-
-            date:
-              new Date().toISOString(),
-
-            note:
-              'AI agent'
-          }
+      if (!snap.exists()) {
+        throw new Error(
+          'Product no longer exists.'
         );
       }
-    );
+
+      const data = snap.data();
+
+      if (data.ownerId !== ownerId()) {
+        throw new Error(
+          'Unauthorized product.'
+        );
+      }
+
+      const current =
+        Number(data.stock) || 0;
+
+      newStock =
+        action.type === 'addStock'
+          ? current + Number(action.qty)
+          : current - Number(action.qty);
+
+      if (newStock < 0) {
+        throw new Error(
+          `Not enough stock. Available: ${current}, requested: ${action.qty}.`
+        );
+      }
+
+      tx.update(ref, {
+        stock: newStock,
+        updatedAt: new Date().toISOString()
+      });
+
+      const adjustmentRef =
+        doc(collection(db, 'stockAdjustments'));
+
+      tx.set(adjustmentRef, {
+        ownerId: ownerId(),
+        productId: action.product.id,
+        type:
+          action.type === 'addStock'
+            ? 'add'
+            : 'remove',
+        quantity: Number(action.qty),
+        date: new Date().toISOString(),
+        note: 'AI agent'
+      });
+    });
 
     rememberContext({
-      product:
-        action.product,
+      product: action.product,
       action
     });
 
     return (
       `Done. ${action.product.name} stock ` +
-      `${
-        action.type === 'addStock'
-          ? 'increased'
-          : 'decreased'
-      } ` +
+      `${action.type === 'addStock' ? 'increased' : 'decreased'} ` +
       `by ${action.qty}. New stock: ${newStock}.`
     );
   }
 
   /* ---------------------------------------------------------------------- */
-  /* Batch Stock Add / Auto-Create Missing Products                          */
+  /* Batch Stock Add / Auto-Create Missing Products                           */
   /* ---------------------------------------------------------------------- */
 
-  if (
-    action.type ===
-    'addStockBatch'
-  ) {
+  if (action.type === 'addStockBatch') {
     const results = [];
 
-    const mergedItems =
-      mergeStockItems(
-        action.items,
-        products()
-      );
+    const mergedItems = mergeStockItems(
+      action.items,
+      products()
+    );
 
-    await window.runAtomicOrOffline(
-      async tx => {
-        const productState =
-          new Map();
+    await window.runAtomicOrOffline(async tx => {
+      const productState = new Map();
 
-        for (
-          const item of mergedItems
+      for (const item of mergedItems) {
+        const name =
+          String(item.name || '').trim();
+
+        const qty =
+          Number(item.qty);
+
+        const price =
+          Number(item.price);
+
+        if (!name) {
+          throw new Error(
+            'A stock item has no product name.'
+          );
+        }
+
+        if (
+          !Number.isFinite(qty) ||
+          qty <= 0
         ) {
-          const name =
-            String(
-              item.name || ''
-            ).trim();
+          throw new Error(
+            `Invalid quantity for ${name}.`
+          );
+        }
 
-          const qty =
-            Number(item.qty);
+        if (
+          !Number.isFinite(price) ||
+          price < 0
+        ) {
+          throw new Error(
+            `Invalid price for ${name}.`
+          );
+        }
 
-          const price =
-            Number(item.price);
+        let existing =
+          products().find(
+            p => norm(p.name) === norm(name)
+          );
 
-          if (!name) {
-            throw new Error(
-              'A stock item has no product name.'
-            );
-          }
+        const existingKey =
+          existing
+            ? String(existing.id)
+            : `new:${norm(name)}`;
 
-          if (
-            !Number.isFinite(qty) ||
-            qty <= 0
-          ) {
-            throw new Error(
-              `Invalid quantity for ${name}.`
-            );
-          }
+        if (existing) {
+          const ref = doc(
+            db,
+            'products',
+            existing.id
+          );
 
-          if (
-            !Number.isFinite(price) ||
-            price < 0
-          ) {
-            throw new Error(
-              `Invalid price for ${name}.`
-            );
-          }
+          let state =
+            productState.get(existingKey);
 
-          let existing =
-            products().find(
-              p =>
-                norm(p.name) ===
-                norm(name)
-            );
+          if (!state) {
+            const snap =
+              await tx.get(ref);
 
-          const existingKey =
-            existing
-              ? String(existing.id)
-              : `new:${norm(name)}`;
-
-          if (existing) {
-            const ref =
-              doc(
-                db,
-                'products',
-                existing.id
-              );
-
-            let state =
-              productState.get(
-                existingKey
-              );
-
-            if (!state) {
-              const snap =
-                await tx.get(ref);
-
-              if (!snap.exists()) {
-                throw new Error(
-                  `Product ${name} no longer exists.`
-                );
-              }
-
-              const data =
-                snap.data();
-
-              if (
-                data.ownerId !==
-                ownerId()
-              ) {
-                throw new Error(
-                  `Unauthorized product ${name}.`
-                );
-              }
-
-              state = {
-                ref,
-                name:
-                  data.name ||
-                  name,
-
-                stock:
-                  Number(
-                    data.stock
-                  ) || 0,
-
-                cost:
-                  Number(
-                    data.cost
-                  ) || 0,
-
-                price:
-                  Number(
-                    data.price
-                  ) || 0,
-
-                wholesalePrice:
-                  Number(
-                    data.wholesalePrice ??
-                    data.price ??
-                    0
-                  ),
-
-                retailPrice:
-                  Number(
-                    data.retailPrice ??
-                    data.price ??
-                    0
-                  )
-              };
-
-              productState.set(
-                existingKey,
-                state
+            if (!snap.exists()) {
+              throw new Error(
+                `Product ${name} no longer exists.`
               );
             }
 
-            state.stock += qty;
+            const data = snap.data();
 
-            const updates = {
-              stock:
-                state.stock,
+            if (
+              data.ownerId !== ownerId()
+            ) {
+              throw new Error(
+                `Unauthorized product ${name}.`
+              );
+            }
 
-              updatedAt:
-                new Date().toISOString()
+            state = {
+              ref,
+              name: data.name || name,
+              stock: Number(data.stock) || 0,
+              cost: Number(data.cost) || 0,
+              price: Number(data.price) || 0,
+              wholesalePrice:
+                Number(
+                  data.wholesalePrice ??
+                  data.price ??
+                  0
+                ),
+              retailPrice:
+                Number(
+                  data.retailPrice ??
+                  data.price ??
+                  0
+                )
             };
 
-            if (price > 0) {
-              state.cost = price;
-              state.price = price;
-              state.wholesalePrice =
-                price;
-              state.retailPrice =
-                price;
-
-              updates.cost =
-                price;
-
-              updates.price =
-                price;
-
-              updates.wholesalePrice =
-                price;
-
-              updates.retailPrice =
-                price;
-            }
-
-            tx.update(
-              state.ref,
-              updates
-            );
-
-            const adjustmentRef =
-              doc(
-                collection(
-                  db,
-                  'stockAdjustments'
-                )
-              );
-
-            tx.set(
-              adjustmentRef,
-              {
-                ownerId:
-                  ownerId(),
-
-                productId:
-                  existing.id,
-
-                type:
-                  'add',
-
-                quantity:
-                  qty,
-
-                price,
-
-                date:
-                  new Date().toISOString(),
-
-                note:
-                  'AI agent batch stock add'
-              }
-            );
-
-            results.push(
-              `${state.name}: +${qty} stock ` +
-              `(new stock: ${state.stock}) ` +
-              `at ${money(price)}`
-            );
-
-          } else {
-            const productRef =
-              doc(
-                collection(
-                  db,
-                  'products'
-                )
-              );
-
-            tx.set(
-              productRef,
-              {
-                name,
-
-                barcode:
-                  '',
-
-                cost:
-                  price,
-
-                price,
-
-                wholesalePrice:
-                  price,
-
-                retailPrice:
-                  price,
-
-                minStock:
-                  5,
-
-                stock:
-                  qty,
-
-                ownerId:
-                  ownerId(),
-
-                createdAt:
-                  new Date().toISOString(),
-
-                updatedAt:
-                  new Date().toISOString()
-              }
-            );
-
-            const adjustmentRef =
-              doc(
-                collection(
-                  db,
-                  'stockAdjustments'
-                )
-              );
-
-            tx.set(
-              adjustmentRef,
-              {
-                ownerId:
-                  ownerId(),
-
-                productId:
-                  productRef.id,
-
-                type:
-                  'add',
-
-                quantity:
-                  qty,
-
-                price,
-
-                date:
-                  new Date().toISOString(),
-
-                note:
-                  'AI agent product auto-creation'
-              }
-            );
-
             productState.set(
-              `new:${norm(name)}`,
-              {
-                ref:
-                  productRef,
-
-                name,
-
-                stock:
-                  qty
-              }
-            );
-
-            results.push(
-              `${name}: created with ${qty} stock ` +
-              `at ${money(price)}`
+              existingKey,
+              state
             );
           }
+
+          state.stock += qty;
+
+          const updates = {
+            stock: state.stock,
+            updatedAt:
+              new Date().toISOString()
+          };
+
+          if (price > 0) {
+            state.cost = price;
+            state.price = price;
+            state.wholesalePrice = price;
+            state.retailPrice = price;
+
+            updates.cost = price;
+            updates.price = price;
+            updates.wholesalePrice = price;
+            updates.retailPrice = price;
+          }
+
+          tx.update(
+            state.ref,
+            updates
+          );
+
+          const adjustmentRef =
+            doc(collection(db, 'stockAdjustments'));
+
+          tx.set(adjustmentRef, {
+            ownerId: ownerId(),
+            productId: existing.id,
+            type: 'add',
+            quantity: qty,
+            price,
+            date:
+              new Date().toISOString(),
+            note:
+              'AI agent batch stock add'
+          });
+
+          results.push(
+            `${state.name}: +${qty} stock ` +
+            `(new stock: ${state.stock}) ` +
+            `at ${money(price)}`
+          );
+
+        } else {
+          const productRef =
+            doc(collection(db, 'products'));
+
+          tx.set(productRef, {
+            name,
+            barcode: '',
+            cost: price,
+            price,
+            wholesalePrice: price,
+            retailPrice: price,
+            minStock: 5,
+            stock: qty,
+            ownerId: ownerId(),
+            createdAt:
+              new Date().toISOString(),
+            updatedAt:
+              new Date().toISOString()
+          });
+
+          const adjustmentRef =
+            doc(collection(db, 'stockAdjustments'));
+
+          tx.set(adjustmentRef, {
+            ownerId: ownerId(),
+            productId: productRef.id,
+            type: 'add',
+            quantity: qty,
+            price,
+            date:
+              new Date().toISOString(),
+            note:
+              'AI agent product auto-creation'
+          });
+
+          productState.set(
+            `new:${norm(name)}`,
+            {
+              ref: productRef,
+              name,
+              stock: qty
+            }
+          );
+
+          results.push(
+            `${name}: created with ${qty} stock ` +
+            `at ${money(price)}`
+          );
         }
       }
-    );
+    });
 
     return (
       `Added to stock successfully:\n` +
       results
-        .map(
-          r => `• ${r}`
-        )
+        .map(r => `• ${r}`)
         .join('\n')
     );
   }
@@ -2696,38 +2135,24 @@ export async function execute(action) {
   /* Single Product Sale                                                     */
   /* ---------------------------------------------------------------------- */
 
-  if (
-    action.type ===
-    'sellProduct'
-  ) {
+  if (action.type === 'sellProduct') {
     const items = [
       {
-        product:
-          action.product,
-
-        qty:
-          Number(action.qty),
-
+        product: action.product,
+        qty: Number(action.qty),
         unitPrice:
-          action.unitPrice !==
-          undefined
-            ? Number(
-              action.unitPrice
-            )
+          action.unitPrice !== undefined
+            ? Number(action.unitPrice)
             : undefined
       }
     ];
 
     return await executeBatchSale({
       items,
-
       customer:
-        action.customer ||
-        null,
-
+        action.customer || null,
       saleType:
-        action.saleType ||
-        'retail'
+        action.saleType || 'retail'
     });
   }
 
@@ -2735,13 +2160,8 @@ export async function execute(action) {
   /* Batch Sale                                                              */
   /* ---------------------------------------------------------------------- */
 
-  if (
-    action.type ===
-    'sellProductBatch'
-  ) {
-    return await executeBatchSale(
-      action
-    );
+  if (action.type === 'sellProductBatch') {
+    return await executeBatchSale(action);
   }
 
   /* ---------------------------------------------------------------------- */
@@ -2749,173 +2169,116 @@ export async function execute(action) {
   /* ---------------------------------------------------------------------- */
 
   if (
-    action.type ===
-      'receiveCustomer' ||
-    action.type ===
-      'giveCustomer'
+    action.type === 'receiveCustomer' ||
+    action.type === 'giveCustomer'
   ) {
-    const ref =
-      doc(
-        db,
-        'customers',
-        action.customer.id
-      );
+    const ref = doc(
+      db,
+      'customers',
+      action.customer.id
+    );
 
     const transactionRef =
-      doc(
-        collection(
-          db,
-          'customerTransactions'
-        )
-      );
+      doc(collection(db, 'customerTransactions'));
 
     let newBalance = 0;
 
-    await window.runAtomicOrOffline(
-      async tx => {
-        const snap =
-          await tx.get(ref);
+    await window.runAtomicOrOffline(async tx => {
+      const snap = await tx.get(ref);
 
-        if (!snap.exists()) {
-          throw new Error(
-            'Customer no longer exists.'
-          );
-        }
-
-        const data =
-          snap.data();
-
-        if (
-          data.ownerId !==
-          ownerId()
-        ) {
-          throw new Error(
-            'Unauthorized customer.'
-          );
-        }
-
-        const current =
-          Math.max(
-            0,
-            Number(
-              data.balance
-            ) || 0
-          );
-
-        if (
-          action.type ===
-            'receiveCustomer' &&
-          Number(
-            action.amount
-          ) > current
-        ) {
-          throw new Error(
-            `Amount exceeds customer due of ${money(current)}.`
-          );
-        }
-
-        newBalance =
-          action.type ===
-            'receiveCustomer'
-            ? Math.max(
-              0,
-              current -
-                Number(
-                  action.amount
-                )
-            )
-            : current +
-              Number(
-                action.amount
-              );
-
-        tx.update(
-          ref,
-          {
-            balance:
-              newBalance,
-
-            updatedAt:
-              new Date().toISOString()
-          }
-        );
-
-        tx.set(
-          transactionRef,
-          {
-            ownerId:
-              ownerId(),
-
-            customerId:
-              action.customer.id,
-
-            type:
-              action.type ===
-                'receiveCustomer'
-                ? 'payment'
-                : 'manual_debt',
-
-            amount:
-              Number(
-                action.amount
-              ),
-
-            amountPaid:
-              action.type ===
-                'receiveCustomer'
-                ? Number(
-                  action.amount
-                )
-                : 0,
-
-            debitAmount:
-              action.type ===
-                'receiveCustomer'
-                ? 0
-                : Number(
-                  action.amount
-                ),
-
-            creditAmount:
-              action.type ===
-                'receiveCustomer'
-                ? Number(
-                  action.amount
-                )
-                : 0,
-
-            balanceAfter:
-              newBalance,
-
-            date:
-              new Date().toISOString(),
-
-            note:
-              'AI agent',
-
-            createdBy:
-              window.authUserId ||
-              window.currentUserId
-          }
+      if (!snap.exists()) {
+        throw new Error(
+          'Customer no longer exists.'
         );
       }
-    );
+
+      const data = snap.data();
+
+      if (data.ownerId !== ownerId()) {
+        throw new Error(
+          'Unauthorized customer.'
+        );
+      }
+
+      const current =
+        Math.max(
+          0,
+          Number(data.balance) || 0
+        );
+
+      if (
+        action.type === 'receiveCustomer' &&
+        Number(action.amount) > current
+      ) {
+        throw new Error(
+          `Amount exceeds customer due of ${money(current)}.`
+        );
+      }
+
+      newBalance =
+        action.type === 'receiveCustomer'
+          ? Math.max(
+            0,
+            current - Number(action.amount)
+          )
+          : current + Number(action.amount);
+
+      tx.update(ref, {
+        balance: newBalance,
+        updatedAt:
+          new Date().toISOString()
+      });
+
+      tx.set(transactionRef, {
+        ownerId: ownerId(),
+        customerId:
+          action.customer.id,
+
+        type:
+          action.type === 'receiveCustomer'
+            ? 'payment'
+            : 'manual_debt',
+
+        amount:
+          Number(action.amount),
+
+        amountPaid:
+          action.type === 'receiveCustomer'
+            ? Number(action.amount)
+            : 0,
+
+        debitAmount:
+          action.type === 'receiveCustomer'
+            ? 0
+            : Number(action.amount),
+
+        creditAmount:
+          action.type === 'receiveCustomer'
+            ? Number(action.amount)
+            : 0,
+
+        balanceAfter:
+          newBalance,
+
+        date:
+          new Date().toISOString(),
+
+        note: 'AI agent',
+
+        createdBy:
+          window.authUserId ||
+          window.currentUserId
+      });
+    });
 
     rememberContext({
-      customer:
-        action.customer,
-
+      customer: action.customer,
       action
     });
 
     return (
       `Done. ${money(action.amount)} ` +
-      `${
-        action.type ===
-        'receiveCustomer'
-          ? 'received from'
-          : 'added to'
-      } ` +
+      `${action.type === 'receiveCustomer' ? 'received from' : 'added to'} ` +
       `${action.customer.name}. ` +
       `New due: ${money(newBalance)}.`
     );
@@ -2925,10 +2288,7 @@ export async function execute(action) {
   /* Add Customer                                                            */
   /* ---------------------------------------------------------------------- */
 
-  if (
-    action.type ===
-    'addCustomer'
-  ) {
+  if (action.type === 'addCustomer') {
     const existing =
       customers().filter(
         c =>
@@ -2944,43 +2304,24 @@ export async function execute(action) {
     }
 
     await window.addDoc(
-      collection(
-        db,
-        'customers'
-      ),
+      collection(db, 'customers'),
       {
-        name:
-          action.name,
-
-        phone:
-          action.phone || '',
-
-        address:
-          '',
-
-        notes:
-          '',
-
-        dueDate:
-          null,
-
-        balance:
-          0,
-
+        name: action.name,
+        phone: action.phone || '',
+        address: '',
+        notes: '',
+        dueDate: null,
+        balance: 0,
         createdAt:
           new Date().toISOString(),
-
-        ownerId:
-          ownerId()
+        ownerId: ownerId()
       }
     );
 
     rememberContext({
       customer: {
-        name:
-          action.name
+        name: action.name
       },
-
       action
     });
 
@@ -2994,10 +2335,7 @@ export async function execute(action) {
   /* Add Product                                                             */
   /* ---------------------------------------------------------------------- */
 
-  if (
-    action.type ===
-    'addProduct'
-  ) {
+  if (action.type === 'addProduct') {
     const existing =
       products().filter(
         p =>
@@ -3013,52 +2351,30 @@ export async function execute(action) {
     }
 
     const cost =
-      Number(action.cost) ||
-      0;
+      Number(action.cost) || 0;
 
     const wholesalePrice =
-      Number(
-        action.wholesalePrice
-      ) || cost;
+      Number(action.wholesalePrice) ||
+      cost;
 
     const retailPrice =
-      Number(
-        action.retailPrice
-      ) || wholesalePrice;
+      Number(action.retailPrice) ||
+      wholesalePrice;
 
     await window.addDoc(
-      collection(
-        db,
-        'products'
-      ),
+      collection(db, 'products'),
       {
-        name:
-          action.name,
-
-        barcode:
-          action.barcode || '',
-
+        name: action.name,
+        barcode: action.barcode || '',
         cost,
-
-        price:
-          wholesalePrice,
-
+        price: wholesalePrice,
         wholesalePrice,
-
         retailPrice,
-
         minStock:
-          Number(
-            action.minStock
-          ) || 5,
-
+          Number(action.minStock) || 5,
         stock:
-          Number(
-            action.stock
-          ) || 0,
-
-        ownerId:
-          ownerId()
+          Number(action.stock) || 0,
+        ownerId: ownerId()
       }
     );
 
@@ -3073,145 +2389,97 @@ export async function execute(action) {
   /* ---------------------------------------------------------------------- */
 
   if (
-    action.type ===
-      'supplierPayment' ||
-    action.type ===
-      'supplierDebt'
+    action.type === 'supplierPayment' ||
+    action.type === 'supplierDebt'
   ) {
-    const ref =
-      doc(
-        db,
-        'suppliers',
-        action.supplier.id
-      );
+    const ref = doc(
+      db,
+      'suppliers',
+      action.supplier.id
+    );
 
     const transactionRef =
-      doc(
-        collection(
-          db,
-          'supplierTransactions'
-        )
-      );
+      doc(collection(db, 'supplierTransactions'));
 
     let newBalance = 0;
 
-    await window.runAtomicOrOffline(
-      async tx => {
-        const snap =
-          await tx.get(ref);
+    await window.runAtomicOrOffline(async tx => {
+      const snap = await tx.get(ref);
 
-        if (!snap.exists()) {
-          throw new Error(
-            'Supplier no longer exists.'
-          );
-        }
-
-        const data =
-          snap.data();
-
-        if (
-          data.ownerId !==
-          ownerId()
-        ) {
-          throw new Error(
-            'Unauthorized supplier.'
-          );
-        }
-
-        const current =
-          Math.max(
-            0,
-            Number(
-              data.balance
-            ) || 0
-          );
-
-        if (
-          action.type ===
-            'supplierPayment' &&
-          Number(
-            action.amount
-          ) > current
-        ) {
-          throw new Error(
-            `Payment exceeds supplier payable of ${money(current)}.`
-          );
-        }
-
-        newBalance =
-          action.type ===
-            'supplierPayment'
-            ? Math.max(
-              0,
-              current -
-                Number(
-                  action.amount
-                )
-            )
-            : current +
-              Number(
-                action.amount
-              );
-
-        tx.update(
-          ref,
-          {
-            balance:
-              newBalance,
-
-            updatedAt:
-              new Date().toISOString()
-          }
-        );
-
-        tx.set(
-          transactionRef,
-          {
-            ownerId:
-              ownerId(),
-
-            supplierId:
-              action.supplier.id,
-
-            type:
-              action.type ===
-                'supplierPayment'
-                ? 'payment'
-                : 'manual_debt',
-
-            amount:
-              Number(
-                action.amount
-              ),
-
-            balanceAfter:
-              newBalance,
-
-            date:
-              new Date().toISOString(),
-
-            note:
-              'AI agent'
-          }
+      if (!snap.exists()) {
+        throw new Error(
+          'Supplier no longer exists.'
         );
       }
-    );
+
+      const data = snap.data();
+
+      if (data.ownerId !== ownerId()) {
+        throw new Error(
+          'Unauthorized supplier.'
+        );
+      }
+
+      const current =
+        Math.max(
+          0,
+          Number(data.balance) || 0
+        );
+
+      if (
+        action.type === 'supplierPayment' &&
+        Number(action.amount) > current
+      ) {
+        throw new Error(
+          `Payment exceeds supplier payable of ${money(current)}.`
+        );
+      }
+
+      newBalance =
+        action.type === 'supplierPayment'
+          ? Math.max(
+            0,
+            current - Number(action.amount)
+          )
+          : current + Number(action.amount);
+
+      tx.update(ref, {
+        balance: newBalance,
+        updatedAt:
+          new Date().toISOString()
+      });
+
+      tx.set(transactionRef, {
+        ownerId: ownerId(),
+        supplierId:
+          action.supplier.id,
+
+        type:
+          action.type === 'supplierPayment'
+            ? 'payment'
+            : 'manual_debt',
+
+        amount:
+          Number(action.amount),
+
+        balanceAfter:
+          newBalance,
+
+        date:
+          new Date().toISOString(),
+
+        note: 'AI agent'
+      });
+    });
 
     rememberContext({
-      supplier:
-        action.supplier,
-
+      supplier: action.supplier,
       action
     });
 
     return (
       `Done. ${money(action.amount)} ` +
-      `${
-        action.type ===
-        'supplierPayment'
-          ? 'paid to'
-          : 'added as payable to'
-      } ` +
+      `${action.type === 'supplierPayment' ? 'paid to' : 'added as payable to'} ` +
       `${action.supplier.name}. ` +
       `New payable: ${money(newBalance)}.`
     );
@@ -3221,34 +2489,24 @@ export async function execute(action) {
   /* Expense                                                                 */
   /* ---------------------------------------------------------------------- */
 
-  if (
-    action.type ===
-    'expense'
-  ) {
+  if (action.type === 'expense') {
     await window.addDoc(
-      collection(
-        db,
-        'expenses'
-      ),
+      collection(db, 'expenses'),
       {
         amount:
-          Number(
-            action.amount
-          ),
+          Number(action.amount),
 
         date:
           new Date().toISOString(),
 
         category:
-          action.category ||
-          'AI expense',
+          action.category || 'AI expense',
 
         note:
           action.note ||
           'Added by AI agent',
 
-        ownerId:
-          ownerId()
+        ownerId: ownerId()
       }
     );
 
@@ -3272,21 +2530,14 @@ export async function execute(action) {
 /* ATOMIC BATCH SALE                                                         */
 /* -------------------------------------------------------------------------- */
 
-async function executeBatchSale(
-  action
-) {
+async function executeBatchSale(action) {
   requireUser();
 
   const db = window.db;
   const doc = window.doc;
-  const collection =
-    window.collection;
+  const collection = window.collection;
 
-  if (
-    !db ||
-    !doc ||
-    !collection
-  ) {
+  if (!db || !doc || !collection) {
     throw new Error(
       'The database interface is not available.'
     );
@@ -3302,9 +2553,7 @@ async function executeBatchSale(
   }
 
   const mergedItems =
-    mergeSaleItems(
-      action.items
-    );
+    mergeSaleItems(action.items);
 
   if (!mergedItems.length) {
     throw new Error(
@@ -3322,8 +2571,7 @@ async function executeBatchSale(
       : null;
 
   const isWholesale =
-    action.saleType ===
-    'wholesale';
+    action.saleType === 'wholesale';
 
   let grandTotal = 0;
   let grandProfit = 0;
@@ -3331,547 +2579,419 @@ async function executeBatchSale(
   const summaryLines = [];
   const saleItems = [];
 
-  await window.runAtomicOrOffline(
-    async tx => {
-      const productStates = [];
+  await window.runAtomicOrOffline(async tx => {
+    const productStates = [];
 
-      /* -------------------------------------------------------------- */
-      /* Validate products and calculate sale prices                    */
-      /* -------------------------------------------------------------- */
-
-      for (
-        const item of mergedItems
-      ) {
-        if (
-          !item?.product?.id
-        ) {
-          throw new Error(
-            `Product "${item?.name || 'unknown'}" could not be identified.`
-          );
-        }
-
-        const pRef =
-          doc(
-            db,
-            'products',
-            item.product.id
-          );
-
-        const pSnap =
-          await tx.get(pRef);
-
-        if (!pSnap.exists()) {
-          throw new Error(
-            `Product ${item.product.name} no longer exists.`
-          );
-        }
-
-        const pData =
-          pSnap.data();
-
-        if (
-          pData.ownerId !==
-          ownerId()
-        ) {
-          throw new Error(
-            `Unauthorized product ${item.product.name}.`
-          );
-        }
-
-        const availableStock =
-          Number(
-            pData.stock
-          ) || 0;
-
-        const requestedQty =
-          Number(
-            item.qty
-          );
-
-        if (
-          !Number.isFinite(
-            requestedQty
-          ) ||
-          requestedQty <= 0
-        ) {
-          throw new Error(
-            `Invalid quantity for ${pData.name}.`
-          );
-        }
-
-        if (
-          requestedQty >
-          availableStock
-        ) {
-          throw new Error(
-            `Not enough stock for ${pData.name}. ` +
-            `Available: ${availableStock}, requested: ${requestedQty}.`
-          );
-        }
-
-        const normalRetail =
-          Number(
-            pData.retailPrice ??
-            pData.price ??
-            0
-          );
-
-        const normalWholesale =
-          Number(
-            pData.wholesalePrice ??
-            pData.price ??
-            0
-          );
-
-        const cost =
-          Number(
-            pData.cost
-          ) || 0;
-
-        const normalPrice =
-          isWholesale
-            ? normalWholesale
-            : normalRetail;
-
-        /*
-         * IMPORTANT FIX:
-         *
-         * If parser supplied unitPrice, it ALWAYS wins.
-         *
-         * Example:
-         *
-         *   1 lamp 1000 ka sale karo
-         *
-         * item.unitPrice = 1000
-         *
-         * Therefore selling price = 1000,
-         * NOT product.retailPrice.
-         */
-        let unitPrice;
-
-        if (
-          item.unitPrice !==
-            undefined &&
-          item.unitPrice !==
-            null &&
-          String(
-            item.unitPrice
-          ).trim() !== ''
-        ) {
-          unitPrice =
-            Number(
-              item.unitPrice
-            );
-        } else {
-          unitPrice =
-            normalPrice;
-        }
-
-        if (
-          !Number.isFinite(
-            unitPrice
-          ) ||
-          unitPrice < 0
-        ) {
-          throw new Error(
-            `Invalid selling price for ${pData.name}.`
-          );
-        }
-
-        const itemTotal =
-          unitPrice *
-          requestedQty;
-
-        const itemCostTotal =
-          cost *
-          requestedQty;
-
-        const itemProfit =
-          itemTotal -
-          itemCostTotal;
-
-        const discountPerUnit =
-          !isWholesale
-            ? Math.max(
-              0,
-              normalRetail -
-                unitPrice
-            )
-            : Math.max(
-              0,
-              normalWholesale -
-                unitPrice
-            );
-
-        const itemDiscount =
-          discountPerUnit *
-          requestedQty;
-
-        productStates.push({
-          item,
-          pRef,
-          pData,
-          availableStock,
-          requestedQty,
-          unitPrice,
-          normalPrice,
-          cost,
-          itemTotal,
-          itemCostTotal,
-          itemProfit,
-          itemDiscount
-        });
-      }
-
-      /* -------------------------------------------------------------- */
-      /* Build sale items                                                */
-      /* -------------------------------------------------------------- */
-
-      for (
-        const state of productStates
-      ) {
-        grandTotal +=
-          state.itemTotal;
-
-        grandProfit +=
-          state.itemProfit;
-
-        saleItems.push({
-          id:
-            state.item.product.id,
-
-          name:
-            state.pData.name,
-
-          /*
-           * Actual selling price.
-           * This is the custom price when supplied.
-           */
-          price:
-            state.unitPrice,
-
-          /*
-           * Normal product price is preserved
-           * separately.
-           */
-          normalPrice:
-            state.normalPrice,
-
-          cost:
-            state.cost,
-
-          qty:
-            state.requestedQty,
-
-          discount:
-            state.itemDiscount,
-
-          returnedQty:
-            0
-        });
-
-        summaryLines.push(
-          `${state.requestedQty} × ${state.pData.name} ` +
-          `at ${money(state.unitPrice)} each ` +
-          `= ${money(state.itemTotal)}`
+    for (const item of mergedItems) {
+      if (!item?.product?.id) {
+        throw new Error(
+          `Product "${item?.name || 'unknown'}" could not be identified.`
         );
       }
 
-      /* -------------------------------------------------------------- */
-      /* Reduce stock                                                    */
-      /* -------------------------------------------------------------- */
-
-      for (
-        const state of productStates
-      ) {
-        tx.update(
-          state.pRef,
-          {
-            stock:
-              state.availableStock -
-              state.requestedQty,
-
-            updatedAt:
-              new Date().toISOString()
-          }
-        );
-      }
-
-      /* -------------------------------------------------------------- */
-      /* Customer                                                        */
-      /* -------------------------------------------------------------- */
-
-      let newCustomerBalance = 0;
-
-      if (customerRef) {
-        const cSnap =
-          await tx.get(
-            customerRef
-          );
-
-        if (!cSnap.exists()) {
-          throw new Error(
-            'Customer no longer exists.'
-          );
-        }
-
-        const cData =
-          cSnap.data();
-
-        if (
-          cData.ownerId !==
-          ownerId()
-        ) {
-          throw new Error(
-            'Unauthorized customer.'
-          );
-        }
-
-        const currentBalance =
-          Math.max(
-            0,
-            Number(
-              cData.balance
-            ) || 0
-          );
-
-        newCustomerBalance =
-          currentBalance +
-          grandTotal;
-
-        tx.update(
-          customerRef,
-          {
-            balance:
-              newCustomerBalance,
-
-            updatedAt:
-              new Date().toISOString()
-          }
-        );
-      }
-
-      /* -------------------------------------------------------------- */
-      /* Invoice Number                                                  */
-      /* -------------------------------------------------------------- */
-
-      const invoiceNumbers =
-        sales()
-          .map(
-            x =>
-              parseInt(
-                x.invoiceNumber,
-                10
-              )
-          )
-          .filter(
-            Number.isFinite
-          );
-
-      const billNumber =
-        Math.max(
-          0,
-          ...invoiceNumbers
-        ) + 1;
-
-      const saleRef =
+      const pRef =
         doc(
-          collection(
-            db,
-            'sales'
-          )
+          db,
+          'products',
+          item.product.id
         );
 
-      const totalDiscount =
-        saleItems.reduce(
-          (acc, item) =>
-            acc +
-            (
-              Number(
-                item.discount
-              ) || 0
-            ),
+      const pSnap =
+        await tx.get(pRef);
+
+      if (!pSnap.exists()) {
+        throw new Error(
+          `Product ${item.product.name} no longer exists.`
+        );
+      }
+
+      const pData =
+        pSnap.data();
+
+      if (
+        pData.ownerId !== ownerId()
+      ) {
+        throw new Error(
+          `Unauthorized product ${item.product.name}.`
+        );
+      }
+
+      const availableStock =
+        Number(pData.stock) || 0;
+
+      const requestedQty =
+        Number(item.qty);
+
+      if (
+        !Number.isFinite(requestedQty) ||
+        requestedQty <= 0
+      ) {
+        throw new Error(
+          `Invalid quantity for ${pData.name}.`
+        );
+      }
+
+      if (
+        requestedQty > availableStock
+      ) {
+        throw new Error(
+          `Not enough stock for ${pData.name}. ` +
+          `Available: ${availableStock}, requested: ${requestedQty}.`
+        );
+      }
+
+      const normalRetail =
+        Number(
+          pData.retailPrice ??
+          pData.price ??
           0
         );
 
-      /* -------------------------------------------------------------- */
-      /* Save Sale                                                       */
-      /* -------------------------------------------------------------- */
+      const normalWholesale =
+        Number(
+          pData.wholesalePrice ??
+          pData.price ??
+          0
+        );
+
+      const cost =
+        Number(pData.cost) || 0;
+
+      const normalPrice =
+        isWholesale
+          ? normalWholesale
+          : normalRetail;
+
+      let unitPrice =
+        item.unitPrice !== undefined
+          ? Number(item.unitPrice)
+          : normalPrice;
+
+      if (
+        !Number.isFinite(unitPrice) ||
+        unitPrice < 0
+      ) {
+        throw new Error(
+          `Invalid selling price for ${pData.name}.`
+        );
+      }
+
+      const itemTotal =
+        unitPrice * requestedQty;
+
+      const itemCostTotal =
+        cost * requestedQty;
+
+      const itemProfit =
+        itemTotal - itemCostTotal;
+
+      const discountPerUnit =
+        !isWholesale
+          ? Math.max(
+            0,
+            normalRetail - unitPrice
+          )
+          : Math.max(
+            0,
+            normalWholesale - unitPrice
+          );
+
+      const itemDiscount =
+        discountPerUnit *
+        requestedQty;
+
+      productStates.push({
+        item,
+        pRef,
+        pData,
+        availableStock,
+        requestedQty,
+        unitPrice,
+        normalPrice,
+        cost,
+        itemTotal,
+        itemCostTotal,
+        itemProfit,
+        itemDiscount
+      });
+    }
+
+    for (const state of productStates) {
+      grandTotal += state.itemTotal;
+      grandProfit += state.itemProfit;
+
+      saleItems.push({
+        id: state.item.product.id,
+        name: state.pData.name,
+        price: state.unitPrice,
+        normalPrice: state.normalPrice,
+        cost: state.cost,
+        qty: state.requestedQty,
+        discount: state.itemDiscount,
+        returnedQty: 0
+      });
+
+      summaryLines.push(
+        `${state.requestedQty} × ${state.pData.name} ` +
+        `at ${money(state.unitPrice)} each ` +
+        `= ${money(state.itemTotal)}`
+      );
+    }
+
+    for (const state of productStates) {
+      tx.update(
+        state.pRef,
+        {
+          stock:
+            state.availableStock -
+            state.requestedQty,
+
+          updatedAt:
+            new Date().toISOString()
+        }
+      );
+    }
+
+    /* -------------------------------------------------------------- */
+    /* Customer                                                        */
+    /* -------------------------------------------------------------- */
+
+    let newCustomerBalance = 0;
+
+    if (customerRef) {
+      const cSnap =
+        await tx.get(customerRef);
+
+      if (!cSnap.exists()) {
+        throw new Error(
+          'Customer no longer exists.'
+        );
+      }
+
+      const cData =
+        cSnap.data();
+
+      if (
+        cData.ownerId !== ownerId()
+      ) {
+        throw new Error(
+          'Unauthorized customer.'
+        );
+      }
+
+      const currentBalance =
+        Math.max(
+          0,
+          Number(cData.balance) || 0
+        );
+
+      newCustomerBalance =
+        currentBalance +
+        grandTotal;
+
+      tx.update(
+        customerRef,
+        {
+          balance:
+            newCustomerBalance,
+
+          updatedAt:
+            new Date().toISOString()
+        }
+      );
+    }
+
+    /* -------------------------------------------------------------- */
+    /* Invoice Number                                                  */
+    /* -------------------------------------------------------------- */
+
+    const invoiceNumbers =
+      sales()
+        .map(x =>
+          parseInt(
+            x.invoiceNumber,
+            10
+          )
+        )
+        .filter(Number.isFinite);
+
+    const billNumber =
+      Math.max(
+        0,
+        ...invoiceNumbers
+      ) + 1;
+
+    const saleRef =
+      doc(collection(db, 'sales'));
+
+    const totalDiscount =
+      saleItems.reduce(
+        (acc, item) =>
+          acc +
+          (Number(item.discount) || 0),
+        0
+      );
+
+    tx.set(
+      saleRef,
+      {
+        ownerId: ownerId(),
+
+        createdBy:
+          window.authUserId ||
+          window.currentUserId,
+
+        createdByName:
+          window.currentMemberName ||
+          'Business Owner',
+
+        customerId:
+          action.customer
+            ? action.customer.id
+            : null,
+
+        customerName:
+          action.customer
+            ? action.customer.name
+            : 'Walk-in',
+
+        saleType:
+          isWholesale
+            ? 'wholesale'
+            : 'retail',
+
+        date:
+          new Date().toISOString(),
+
+        items: saleItems,
+
+        subtotal:
+          grandTotal,
+
+        discount:
+          totalDiscount,
+
+        discountType:
+          'amount',
+
+        total:
+          grandTotal,
+
+        amountPaid:
+          action.customer
+            ? 0
+            : grandTotal,
+
+        amountDue:
+          action.customer
+            ? grandTotal
+            : 0,
+
+        totalProfit:
+          grandProfit,
+
+        profitKnown:
+          true,
+
+        note:
+          'AI agent',
+
+        returnedAmount:
+          0,
+
+        returnedProfit:
+          0,
+
+        invoiceNumber:
+          billNumber
+      }
+    );
+
+    /* -------------------------------------------------------------- */
+    /* Customer Transaction                                             */
+    /* -------------------------------------------------------------- */
+
+    if (customerRef) {
+      const transactionRef =
+        doc(
+          collection(db, 'customerTransactions')
+        );
 
       tx.set(
-        saleRef,
+        transactionRef,
         {
-          ownerId:
-            ownerId(),
-
-          createdBy:
-            window.authUserId ||
-            window.currentUserId,
-
-          createdByName:
-            window.currentMemberName ||
-            'Business Owner',
+          ownerId: ownerId(),
 
           customerId:
-            action.customer
-              ? action.customer.id
-              : null,
+            action.customer.id,
 
-          customerName:
-            action.customer
-              ? action.customer.name
-              : 'Walk-in',
+          type:
+            'sale_debt',
 
-          saleType:
-            isWholesale
-              ? 'wholesale'
-              : 'retail',
+          amount:
+            grandTotal,
+
+          amountPaid:
+            0,
+
+          debitAmount:
+            grandTotal,
+
+          creditAmount:
+            0,
+
+          balanceAfter:
+            newCustomerBalance,
 
           date:
             new Date().toISOString(),
 
-          items:
-            saleItems,
-
-          subtotal:
-            grandTotal,
-
-          discount:
-            totalDiscount,
-
-          discountType:
-            'amount',
-
-          total:
-            grandTotal,
-
-          amountPaid:
-            action.customer
-              ? 0
-              : grandTotal,
-
-          amountDue:
-            action.customer
-              ? grandTotal
-              : 0,
-
-          totalProfit:
-            grandProfit,
-
-          profitKnown:
-            true,
-
           note:
-            'AI agent',
+            `Bill No. ${billNumber}`,
 
-          returnedAmount:
-            0,
+          billNo:
+            String(billNumber),
 
-          returnedProfit:
-            0,
+          saleId:
+            saleRef.id,
 
-          invoiceNumber:
-            billNumber
-        }
-      );
-
-      /* -------------------------------------------------------------- */
-      /* Customer Transaction                                             */
-      /* -------------------------------------------------------------- */
-
-      if (customerRef) {
-        const transactionRef =
-          doc(
-            collection(
-              db,
-              'customerTransactions'
-            )
-          );
-
-        tx.set(
-          transactionRef,
-          {
-            ownerId:
-              ownerId(),
-
-            customerId:
-              action.customer.id,
-
-            type:
-              'sale_debt',
-
-            amount:
-              grandTotal,
-
-            amountPaid:
-              0,
-
-            debitAmount:
-              grandTotal,
-
-            creditAmount:
-              0,
-
-            balanceAfter:
-              newCustomerBalance,
-
-            date:
-              new Date().toISOString(),
-
-            note:
-              `Bill No. ${billNumber}`,
-
-            billNo:
-              String(
-                billNumber
-              ),
-
-            saleId:
-              saleRef.id,
-
-            createdBy:
-              window.authUserId ||
-              window.currentUserId
-          }
-        );
-      }
-
-      /* -------------------------------------------------------------- */
-      /* Invoice Counter                                                  */
-      /* -------------------------------------------------------------- */
-
-      tx.set(
-        doc(
-          db,
-          'settings',
-          ownerId()
-        ),
-        {
-          nextInvoiceNumber:
-            billNumber + 1
-        },
-        {
-          merge:
-            true
+          createdBy:
+            window.authUserId ||
+            window.currentUserId
         }
       );
     }
-  );
+
+    /* -------------------------------------------------------------- */
+    /* Invoice Counter                                                  */
+    /* -------------------------------------------------------------- */
+
+    tx.set(
+      doc(
+        db,
+        'settings',
+        ownerId()
+      ),
+      {
+        nextInvoiceNumber:
+          billNumber + 1
+      },
+      {
+        merge: true
+      }
+    );
+  });
 
   rememberContext({
     customer:
-      action.customer ||
-      undefined,
-
+      action.customer || undefined,
     action
   });
 
   return (
     `Done. Sold:\n` +
     summaryLines
-      .map(
-        s => `• ${s}`
-      )
+      .map(s => `• ${s}`)
       .join('\n') +
     `\nTotal: ${money(grandTotal)}` +
     ` | Total Profit: ${money(grandProfit)}` +
@@ -3887,20 +3007,12 @@ async function executeBatchSale(
 /* INFORMATION COMMANDS                                                       */
 /* -------------------------------------------------------------------------- */
 
-export function parseInformationCommand(
-  input
-) {
-  const text =
-    norm(input);
+export function parseInformationCommand(input) {
+  const text = norm(input);
 
-  const allProducts =
-    products();
-
-  const allCustomers =
-    customers();
-
-  const allSales =
-    sales();
+  const allProducts = products();
+  const allCustomers = customers();
+  const allSales = sales();
 
   const productResult =
     resolveEntity(
@@ -3914,11 +3026,8 @@ export function parseInformationCommand(
     RX.stock.test(text)
   ) {
     return {
-      kind:
-        'clarification',
-
-      text:
-        productResult.question
+      kind: 'clarification',
+      text: productResult.question
     };
   }
 
@@ -3927,23 +3036,16 @@ export function parseInformationCommand(
     RX.stock.test(text) &&
     !rx(
       WORDS.addStock
-        .concat(
-          WORDS.removeStock
-        )
-        .concat(
-          WORDS.sale
-        )
+        .concat(WORDS.removeStock)
+        .concat(WORDS.sale)
     ).test(text)
   ) {
     rememberContext({
-      product:
-        productResult.item
+      product: productResult.item
     });
 
     return {
-      kind:
-        'answer',
-
+      kind: 'answer',
       text:
         `${productResult.item.name}: ` +
         `current stock ` +
@@ -3951,52 +3053,38 @@ export function parseInformationCommand(
     };
   }
 
-  if (
-    RX.lowStock.test(text)
-  ) {
+  if (RX.lowStock.test(text)) {
     const low =
       allProducts.filter(
         p =>
-          Number(
-            p.stock || 0
-          ) <=
-          Number(
-            p.minStock || 5
-          )
+          Number(p.stock || 0) <=
+          Number(p.minStock || 5)
       );
 
     return {
-      kind:
-        'answer',
-
-      text:
-        low.length
-          ? `Low stock: ${low
-            .map(
-              p =>
-                `${p.name} (${p.stock})`
-            )
-            .join(', ')}`
-          : 'No low-stock products found.'
+      kind: 'answer',
+      text: low.length
+        ? `Low stock: ${low
+          .map(
+            p =>
+              `${p.name} (${p.stock})`
+          )
+          .join(', ')}`
+        : 'No low-stock products found.'
     };
   }
 
-  if (
-    RX.productsList.test(text)
-  ) {
+  if (RX.productsList.test(text)) {
     return {
-      kind:
-        'answer',
-
-      text:
-        allProducts.length
-          ? allProducts
-            .map(
-              p =>
-                `${p.name}: ${p.stock} in stock`
-            )
-            .join('\n')
-          : 'No products found.'
+      kind: 'answer',
+      text: allProducts.length
+        ? allProducts
+          .map(
+            p =>
+              `${p.name}: ${p.stock} in stock`
+          )
+          .join('\n')
+        : 'No products found.'
     };
   }
 
@@ -4012,20 +3100,15 @@ export function parseInformationCommand(
     RX.balance.test(text)
   ) {
     return {
-      kind:
-        'clarification',
-
-      text:
-        customerResult.question
+      kind: 'clarification',
+      text: customerResult.question
     };
   }
 
   if (
     customerResult.found &&
     RX.balance.test(text) &&
-    !Number.isFinite(
-      amountFrom(text)
-    )
+    !Number.isFinite(amountFrom(text))
   ) {
     rememberContext({
       customer:
@@ -4033,9 +3116,7 @@ export function parseInformationCommand(
     });
 
     return {
-      kind:
-        'answer',
-
+      kind: 'answer',
       text:
         `${customerResult.item.name}: due ` +
         `${money(customerResult.item.balance || 0)}.`
@@ -4055,24 +3136,19 @@ export function parseInformationCommand(
     const due =
       allCustomers.filter(
         c =>
-          Number(
-            c.balance || 0
-          ) > 0
+          Number(c.balance || 0) > 0
       );
 
     return {
-      kind:
-        'answer',
-
-      text:
-        due.length
-          ? due
-            .map(
-              c =>
-                `${c.name}: ${money(c.balance)}`
-            )
-            .join('\n')
-          : 'No customer dues found.'
+      kind: 'answer',
+      text: due.length
+        ? due
+          .map(
+            c =>
+              `${c.name}: ${money(c.balance)}`
+          )
+          .join('\n')
+        : 'No customer dues found.'
     };
   }
 
@@ -4080,8 +3156,7 @@ export function parseInformationCommand(
     RX.sale.test(text) &&
     RX.today.test(text)
   ) {
-    const date =
-      todayDate();
+    const date = todayDate();
 
     const rows =
       allSales.filter(
@@ -4096,16 +3171,12 @@ export function parseInformationCommand(
       rows.reduce(
         (sum, s) =>
           sum +
-          Number(
-            s.total || 0
-          ),
+          Number(s.total || 0),
         0
       );
 
     return {
-      kind:
-        'answer',
-
+      kind: 'answer',
       text:
         `Today's sales: ${rows.length} sale(s), ` +
         `total ${money(total)}.`
@@ -4132,16 +3203,12 @@ export function parseInformationCommand(
       rows.reduce(
         (sum, s) =>
           sum +
-          Number(
-            s.total || 0
-          ),
+          Number(s.total || 0),
         0
       );
 
     return {
-      kind:
-        'answer',
-
+      kind: 'answer',
       text:
         `Yesterday's sales: ${rows.length} sale(s), ` +
         `total ${money(total)}.`
@@ -4168,16 +3235,12 @@ export function parseInformationCommand(
       rows.reduce(
         (sum, s) =>
           sum +
-          Number(
-            s.totalProfit || 0
-          ),
+          Number(s.totalProfit || 0),
         0
       );
 
     return {
-      kind:
-        'answer',
-
+      kind: 'answer',
       text:
         `Today's recorded profit: ${money(profit)}.`
     };
@@ -4193,9 +3256,7 @@ export function parseInformationCommand(
     let rows =
       expenses();
 
-    if (
-      RX.today.test(text)
-    ) {
+    if (RX.today.test(text)) {
       const today =
         todayDate();
 
@@ -4213,16 +3274,12 @@ export function parseInformationCommand(
       rows.reduce(
         (sum, e) =>
           sum +
-          Number(
-            e.amount || 0
-          ),
+          Number(e.amount || 0),
         0
       );
 
     return {
-      kind:
-        'answer',
-
+      kind: 'answer',
       text:
         `Total expenses: ${money(total)}.`
     };
@@ -4235,9 +3292,7 @@ export function parseInformationCommand(
 /* MAIN COMMAND PARSER                                                        */
 /* -------------------------------------------------------------------------- */
 
-export function parseCommand(
-  input
-) {
+export function parseCommand(input) {
   const original =
     String(input || '').trim();
 
@@ -4260,27 +3315,36 @@ export function parseCommand(
   clearOldContext();
 
   const info =
-    parseInformationCommand(
-      original
-    );
+    parseInformationCommand(original);
 
   if (info) {
     return info;
   }
 
-  /* ------------------------------------------------------------------------ */
-  /* SALE INTENT — BEFORE GENERIC PRODUCT AMBIGUITY                           */
-  /* ------------------------------------------------------------------------ */
-
+  /*
+   * IMPORTANT FIX:
+   *
+   * Multi-item sale parsing MUST happen before global product
+   * ambiguity resolution.
+   *
+   * Example:
+   *
+   *   1 lamp 3 frame sale karo
+   *
+   * resolveEntity() sees both "lamp" and "frame" and previously
+   * returned an ambiguity clarification before parseMultiSaleItems()
+   * had a chance to understand the command.
+   *
+   * We now parse the complete sale first. Each product is resolved
+   * separately by findProductStartingAt().
+   */
   const isSaleIntent =
     rx(WORDS.sale).test(text) &&
     !rx(WORDS.addStock).test(text);
 
   if (isSaleIntent) {
     const isWholesale =
-      rx(WORDS.wholesale).test(
-        text
-      );
+      rx(WORDS.wholesale).test(text);
 
     const saleType =
       isWholesale
@@ -4309,17 +3373,11 @@ export function parseCommand(
         allProducts
       );
 
-    if (
-      saleItems.length > 0
-    ) {
-      for (
-        const item of saleItems
-      ) {
+    if (saleItems.length > 0) {
+      for (const item of saleItems) {
         if (!item.product) {
           return {
-            kind:
-              'answer',
-
+            kind: 'answer',
             text:
               `I couldn't find the product ` +
               `"${item.name}" in your inventory.`
@@ -4327,6 +3385,11 @@ export function parseCommand(
         }
       }
 
+      /*
+       * Resolve customer only after the sale products have
+       * been parsed. This prevents product names from being
+       * globally interpreted as one ambiguous entity.
+       */
       const customerResult =
         resolveEntity(
           allCustomers,
@@ -4341,44 +3404,29 @@ export function parseCommand(
           RX.balance.test(text) ||
           rx(
             WORDS.receiveCustomer
-              .concat(
-                WORDS.giveCustomer
-              )
+              .concat(WORDS.giveCustomer)
           ).test(text)
         )
       ) {
         return {
-          kind:
-            'clarification',
-
-          text:
-            customerResult.question
+          kind: 'clarification',
+          text: customerResult.question
         };
       }
 
       let totalAmount = 0;
-
       const lines = [];
 
-      for (
-        const item of saleItems
-      ) {
+      for (const item of saleItems) {
         const prod =
           item.product;
 
         const available =
-          Number(
-            prod.stock
-          ) || 0;
+          Number(prod.stock) || 0;
 
-        if (
-          item.qty >
-          available
-        ) {
+        if (item.qty > available) {
           return {
-            kind:
-              'answer',
-
+            kind: 'answer',
             text:
               `Not enough stock for ${prod.name}. ` +
               `Available: ${available}, ` +
@@ -4387,8 +3435,7 @@ export function parseCommand(
         }
 
         const normalPrice =
-          saleType ===
-            'wholesale'
+          saleType === 'wholesale'
             ? Number(
               prod.wholesalePrice ??
               prod.price ??
@@ -4400,17 +3447,9 @@ export function parseCommand(
               0
             );
 
-        /*
-         * Preserve explicit custom price.
-         */
         const unit =
-          item.unitPrice !==
-            undefined &&
-          item.unitPrice !==
-            null
-            ? Number(
-              item.unitPrice
-            )
+          item.unitPrice !== undefined
+            ? Number(item.unitPrice)
             : normalPrice;
 
         if (
@@ -4418,20 +3457,16 @@ export function parseCommand(
           unit < 0
         ) {
           return {
-            kind:
-              'answer',
-
+            kind: 'answer',
             text:
               `Invalid selling price for ${prod.name}.`
           };
         }
 
         const lineTotal =
-          unit *
-          item.qty;
+          unit * item.qty;
 
-        totalAmount +=
-          lineTotal;
+        totalAmount += lineTotal;
 
         lines.push(
           `• ${item.qty} × ${prod.name} ` +
@@ -4448,20 +3483,16 @@ export function parseCommand(
 
       rememberContext({
         customer:
-          customer ||
-          undefined
+          customer || undefined
       });
 
       return {
-        kind:
-          'confirm',
+        kind: 'confirm',
 
         action: {
-          type:
-            'sellProductBatch',
+          type: 'sellProductBatch',
 
-          items:
-            saleItems,
+          items: saleItems,
 
           customer,
 
@@ -4481,10 +3512,10 @@ export function parseCommand(
     }
   }
 
-  /* ------------------------------------------------------------------------ */
-  /* GENERIC ENTITY RESOLUTION                                                */
-  /* ------------------------------------------------------------------------ */
-
+  /*
+   * Only resolve generic entities AFTER multi-item sales have had
+   * their chance to parse.
+   */
   let productResult =
     resolveEntity(
       allProducts,
@@ -4509,12 +3540,8 @@ export function parseCommand(
   const hasProductVerb =
     rx(
       WORDS.addStock
-        .concat(
-          WORDS.removeStock
-        )
-        .concat(
-          WORDS.sale
-        )
+        .concat(WORDS.removeStock)
+        .concat(WORDS.sale)
     ).test(text);
 
   if (
@@ -4526,17 +3553,10 @@ export function parseCommand(
       contextProduct();
 
     productResult = {
-      found:
-        true,
-
-      ambiguous:
-        false,
-
-      item:
-        product,
-
-      matches:
-        [product]
+      found: true,
+      ambiguous: false,
+      item: product,
+      matches: [product]
     };
   }
 
@@ -4545,9 +3565,7 @@ export function parseCommand(
     (
       rx(
         WORDS.receiveCustomer
-          .concat(
-            WORDS.giveCustomer
-          )
+          .concat(WORDS.giveCustomer)
       ).test(text) ||
       /(?:same customer|this customer|that customer|usi customer|is customer|اس گاہک|اسی گاہک)/i.test(text)
     ) &&
@@ -4557,17 +3575,10 @@ export function parseCommand(
       contextCustomer();
 
     customerResult = {
-      found:
-        true,
-
-      ambiguous:
-        false,
-
-      item:
-        customer,
-
-      matches:
-        [customer]
+      found: true,
+      ambiguous: false,
+      item: customer,
+      matches: [customer]
     };
   }
 
@@ -4575,9 +3586,7 @@ export function parseCommand(
     !supplierResult.found &&
     rx(
       WORDS.supplierPayment
-        .concat(
-          WORDS.supplierDebt
-        )
+        .concat(WORDS.supplierDebt)
     ).test(text) &&
     contextSupplier()
   ) {
@@ -4585,17 +3594,10 @@ export function parseCommand(
       contextSupplier();
 
     supplierResult = {
-      found:
-        true,
-
-      ambiguous:
-        false,
-
-      item:
-        supplier,
-
-      matches:
-        [supplier]
+      found: true,
+      ambiguous: false,
+      item: supplier,
+      matches: [supplier]
     };
   }
 
@@ -4607,9 +3609,7 @@ export function parseCommand(
     )
   ) {
     return {
-      kind:
-        'clarification',
-
+      kind: 'clarification',
       text:
         productResult.question
     };
@@ -4621,16 +3621,12 @@ export function parseCommand(
       RX.balance.test(text) ||
       rx(
         WORDS.receiveCustomer
-          .concat(
-            WORDS.giveCustomer
-          )
+          .concat(WORDS.giveCustomer)
       ).test(text)
     )
   ) {
     return {
-      kind:
-        'clarification',
-
+      kind: 'clarification',
       text:
         customerResult.question
     };
@@ -4640,15 +3636,11 @@ export function parseCommand(
     supplierResult.ambiguous &&
     rx(
       WORDS.supplierPayment
-        .concat(
-          WORDS.supplierDebt
-        )
+        .concat(WORDS.supplierDebt)
     ).test(text)
   ) {
     return {
-      kind:
-        'clarification',
-
+      kind: 'clarification',
       text:
         supplierResult.question
     };
@@ -4660,9 +3652,7 @@ export function parseCommand(
 
   const isStockIntent =
     (
-      rx(
-        WORDS.addStock
-      ).test(text) &&
+      rx(WORDS.addStock).test(text) &&
       (
         RX.stock.test(text) ||
         /(?:keemat|qeemat|price|rate|قیمت)/i.test(text)
@@ -4677,9 +3667,7 @@ export function parseCommand(
     let cleanBody =
       text
         .replace(
-          rx(
-            WORDS.addStock
-          ),
+          rx(WORDS.addStock),
           ' '
         )
         .replace(
@@ -4698,35 +3686,28 @@ export function parseCommand(
         allProducts
       );
 
-    if (
-      stockItems.length > 0
-    ) {
+    if (stockItems.length > 0) {
       const summaryItems =
-        stockItems.map(
-          item => {
-            const pDesc =
-              item.product
-                ? `${item.product.name} ` +
-                  `(current stock ${Number(item.product.stock) || 0})`
-                : `${item.name} (new product)`;
+        stockItems.map(item => {
+          const pDesc =
+            item.product
+              ? `${item.product.name} ` +
+              `(current stock ${Number(item.product.stock) || 0})`
+              : `${item.name} (new product)`;
 
-            return (
-              `• ${item.qty} × ${pDesc} ` +
-              `at ${money(item.price)}`
-            );
-          }
-        );
+          return (
+            `• ${item.qty} × ${pDesc} ` +
+            `at ${money(item.price)}`
+          );
+        });
 
       return {
-        kind:
-          'confirm',
+        kind: 'confirm',
 
         action: {
-          type:
-            'addStockBatch',
+          type: 'addStockBatch',
 
-          items:
-            stockItems,
+          items: stockItems,
 
           summary:
             `Add stock for ${stockItems.length} ` +
@@ -4743,9 +3724,7 @@ export function parseCommand(
 
   if (
     productResult.found &&
-    rx(
-      WORDS.removeStock
-    ).test(text) &&
+    rx(WORDS.removeStock).test(text) &&
     (
       RX.stock.test(text) ||
       RX.quantity.test(text)
@@ -4762,9 +3741,7 @@ export function parseCommand(
       qty <= 0
     ) {
       return {
-        kind:
-          'clarification',
-
+        kind: 'clarification',
         text:
           `How many ${product.name} should I remove?`
       };
@@ -4775,12 +3752,10 @@ export function parseCommand(
     });
 
     return {
-      kind:
-        'confirm',
+      kind: 'confirm',
 
       action: {
-        type:
-          'removeStock',
+        type: 'removeStock',
 
         product,
 
@@ -4798,14 +3773,10 @@ export function parseCommand(
   /* ------------------------------------------------------------------------ */
 
   const receiveWords =
-    rx(
-      WORDS.receiveCustomer
-    );
+    rx(WORDS.receiveCustomer);
 
   const giveWords =
-    rx(
-      WORDS.giveCustomer
-    );
+    rx(WORDS.giveCustomer);
 
   const isCreditPhrase =
     /(?:udhaar|udhar|qarz|ادھار|قرض)/i.test(text);
@@ -4818,13 +3789,9 @@ export function parseCommand(
     const amount =
       amountFrom(text);
 
-    if (
-      !Number.isFinite(amount)
-    ) {
+    if (!Number.isFinite(amount)) {
       return {
-        kind:
-          'clarification',
-
+        kind: 'clarification',
         text:
           `How much should I receive from ${customerResult.item.name}?`
       };
@@ -4838,13 +3805,9 @@ export function parseCommand(
         ) || 0
       );
 
-    if (
-      amount > current
-    ) {
+    if (amount > current) {
       return {
-        kind:
-          'answer',
-
+        kind: 'answer',
         text:
           `${customerResult.item.name}'s current due is ` +
           `${money(current)}. ` +
@@ -4859,12 +3822,10 @@ export function parseCommand(
     });
 
     return {
-      kind:
-        'confirm',
+      kind: 'confirm',
 
       action: {
-        type:
-          'receiveCustomer',
+        type: 'receiveCustomer',
 
         customer:
           customerResult.item,
@@ -4890,13 +3851,9 @@ export function parseCommand(
     const amount =
       amountFrom(text);
 
-    if (
-      !Number.isFinite(amount)
-    ) {
+    if (!Number.isFinite(amount)) {
       return {
-        kind:
-          'clarification',
-
+        kind: 'clarification',
         text:
           `How much credit should I add to ${customerResult.item.name}?`
       };
@@ -4916,12 +3873,10 @@ export function parseCommand(
     });
 
     return {
-      kind:
-        'confirm',
+      kind: 'confirm',
 
       action: {
-        type:
-          'giveCustomer',
+        type: 'giveCustomer',
 
         customer:
           customerResult.item,
@@ -4942,20 +3897,14 @@ export function parseCommand(
 
   if (
     supplierResult.found &&
-    rx(
-      WORDS.supplierPayment
-    ).test(text)
+    rx(WORDS.supplierPayment).test(text)
   ) {
     const amount =
       amountFrom(text);
 
-    if (
-      !Number.isFinite(amount)
-    ) {
+    if (!Number.isFinite(amount)) {
       return {
-        kind:
-          'clarification',
-
+        kind: 'clarification',
         text:
           `How much should I pay ${supplierResult.item.name}?`
       };
@@ -4969,13 +3918,9 @@ export function parseCommand(
         ) || 0
       );
 
-    if (
-      amount > current
-    ) {
+    if (amount > current) {
       return {
-        kind:
-          'answer',
-
+        kind: 'answer',
         text:
           `${supplierResult.item.name}'s current payable is ` +
           `${money(current)}. ` +
@@ -4989,12 +3934,10 @@ export function parseCommand(
     });
 
     return {
-      kind:
-        'confirm',
+      kind: 'confirm',
 
       action: {
-        type:
-          'supplierPayment',
+        type: 'supplierPayment',
 
         supplier:
           supplierResult.item,
@@ -5015,20 +3958,14 @@ export function parseCommand(
 
   if (
     supplierResult.found &&
-    rx(
-      WORDS.supplierDebt
-    ).test(text)
+    rx(WORDS.supplierDebt).test(text)
   ) {
     const amount =
       amountFrom(text);
 
-    if (
-      !Number.isFinite(amount)
-    ) {
+    if (!Number.isFinite(amount)) {
       return {
-        kind:
-          'clarification',
-
+        kind: 'clarification',
         text:
           `How much payable should I add for ${supplierResult.item.name}?`
       };
@@ -5048,12 +3985,10 @@ export function parseCommand(
     });
 
     return {
-      kind:
-        'confirm',
+      kind: 'confirm',
 
       action: {
-        type:
-          'supplierDebt',
+        type: 'supplierDebt',
 
         supplier:
           supplierResult.item,
@@ -5073,32 +4008,24 @@ export function parseCommand(
   /* ------------------------------------------------------------------------ */
 
   if (
-    rx(
-      WORDS.expense
-    ).test(text)
+    rx(WORDS.expense).test(text)
   ) {
     const amount =
       amountFrom(text);
 
-    if (
-      !Number.isFinite(amount)
-    ) {
+    if (!Number.isFinite(amount)) {
       return {
-        kind:
-          'clarification',
-
+        kind: 'clarification',
         text:
           'How much is the expense?'
       };
     }
 
     return {
-      kind:
-        'confirm',
+      kind: 'confirm',
 
       action: {
-        type:
-          'expense',
+        type: 'expense',
 
         amount,
 
@@ -5119,9 +4046,7 @@ export function parseCommand(
   /* ------------------------------------------------------------------------ */
 
   if (
-    rx(
-      WORDS.addCustomer
-    ).test(text) &&
+    rx(WORDS.addCustomer).test(text) &&
     RX.customer.test(text)
   ) {
     let name =
@@ -5146,9 +4071,7 @@ export function parseCommand(
 
     if (!name) {
       return {
-        kind:
-          'clarification',
-
+        kind: 'clarification',
         text:
           'What is the customer name?'
       };
@@ -5163,21 +4086,17 @@ export function parseCommand(
 
     if (duplicate) {
       return {
-        kind:
-          'answer',
-
+        kind: 'answer',
         text:
           `Customer "${duplicate.name}" already exists.`
       };
     }
 
     return {
-      kind:
-        'confirm',
+      kind: 'confirm',
 
       action: {
-        type:
-          'addCustomer',
+        type: 'addCustomer',
 
         name,
 
@@ -5192,15 +4111,11 @@ export function parseCommand(
   /* ------------------------------------------------------------------------ */
 
   if (
-    rx(
-      WORDS.addProduct
-    ).test(text) &&
+    rx(WORDS.addProduct).test(text) &&
     /(?:product|item|پروڈکٹ|آئٹم)/i.test(text)
   ) {
     return {
-      kind:
-        'clarification',
-
+      kind: 'clarification',
       text:
         'Please provide the product name and its price before I create it.'
     };
@@ -5218,9 +4133,7 @@ export function parseCommand(
     /^(?:receive it|receive|collect it|liya|le liya|وصول کرلو)$/i.test(text)
   ) {
     return {
-      kind:
-        'clarification',
-
+      kind: 'clarification',
       text:
         `How much should I receive from ${context.customer.name}?`
     };
@@ -5231,9 +4144,7 @@ export function parseCommand(
     /^(?:add more|add aur|aur add karo|aur daal do|مزید شامل کرو)$/i.test(text)
   ) {
     return {
-      kind:
-        'clarification',
-
+      kind: 'clarification',
       text:
         `How many more ${context.product.name} should I add?`
     };
@@ -5246,9 +4157,7 @@ export function parseCommand(
 /* MULTI-ACTION COMMAND DETECTION                                             */
 /* -------------------------------------------------------------------------- */
 
-export function splitMultiCommand(
-  input
-) {
+export function splitMultiCommand(input) {
   const text =
     String(input || '').trim();
 
@@ -5257,17 +4166,15 @@ export function splitMultiCommand(
   }
 
   /*
-   * Multi-product stock/sale commands are parsed
-   * completely before this function.
+   * Multi-product stock/sale commands are parsed as a complete command
+   * before this function is reached.
    */
   const parts =
     text
       .split(
         /\s+(?:and|aur|phir|then|اور|پھر)\s+/i
       )
-      .map(
-        x => x.trim()
-      )
+      .map(x => x.trim())
       .filter(Boolean);
 
   return parts.length > 1
@@ -5279,17 +4186,13 @@ export function splitMultiCommand(
 /* PUBLIC AGENT HANDLER                                                       */
 /* -------------------------------------------------------------------------- */
 
-export async function handleAgentCommand(
-  input
-) {
+export async function handleAgentCommand(input) {
   const text =
     String(input || '').trim();
 
   if (!text) {
     return {
-      handled:
-        true,
-
+      handled: true,
       text:
         'Please enter a command.'
     };
@@ -5301,34 +4204,24 @@ export async function handleAgentCommand(
   /* PENDING CONFIRMATION                                                     */
   /* ---------------------------------------------------------------------- */
 
-  if (
-    window.__myBusinessAiPending
-  ) {
+  if (window.__myBusinessAiPending) {
     const pending =
       window.__myBusinessAiPending;
 
     if (isYes(text)) {
-      window.__myBusinessAiPending =
-        null;
+      window.__myBusinessAiPending = null;
 
       try {
         const result =
-          await execute(
-            pending
-          );
+          await execute(pending);
 
         return {
-          handled:
-            true,
-
-          text:
-            result
+          handled: true,
+          text: result
         };
       } catch (error) {
         return {
-          handled:
-            true,
-
+          handled: true,
           text:
             `I could not complete that task: ` +
             `${error?.message || error}`
@@ -5337,22 +4230,17 @@ export async function handleAgentCommand(
     }
 
     if (isNo(text)) {
-      window.__myBusinessAiPending =
-        null;
+      window.__myBusinessAiPending = null;
 
       return {
-        handled:
-          true,
-
+        handled: true,
         text:
           'Cancelled. No changes were made.'
       };
     }
 
     return {
-      handled:
-        true,
-
+      handled: true,
       text:
         'Please reply "yes" to confirm or "no" to cancel.'
     };
@@ -5366,42 +4254,29 @@ export async function handleAgentCommand(
     parseCommand(text);
 
   if (
-    parsed?.kind ===
-    'answer'
+    parsed?.kind === 'answer'
   ) {
     return {
-      handled:
-        true,
-
-      text:
-        parsed.text
+      handled: true,
+      text: parsed.text
     };
   }
 
   if (
-    parsed?.kind ===
-    'clarification'
+    parsed?.kind === 'clarification'
   ) {
     return {
-      handled:
-        true,
-
-      text:
-        parsed.text
+      handled: true,
+      text: parsed.text
     };
   }
 
   if (
-    parsed?.kind ===
-    'confirm'
+    parsed?.kind === 'confirm'
   ) {
     return {
-      handled:
-        true,
-
-      confirmation:
-        true,
-
+      handled: true,
+      confirmation: true,
       text:
         confirmationText(
           parsed.action
@@ -5414,13 +4289,9 @@ export async function handleAgentCommand(
   /* ---------------------------------------------------------------------- */
 
   const multi =
-    splitMultiCommand(
-      text
-    );
+    splitMultiCommand(text);
 
-  if (
-    multi.length > 1
-  ) {
+  if (multi.length > 1) {
     const parsedParts =
       multi.map(
         part =>
@@ -5435,31 +4306,22 @@ export async function handleAgentCommand(
             'answer',
             'confirm',
             'clarification'
-          ].includes(
-            part.kind
-          )
+          ].includes(part.kind)
       );
 
     if (!unsupported) {
       const clarifications =
         parsedParts.filter(
           p =>
-            p.kind ===
-            'clarification'
+            p.kind === 'clarification'
         );
 
-      if (
-        clarifications.length
-      ) {
+      if (clarifications.length) {
         return {
-          handled:
-            true,
-
+          handled: true,
           text:
             clarifications
-              .map(
-                x => x.text
-              )
+              .map(x => x.text)
               .join('\n')
         };
       }
@@ -5467,8 +4329,7 @@ export async function handleAgentCommand(
       const answers =
         parsedParts.filter(
           p =>
-            p.kind ===
-            'answer'
+            p.kind === 'answer'
         );
 
       if (
@@ -5476,14 +4337,10 @@ export async function handleAgentCommand(
         parsedParts.length
       ) {
         return {
-          handled:
-            true,
-
+          handled: true,
           text:
             answers
-              .map(
-                x => x.text
-              )
+              .map(x => x.text)
               .join('\n')
         };
       }
@@ -5492,21 +4349,16 @@ export async function handleAgentCommand(
         parsedParts
           .filter(
             p =>
-              p.kind ===
-              'confirm'
+              p.kind === 'confirm'
           )
           .map(
             p =>
               p.action
           );
 
-      if (
-        actions.length
-      ) {
+      if (actions.length) {
         return {
-          handled:
-            true,
-
+          handled: true,
           text:
             'I understood multiple actions, but I need to process them one at a time to keep the business data safe.'
         };
@@ -5515,8 +4367,7 @@ export async function handleAgentCommand(
   }
 
   return {
-    handled:
-      false
+    handled: false
   };
 }
 
@@ -5534,45 +4385,37 @@ export function agentContext() {
   return [
     'MyBusiness local agent context:',
 
-    `Products: ${
-      data.products?.length || 0
+    `Products: ${data.products?.length || 0
     }`,
 
-    `Customers: ${
-      data.customers?.length || 0
+    `Customers: ${data.customers?.length || 0
     }`,
 
-    `Suppliers: ${
-      data.suppliers?.length || 0
+    `Suppliers: ${data.suppliers?.length || 0
     }`,
 
-    `Sales: ${
-      data.sales?.length || 0
+    `Sales: ${data.sales?.length || 0
     }`,
 
-    `Expenses: ${
-      data.expenses?.length || 0
+    `Expenses: ${data.expenses?.length || 0
     }`,
 
-    `Product names: ${
-      names(
-        data.products || [],
-        20
-      ) || 'none'
+    `Product names: ${names(
+      data.products || [],
+      20
+    ) || 'none'
     }`,
 
-    `Customer names: ${
-      names(
-        data.customers || [],
-        20
-      ) || 'none'
+    `Customer names: ${names(
+      data.customers || [],
+      20
+    ) || 'none'
     }`,
 
-    `Supplier names: ${
-      names(
-        data.suppliers || [],
-        20
-      ) || 'none'
+    `Supplier names: ${names(
+      data.suppliers || [],
+      20
+    ) || 'none'
     }`,
 
     context.product
@@ -5587,27 +4430,21 @@ export function agentContext() {
       ? `Current supplier context: ${context.supplier.name}`
       : '',
 
-    `Language: ${
-      typeof document !==
-      'undefined'
-        ? (
-          document.documentElement.lang ||
-          'en'
-        )
-        : 'en'
+    `Language: ${typeof document !== 'undefined'
+      ? (
+        document.documentElement.lang ||
+        'en'
+      )
+      : 'en'
     }`,
 
     'Registered actions:',
 
-    Object.keys(
-      ACTIONS
-    ).join(', '),
+    Object.keys(ACTIONS).join(', '),
 
     'Multi-item stock: supported.',
 
     'Multi-item sales: supported.',
-
-    'Custom sale prices: supported.',
 
     'Safety: Deterministic execution only.'
   ]
