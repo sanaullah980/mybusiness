@@ -7,6 +7,13 @@
  *   handleAgentCommand(input)
  *   agentContext()
  *   getAgentState()
+ *
+ * IMPORTANT:
+ *   This file preserves the existing MyBusiness AI functionality.
+ *
+ *   Firestore transaction safety:
+ *   ALL transaction.get() calls are completed BEFORE any
+ *   transaction.set(), transaction.update(), or transaction.delete().
  */
 
 /* -------------------------------------------------------------------------- */
@@ -135,7 +142,9 @@ export const ownerId = () =>
 
 export function requireUser() {
   if (!ownerId()) {
-    throw new Error('Please log in again before using the AI agent.');
+    throw new Error(
+      'Please log in again before using the AI agent.'
+    );
   }
 }
 
@@ -347,7 +356,10 @@ export const MULTIPLIER_WORDS = {
 /* -------------------------------------------------------------------------- */
 
 export function parseCompoundNumberWords(text) {
-  const words = norm(text).split(/\s+/).filter(Boolean);
+  const words = norm(text)
+    .split(/\s+/)
+    .filter(Boolean);
+
   if (!words.length) return NaN;
 
   let total = 0;
@@ -363,7 +375,10 @@ export function parseCompoundNumberWords(text) {
 
     if (MULTIPLIER_WORDS[w] !== undefined) {
       const mult = MULTIPLIER_WORDS[w];
-      const base = currentVal === 0 ? 1 : currentVal;
+      const base =
+        currentVal === 0
+          ? 1
+          : currentVal;
 
       if (mult >= 1000) {
         total += base * mult;
@@ -386,46 +401,76 @@ export function parseCompoundNumberWords(text) {
   }
 
   total += currentVal;
-  return hasNumber ? total : NaN;
+
+  return hasNumber
+    ? total
+    : NaN;
 }
 
 export function numberFrom(value) {
-  const text = String(value || '').replace(/,/g, '');
+  const text =
+    String(value || '').replace(/,/g, '');
 
-  const match = text.match(
-    /(?:rs\.?|rs|rupees?|₨|pkr)?\s*(-?\d+(?:\.\d+)?)/i
-  );
+  const match =
+    text.match(
+      /(?:rs\.?|rs|rupees?|₨|pkr)?\s*(-?\d+(?:\.\d+)?)/i
+    );
 
-  return match ? Number(match[1]) : NaN;
+  return match
+    ? Number(match[1])
+    : NaN;
 }
 
 export function amountFrom(value) {
-  const numeric = numberFrom(value);
-  if (Number.isFinite(numeric)) return numeric;
+  const numeric =
+    numberFrom(value);
+
+  if (Number.isFinite(numeric)) {
+    return numeric;
+  }
 
   return parseCompoundNumberWords(value);
 }
 
 export function qtyFrom(value) {
-  const text = norm(value);
+  const text =
+    norm(value);
 
-  const explicit = text.match(
-    /(\d+(?:\.\d+)?)\s*(?:x|pcs?|pieces?|piece|units?|unit|items?|item|qty|quantity|پیس|عدد)\b/i
-  );
+  const explicit =
+    text.match(
+      /(\d+(?:\.\d+)?)\s*(?:x|pcs?|pieces?|piece|units?|unit|items?|item|qty|quantity|پیس|عدد)\b/i
+    );
 
   if (explicit) {
-    return Math.max(1, Math.floor(Number(explicit[1])));
+    return Math.max(
+      1,
+      Math.floor(
+        Number(explicit[1])
+      )
+    );
   }
 
-  const digits = text.match(/\b(\d+(?:\.\d+)?)\b/);
+  const digits =
+    text.match(
+      /\b(\d+(?:\.\d+)?)\b/
+    );
 
   if (digits) {
-    return Math.max(1, Math.floor(Number(digits[1])));
+    return Math.max(
+      1,
+      Math.floor(
+        Number(digits[1])
+      )
+    );
   }
 
-  const wordVal = parseCompoundNumberWords(text);
+  const wordVal =
+    parseCompoundNumberWords(text);
 
-  if (Number.isFinite(wordVal) && wordVal > 0) {
+  if (
+    Number.isFinite(wordVal) &&
+    wordVal > 0
+  ) {
     return Math.floor(wordVal);
   }
 
@@ -437,18 +482,30 @@ export function qtyFrom(value) {
 /* -------------------------------------------------------------------------- */
 
 export function escapeRegex(value) {
-  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return String(value || '')
+    .replace(
+      /[.*+?^${}()|[\]\\]/g,
+      '\\$&'
+    );
 }
 
 export function rx(words) {
-  const sorted = [...words]
-    .filter(Boolean)
-    .sort((a, b) => String(b).length - String(a).length);
+  const sorted =
+    [...words]
+      .filter(Boolean)
+      .sort(
+        (a, b) =>
+          String(b).length -
+          String(a).length
+      );
 
   return new RegExp(
     '(?:^|\\s)(?:' +
     sorted
-      .map(word => escapeRegex(word).replace(/\s+/g, '\\s*'))
+      .map(word =>
+        escapeRegex(word)
+          .replace(/\s+/g, '\\s*')
+      )
       .join('|') +
     ')(?=\\s|$)',
     'i'
@@ -456,7 +513,8 @@ export function rx(words) {
 }
 
 export const RX = {
-  stock: /(?:stock|inventory|stok|maal|saman|سٹاک|اسٹاک|ذخیرہ|مال|سامان)/i,
+  stock:
+    /(?:stock|inventory|stok|maal|saman|سٹاک|اسٹاک|ذخیرہ|مال|سامان)/i,
 
   quantity:
     /(?:pcs?|pieces?|piece|units?|unit|items?|item|qty|quantity|پیس|عدد)/i,
@@ -470,7 +528,8 @@ export const RX = {
   balance:
     /(?:balance|due|debt|owe|owes|udhaar|udhar|qarz|kitna|kitne|how much|واجب|ادھار|قرض|کتنا|کتنے)/i,
 
-  sale: rx(WORDS.sale),
+  sale:
+    rx(WORDS.sale),
 
   profit:
     /(?:profit|profet|munafa|منافع|منافعہ)/i,
@@ -505,85 +564,149 @@ export const RX = {
 /* -------------------------------------------------------------------------- */
 
 export function levenshtein(a, b) {
-  const left = String(a || '');
-  const right = String(b || '');
+  const left =
+    String(a || '');
 
-  if (left === right) return 0;
+  const right =
+    String(b || '');
 
-  const prev = new Array(right.length + 1);
+  if (left === right) {
+    return 0;
+  }
 
-  for (let j = 0; j <= right.length; j++) {
+  const prev =
+    new Array(right.length + 1);
+
+  for (
+    let j = 0;
+    j <= right.length;
+    j++
+  ) {
     prev[j] = j;
   }
 
-  for (let i = 1; i <= left.length; i++) {
-    const current = new Array(right.length + 1);
+  for (
+    let i = 1;
+    i <= left.length;
+    i++
+  ) {
+    const current =
+      new Array(right.length + 1);
+
     current[0] = i;
 
-    for (let j = 1; j <= right.length; j++) {
+    for (
+      let j = 1;
+      j <= right.length;
+      j++
+    ) {
       current[j] =
         left[i - 1] === right[j - 1]
           ? prev[j - 1]
-          : 1 + Math.min(
-            prev[j - 1],
-            prev[j],
-            current[j - 1]
-          );
+          : 1 +
+            Math.min(
+              prev[j - 1],
+              prev[j],
+              current[j - 1]
+            );
     }
 
-    for (let j = 0; j <= right.length; j++) {
-      prev[j] = current[j];
+    for (
+      let j = 0;
+      j <= right.length;
+      j++
+    ) {
+      prev[j] =
+        current[j];
     }
   }
 
   return prev[right.length];
 }
 
-export function findMentionedAll(list, sentence) {
-  const text = norm(sentence);
+export function findMentionedAll(
+  list,
+  sentence
+) {
+  const text =
+    norm(sentence);
 
-  if (!Array.isArray(list) || !list.length) {
+  if (
+    !Array.isArray(list) ||
+    !list.length
+  ) {
     return [];
   }
 
-  const exact = list.filter(item => {
-    if (!item?.name) return false;
+  const exact =
+    list.filter(item => {
+      if (!item?.name) {
+        return false;
+      }
 
-    const name = norm(item.name);
+      const name =
+        norm(item.name);
 
-    return (
-      text === name ||
-      text.includes(` ${name} `) ||
-      text.startsWith(`${name} `) ||
-      text.endsWith(` ${name}`)
-    );
-  });
+      return (
+        text === name ||
+        text.includes(` ${name} `) ||
+        text.startsWith(`${name} `) ||
+        text.endsWith(` ${name}`)
+      );
+    });
 
   if (exact.length) {
     return exact;
   }
 
-  const words = text.split(/\s+/).filter(Boolean);
+  const words =
+    text
+      .split(/\s+/)
+      .filter(Boolean);
+
   const candidates = [];
 
   for (const item of list) {
-    if (!item?.name) continue;
+    if (!item?.name) {
+      continue;
+    }
 
-    const name = norm(item.name);
-    const nameWords = name.split(/\s+/).length;
+    const name =
+      norm(item.name);
 
-    for (let i = 0; i < words.length; i++) {
-      const window = words
-        .slice(i, i + nameWords)
-        .join(' ');
+    const nameWords =
+      name.split(/\s+/).length;
 
-      if (!window) continue;
+    for (
+      let i = 0;
+      i < words.length;
+      i++
+    ) {
+      const window =
+        words
+          .slice(
+            i,
+            i + nameWords
+          )
+          .join(' ');
 
-      const distance = levenshtein(window, name);
-      const limit = Math.max(
-        1,
-        Math.floor(name.length * 0.25)
-      );
+      if (!window) {
+        continue;
+      }
+
+      const distance =
+        levenshtein(
+          window,
+          name
+        );
+
+      const limit =
+        Math.max(
+          1,
+          Math.floor(
+            name.length * 0.25
+          )
+        );
 
       if (distance <= limit) {
         candidates.push({
@@ -594,21 +717,41 @@ export function findMentionedAll(list, sentence) {
     }
   }
 
-  candidates.sort((a, b) => a.distance - b.distance);
+  candidates.sort(
+    (a, b) =>
+      a.distance -
+      b.distance
+  );
 
   if (!candidates.length) {
     return [];
   }
 
-  const bestDistance = candidates[0].distance;
+  const bestDistance =
+    candidates[0].distance;
 
   return candidates
-    .filter(x => x.distance === bestDistance)
-    .map(x => x.item);
+    .filter(
+      x =>
+        x.distance ===
+        bestDistance
+    )
+    .map(
+      x =>
+        x.item
+    );
 }
 
-export function resolveEntity(list, sentence, label) {
-  const matches = findMentionedAll(list, sentence);
+export function resolveEntity(
+  list,
+  sentence,
+  label
+) {
+  const matches =
+    findMentionedAll(
+      list,
+      sentence
+    );
 
   if (!matches.length) {
     return {
@@ -633,6 +776,7 @@ export function resolveEntity(list, sentence, label) {
     ambiguous: true,
     item: null,
     matches,
+
     question:
       `I found more than one ${label} matching that name: ` +
       matches
@@ -643,7 +787,10 @@ export function resolveEntity(list, sentence, label) {
   };
 }
 
-export function names(list, max = 30) {
+export function names(
+  list,
+  max = 30
+) {
   return list
     .slice(0, max)
     .map(x => x?.name)
@@ -655,7 +802,8 @@ export function names(list, max = 30) {
 /* SHORT-TERM CONVERSATION CONTEXT                                            */
 /* -------------------------------------------------------------------------- */
 
-const CONTEXT_KEY = '__myBusinessAiContext';
+const CONTEXT_KEY =
+  '__myBusinessAiContext';
 
 export function getContext() {
   if (!window[CONTEXT_KEY]) {
@@ -673,11 +821,14 @@ export function getContext() {
 }
 
 export function clearOldContext() {
-  const context = getContext();
+  const context =
+    getContext();
 
   if (
     context.timestamp &&
-    Date.now() - context.timestamp > 5 * 60 * 1000
+    Date.now() -
+      context.timestamp >
+      5 * 60 * 1000
   ) {
     context.product = null;
     context.customer = null;
@@ -694,57 +845,98 @@ export function rememberContext({
   action = undefined,
   text = undefined
 }) {
-  const context = getContext();
+  const context =
+    getContext();
 
-  if (product !== undefined) {
-    context.product = product;
+  if (
+    product !== undefined
+  ) {
+    context.product =
+      product;
   }
 
-  if (customer !== undefined) {
-    context.customer = customer;
+  if (
+    customer !== undefined
+  ) {
+    context.customer =
+      customer;
   }
 
-  if (supplier !== undefined) {
-    context.supplier = supplier;
+  if (
+    supplier !== undefined
+  ) {
+    context.supplier =
+      supplier;
   }
 
-  if (action !== undefined) {
-    context.lastAction = action;
+  if (
+    action !== undefined
+  ) {
+    context.lastAction =
+      action;
   }
 
-  if (text !== undefined) {
-    context.lastText = text;
+  if (
+    text !== undefined
+  ) {
+    context.lastText =
+      text;
   }
 
-  context.timestamp = Date.now();
+  context.timestamp =
+    Date.now();
 }
 
 export function contextProduct() {
   clearOldContext();
-  return getContext().product || null;
+
+  return (
+    getContext().product ||
+    null
+  );
 }
 
 export function contextCustomer() {
   clearOldContext();
-  return getContext().customer || null;
+
+  return (
+    getContext().customer ||
+    null
+  );
 }
 
 export function contextSupplier() {
   clearOldContext();
-  return getContext().supplier || null;
+
+  return (
+    getContext().supplier ||
+    null
+  );
 }
 
 /* -------------------------------------------------------------------------- */
 /* CONFIRMATION                                                               */
 /* -------------------------------------------------------------------------- */
 
-export function confirmationText(action) {
-  window.__myBusinessAiPending = action;
+export function confirmationText(
+  action
+) {
+  window.__myBusinessAiPending =
+    action;
 
   rememberContext({
-    product: action.product ?? undefined,
-    customer: action.customer ?? undefined,
-    supplier: action.supplier ?? undefined,
+    product:
+      action.product ??
+      undefined,
+
+    customer:
+      action.customer ??
+      undefined,
+
+    supplier:
+      action.supplier ??
+      undefined,
+
     action
   });
 
@@ -755,7 +947,8 @@ export function confirmationText(action) {
 }
 
 export function isYes(value) {
-  const text = norm(value);
+  const text =
+    norm(value);
 
   return (
     RX.confirm.test(text) ||
@@ -764,7 +957,8 @@ export function isYes(value) {
 }
 
 export function isNo(value) {
-  const text = norm(value);
+  const text =
+    norm(value);
 
   return (
     RX.cancel.test(text) ||
@@ -776,10 +970,14 @@ export function isNo(value) {
 /* DATE & SAFE DATA HELPERS                                                   */
 /* -------------------------------------------------------------------------- */
 
-export function localDate(value = new Date()) {
+export function localDate(
+  value = new Date()
+) {
   if (window.getLocalDateStr) {
     return window.getLocalDateStr(
-      value instanceof Date ? value : new Date(value)
+      value instanceof Date
+        ? value
+        : new Date(value)
     );
   }
 
@@ -788,35 +986,61 @@ export function localDate(value = new Date()) {
       ? value
       : new Date(value);
 
-  if (Number.isNaN(d.getTime())) {
+  if (
+    Number.isNaN(
+      d.getTime()
+    )
+  ) {
     return '';
   }
 
   return [
     d.getFullYear(),
-    String(d.getMonth() + 1).padStart(2, '0'),
-    String(d.getDate()).padStart(2, '0')
+    String(
+      d.getMonth() + 1
+    ).padStart(2, '0'),
+    String(
+      d.getDate()
+    ).padStart(2, '0')
   ].join('-');
 }
 
-export function dateMatches(value, target) {
-  return localDate(value) === target;
+export function dateMatches(
+  value,
+  target
+) {
+  return (
+    localDate(value) ===
+    target
+  );
 }
 
 export function todayDate() {
-  return localDate(new Date());
+  return localDate(
+    new Date()
+  );
 }
 
 export function yesterdayDate() {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
+  const d =
+    new Date();
+
+  d.setDate(
+    d.getDate() - 1
+  );
+
   return localDate(d);
 }
 
-export function dataSet(name) {
-  const data = window.data || {};
+export function dataSet(
+  name
+) {
+  const data =
+    window.data || {};
 
-  return Array.isArray(data[name])
+  return Array.isArray(
+    data[name]
+  )
     ? data[name]
     : [];
 }
@@ -845,84 +1069,123 @@ export function expenses() {
 /* ACTION REGISTRY                                                            */
 /* -------------------------------------------------------------------------- */
 
-export const ACTIONS = Object.freeze({
-  addStock: {
-    purpose: 'Increase product stock',
-    required: ['product', 'qty'],
-    confirmation: true
-  },
+export const ACTIONS =
+  Object.freeze({
+    addStock: {
+      purpose:
+        'Increase product stock',
+      required: [
+        'product',
+        'qty'
+      ],
+      confirmation: true
+    },
 
-  addStockBatch: {
-    purpose: 'Add multiple stock items and create missing products',
-    required: ['items'],
-    confirmation: true
-  },
+    addStockBatch: {
+      purpose:
+        'Add multiple stock items and create missing products',
+      required: ['items'],
+      confirmation: true
+    },
 
-  removeStock: {
-    purpose: 'Decrease product stock',
-    required: ['product', 'qty'],
-    confirmation: true
-  },
+    removeStock: {
+      purpose:
+        'Decrease product stock',
+      required: [
+        'product',
+        'qty'
+      ],
+      confirmation: true
+    },
 
-  receiveCustomer: {
-    purpose: 'Receive payment from customer',
-    required: ['customer', 'amount'],
-    confirmation: true
-  },
+    receiveCustomer: {
+      purpose:
+        'Receive payment from customer',
+      required: [
+        'customer',
+        'amount'
+      ],
+      confirmation: true
+    },
 
-  giveCustomer: {
-    purpose: 'Add customer credit/debt',
-    required: ['customer', 'amount'],
-    confirmation: true
-  },
+    giveCustomer: {
+      purpose:
+        'Add customer credit/debt',
+      required: [
+        'customer',
+        'amount'
+      ],
+      confirmation: true
+    },
 
-  addCustomer: {
-    purpose: 'Create customer',
-    required: ['name'],
-    confirmation: true
-  },
+    addCustomer: {
+      purpose:
+        'Create customer',
+      required: ['name'],
+      confirmation: true
+    },
 
-  addProduct: {
-    purpose: 'Create product',
-    required: ['name'],
-    confirmation: true
-  },
+    addProduct: {
+      purpose:
+        'Create product',
+      required: ['name'],
+      confirmation: true
+    },
 
-  supplierPayment: {
-    purpose: 'Pay supplier',
-    required: ['supplier', 'amount'],
-    confirmation: true
-  },
+    supplierPayment: {
+      purpose:
+        'Pay supplier',
+      required: [
+        'supplier',
+        'amount'
+      ],
+      confirmation: true
+    },
 
-  supplierDebt: {
-    purpose: 'Add supplier payable',
-    required: ['supplier', 'amount'],
-    confirmation: true
-  },
+    supplierDebt: {
+      purpose:
+        'Add supplier payable',
+      required: [
+        'supplier',
+        'amount'
+      ],
+      confirmation: true
+    },
 
-  expense: {
-    purpose: 'Record expense',
-    required: ['amount'],
-    confirmation: true
-  },
+    expense: {
+      purpose:
+        'Record expense',
+      required: ['amount'],
+      confirmation: true
+    },
 
-  sellProduct: {
-    purpose: 'Sell single product',
-    required: ['product', 'qty'],
-    confirmation: true
-  },
+    sellProduct: {
+      purpose:
+        'Sell single product',
+      required: [
+        'product',
+        'qty'
+      ],
+      confirmation: true
+    },
 
-  sellProductBatch: {
-    purpose: 'Sell multiple products with custom prices',
-    required: ['items'],
-    confirmation: true
-  }
-});
+    sellProductBatch: {
+      purpose:
+        'Sell multiple products with custom prices',
+      required: ['items'],
+      confirmation: true
+    }
+  });
 
-export function isRegisteredAction(type) {
+export function isRegisteredAction(
+  type
+) {
   return Boolean(
     type &&
-    Object.prototype.hasOwnProperty.call(ACTIONS, type)
+    Object.prototype.hasOwnProperty.call(
+      ACTIONS,
+      type
+    )
   );
 }
 
@@ -930,70 +1193,112 @@ export function isRegisteredAction(type) {
 /* VALIDATION                                                                 */
 /* -------------------------------------------------------------------------- */
 
-export function validateAction(action) {
-  if (!action || !isRegisteredAction(action.type)) {
+export function validateAction(
+  action
+) {
+  if (
+    !action ||
+    !isRegisteredAction(
+      action.type
+    )
+  ) {
     return {
       valid: false,
-      error: 'Unsupported agent action.'
-    };
-  }
-
-  if (action.product && !action.product.id) {
-    return {
-      valid: false,
-      error: 'The selected product is missing its ID.'
-    };
-  }
-
-  if (action.customer && !action.customer.id) {
-    return {
-      valid: false,
-      error: 'The selected customer is missing its ID.'
-    };
-  }
-
-  if (action.supplier && !action.supplier.id) {
-    return {
-      valid: false,
-      error: 'The selected supplier is missing its ID.'
+      error:
+        'Unsupported agent action.'
     };
   }
 
   if (
-    ['addStock', 'removeStock', 'sellProduct'].includes(action.type)
+    action.product &&
+    !action.product.id
+  ) {
+    return {
+      valid: false,
+      error:
+        'The selected product is missing its ID.'
+    };
+  }
+
+  if (
+    action.customer &&
+    !action.customer.id
+  ) {
+    return {
+      valid: false,
+      error:
+        'The selected customer is missing its ID.'
+    };
+  }
+
+  if (
+    action.supplier &&
+    !action.supplier.id
+  ) {
+    return {
+      valid: false,
+      error:
+        'The selected supplier is missing its ID.'
+    };
+  }
+
+  if (
+    [
+      'addStock',
+      'removeStock',
+      'sellProduct'
+    ].includes(action.type)
   ) {
     if (
-      !Number.isFinite(Number(action.qty)) ||
+      !Number.isFinite(
+        Number(action.qty)
+      ) ||
       Number(action.qty) <= 0
     ) {
       return {
         valid: false,
-        error: 'Quantity must be greater than zero.'
+        error:
+          'Quantity must be greater than zero.'
       };
     }
   }
 
-  if (action.type === 'addStockBatch') {
+  if (
+    action.type ===
+    'addStockBatch'
+  ) {
     if (
-      !Array.isArray(action.items) ||
+      !Array.isArray(
+        action.items
+      ) ||
       !action.items.length
     ) {
       return {
         valid: false,
-        error: 'At least one stock item is required.'
+        error:
+          'At least one stock item is required.'
       };
     }
 
-    for (const item of action.items) {
-      if (!String(item?.name || '').trim()) {
+    for (
+      const item of action.items
+    ) {
+      if (
+        !String(
+          item?.name || ''
+        ).trim()
+      ) {
         return {
           valid: false,
-          error: 'Each stock item needs a product name.'
+          error:
+            'Each stock item needs a product name.'
         };
       }
 
       if (
-        !Number.isFinite(Number(item?.qty)) ||
+        !Number.isFinite(
+          Number(item?.qty)
+        ) ||
         Number(item.qty) <= 0
       ) {
         return {
@@ -1004,7 +1309,9 @@ export function validateAction(action) {
       }
 
       if (
-        !Number.isFinite(Number(item?.price)) ||
+        !Number.isFinite(
+          Number(item?.price)
+        ) ||
         Number(item.price) < 0
       ) {
         return {
@@ -1016,19 +1323,30 @@ export function validateAction(action) {
     }
   }
 
-  if (action.type === 'sellProductBatch') {
+  if (
+    action.type ===
+    'sellProductBatch'
+  ) {
     if (
-      !Array.isArray(action.items) ||
+      !Array.isArray(
+        action.items
+      ) ||
       !action.items.length
     ) {
       return {
         valid: false,
-        error: 'At least one sale item is required.'
+        error:
+          'At least one sale item is required.'
       };
     }
 
-    for (const item of action.items) {
-      if (!item?.product || !item.product.id) {
+    for (
+      const item of action.items
+    ) {
+      if (
+        !item?.product ||
+        !item.product.id
+      ) {
         return {
           valid: false,
           error:
@@ -1037,7 +1355,9 @@ export function validateAction(action) {
       }
 
       if (
-        !Number.isFinite(Number(item?.qty)) ||
+        !Number.isFinite(
+          Number(item?.qty)
+        ) ||
         Number(item.qty) <= 0
       ) {
         return {
@@ -1048,10 +1368,17 @@ export function validateAction(action) {
       }
 
       if (
-        item.unitPrice !== undefined &&
+        item.unitPrice !==
+        undefined &&
         (
-          !Number.isFinite(Number(item.unitPrice)) ||
-          Number(item.unitPrice) < 0
+          !Number.isFinite(
+            Number(
+              item.unitPrice
+            )
+          ) ||
+          Number(
+            item.unitPrice
+          ) < 0
         )
       ) {
         return {
@@ -1073,12 +1400,15 @@ export function validateAction(action) {
     ].includes(action.type)
   ) {
     if (
-      !Number.isFinite(Number(action.amount)) ||
+      !Number.isFinite(
+        Number(action.amount)
+      ) ||
       Number(action.amount) <= 0
     ) {
       return {
         valid: false,
-        error: 'Amount must be greater than zero.'
+        error:
+          'Amount must be greater than zero.'
       };
     }
   }
@@ -1092,93 +1422,120 @@ export function validateAction(action) {
 /* MULTI-ITEM NORMALIZATION HELPERS                                           */
 /* -------------------------------------------------------------------------- */
 
-const FILLER_AND_LINK_WORDS = new Set([
-  'aur',
-  'or',
-  'and',
-  'اور',
+const FILLER_AND_LINK_WORDS =
+  new Set([
+    'aur',
+    'or',
+    'and',
+    'اور',
 
-  'mein',
-  'me',
-  'main',
-  'ma',
-  'میں',
+    'mein',
+    'me',
+    'main',
+    'ma',
+    'میں',
 
-  'ka',
-  'ki',
-  'ke',
-  'kay',
-  'kaa',
-  'کا',
-  'کی',
-  'کے',
+    'ka',
+    'ki',
+    'ke',
+    'kay',
+    'kaa',
+    'کا',
+    'کی',
+    'کے',
 
-  'ko',
-  'سے',
-  'se',
-  'کو',
+    'ko',
+    'سے',
+    'se',
+    'کو',
 
-  'karo',
-  'kro',
-  'kar',
-  'kr',
-  'krdo',
-  'kardo',
-  'کرو',
-  'کر',
-  'دو',
+    'karo',
+    'kro',
+    'kar',
+    'kr',
+    'krdo',
+    'kardo',
+    'کرو',
+    'کر',
+    'دو',
 
-  'hai',
-  'he',
-  'hy',
-  'hain',
-  'ہے',
-  'ہیں',
+    'hai',
+    'he',
+    'hy',
+    'hain',
+    'ہے',
+    'ہیں',
 
-  'bhai',
-  'yaar',
-  'please',
-  'plz',
-  'zara',
-  'ab',
+    'bhai',
+    'yaar',
+    'please',
+    'plz',
+    'zara',
+    'ab',
 
-  'it',
-  'itna',
-  'bas',
-  'just',
+    'it',
+    'itna',
+    'bas',
+    'just',
 
-  'do'
-]);
+    'do'
+  ]);
 
-const PRICE_INDICATOR_WORDS = new Set(
-  WORDS.price.map(w => norm(w))
-);
+const PRICE_INDICATOR_WORDS =
+  new Set(
+    WORDS.price.map(
+      w => norm(w)
+    )
+  );
 
-const SALE_WORDS_SET = new Set(
-  WORDS.sale.map(w => norm(w))
-);
+const SALE_WORDS_SET =
+  new Set(
+    WORDS.sale.map(
+      w => norm(w)
+    )
+  );
 
-const STOCK_ACTION_WORDS_SET = new Set(
-  WORDS.addStock
-    .concat(WORDS.removeStock)
-    .map(w => norm(w))
-);
+const STOCK_ACTION_WORDS_SET =
+  new Set(
+    WORDS.addStock
+      .concat(
+        WORDS.removeStock
+      )
+      .map(
+        w => norm(w)
+      )
+  );
 
-function isNumberToken(token) {
-  if (!token) return false;
+function isNumberToken(
+  token
+) {
+  if (!token) {
+    return false;
+  }
 
-  if (/^\d+(?:\.\d+)?$/.test(token)) {
+  if (
+    /^\d+(?:\.\d+)?$/.test(
+      token
+    )
+  ) {
     return true;
   }
 
   return (
-    NUMBER_WORDS[token] !== undefined ||
-    MULTIPLIER_WORDS[token] !== undefined
+    NUMBER_WORDS[token] !==
+      undefined ||
+    MULTIPLIER_WORDS[token] !==
+      undefined
   );
 }
 
-function evaluateNumberTokens(tokens) {
-  if (!Array.isArray(tokens) || !tokens.length) {
+function evaluateNumberTokens(
+  tokens
+) {
+  if (
+    !Array.isArray(tokens) ||
+    !tokens.length
+  ) {
     return NaN;
   }
 
@@ -1187,51 +1544,84 @@ function evaluateNumberTokens(tokens) {
   );
 }
 
-function isSaleWord(token) {
-  return SALE_WORDS_SET.has(norm(token));
+function isSaleWord(
+  token
+) {
+  return SALE_WORDS_SET.has(
+    norm(token)
+  );
 }
 
-function isStockActionWord(token) {
-  return STOCK_ACTION_WORDS_SET.has(norm(token));
+function isStockActionWord(
+  token
+) {
+  return STOCK_ACTION_WORDS_SET.has(
+    norm(token)
+  );
 }
 
-function isFiller(token) {
-  return FILLER_AND_LINK_WORDS.has(norm(token));
+function isFiller(
+  token
+) {
+  return FILLER_AND_LINK_WORDS.has(
+    norm(token)
+  );
 }
 
-function isPriceIndicator(token) {
-  return PRICE_INDICATOR_WORDS.has(norm(token));
+function isPriceIndicator(
+  token
+) {
+  return PRICE_INDICATOR_WORDS.has(
+    norm(token)
+  );
 }
 
-/*
- * Returns the longest exact product-name match starting at index.
- *
- * This is important for multi-item sales:
- *
- *   1 mobile charger 3 photo frame 2 lamp
- *
- * It makes "mobile charger" one product instead of two words.
- */
-function findProductStartingAt(tokens, index, allProducts) {
-  if (!Array.isArray(allProducts) || !allProducts.length) {
+/* -------------------------------------------------------------------------- */
+/* PRODUCT TOKEN MATCHER                                                      */
+/* -------------------------------------------------------------------------- */
+
+function findProductStartingAt(
+  tokens,
+  index,
+  allProducts
+) {
+  if (
+    !Array.isArray(
+      allProducts
+    ) ||
+    !allProducts.length
+  ) {
     return null;
   }
 
-  const maxWords = Math.min(
-    12,
-    tokens.length - index
-  );
-
-  for (let len = maxWords; len >= 1; len--) {
-    const candidate = tokens
-      .slice(index, index + len)
-      .join(' ');
-
-    const normalizedCandidate = norm(candidate);
-
-    const found = allProducts.find(
-      p => norm(p?.name) === normalizedCandidate
+  const maxWords =
+    Math.min(
+      12,
+      tokens.length - index
     );
+
+  for (
+    let len = maxWords;
+    len >= 1;
+    len--
+  ) {
+    const candidate =
+      tokens
+        .slice(
+          index,
+          index + len
+        )
+        .join(' ');
+
+    const normalizedCandidate =
+      norm(candidate);
+
+    const found =
+      allProducts.find(
+        p =>
+          norm(p?.name) ===
+          normalizedCandidate
+      );
 
     if (found) {
       return {
@@ -1244,11 +1634,11 @@ function findProductStartingAt(tokens, index, allProducts) {
   return null;
 }
 
-/*
- * Find whether tokens beginning at index represent a known product
- * after an optional quantity.
- */
-function nextKnownProduct(tokens, index, allProducts) {
+function nextKnownProduct(
+  tokens,
+  index,
+  allProducts
+) {
   let start = index;
 
   while (
@@ -1265,58 +1655,78 @@ function nextKnownProduct(tokens, index, allProducts) {
   );
 }
 
-/*
- * Remove repeated/duplicate product items from a batch.
- *
- * Example:
- *   2 lamp 3 lamp stock add
- *
- * becomes:
- *   lamp qty = 5
- */
-function mergeStockItems(items, allProducts) {
-  const map = new Map();
+/* -------------------------------------------------------------------------- */
+/* ITEM MERGING                                                               */
+/* -------------------------------------------------------------------------- */
 
-  for (const item of items) {
-    const key = norm(
-      item.product?.name || item.name
-    );
+function mergeStockItems(
+  items,
+  allProducts
+) {
+  const map =
+    new Map();
 
-    if (!key) continue;
+  for (
+    const item of items
+  ) {
+    const key =
+      norm(
+        item.product?.name ||
+        item.name
+      );
+
+    if (!key) {
+      continue;
+    }
 
     if (!map.has(key)) {
-      map.set(key, {
-        ...item
-      });
+      map.set(
+        key,
+        {
+          ...item
+        }
+      );
     } else {
-      const existing = map.get(key);
+      const existing =
+        map.get(key);
 
       existing.qty =
-        Number(existing.qty || 0) +
-        Number(item.qty || 0);
+        Number(
+          existing.qty || 0
+        ) +
+        Number(
+          item.qty || 0
+        );
 
-      /*
-       * If a later item explicitly gives a price,
-       * use that price.
-       */
       if (
-        Number.isFinite(Number(item.price)) &&
+        Number.isFinite(
+          Number(item.price)
+        ) &&
         Number(item.price) >= 0
       ) {
-        existing.price = Number(item.price);
+        existing.price =
+          Number(item.price);
       }
     }
   }
 
-  return [...map.values()].map(item => {
+  return [
+    ...map.values()
+  ].map(item => {
     if (!item.product) {
-      const found = allProducts.find(
-        p => norm(p.name) === norm(item.name)
-      );
+      const found =
+        allProducts.find(
+          p =>
+            norm(p.name) ===
+            norm(item.name)
+        );
 
       if (found) {
-        item.product = found;
-        item.name = found.name;
+        item.product =
+          found;
+
+        item.name =
+          found.name;
       }
     }
 
@@ -1324,121 +1734,182 @@ function mergeStockItems(items, allProducts) {
   });
 }
 
-function mergeSaleItems(items) {
-  const map = new Map();
+function mergeSaleItems(
+  items
+) {
+  const map =
+    new Map();
 
-  for (const item of items) {
-    if (!item?.product?.id) continue;
-
-    const key = String(item.product.id);
-
-    if (!map.has(key)) {
-      map.set(key, {
-        ...item
-      });
+  for (
+    const item of items
+  ) {
+    if (
+      !item?.product?.id
+    ) {
       continue;
     }
 
-    const existing = map.get(key);
+    const key =
+      String(
+        item.product.id
+      );
+
+    if (!map.has(key)) {
+      map.set(
+        key,
+        {
+          ...item
+        }
+      );
+
+      continue;
+    }
+
+    const existing =
+      map.get(key);
 
     existing.qty =
-      Number(existing.qty || 0) +
-      Number(item.qty || 0);
+      Number(
+        existing.qty || 0
+      ) +
+      Number(
+        item.qty || 0
+      );
 
-    /*
-     * If the second occurrence has a custom price,
-     * retain that explicit price.
-     */
-    if (item.unitPrice !== undefined) {
-      existing.unitPrice = Number(item.unitPrice);
+    if (
+      item.unitPrice !==
+      undefined
+    ) {
+      existing.unitPrice =
+        Number(
+          item.unitPrice
+        );
     }
   }
 
-  return [...map.values()];
+  return [
+    ...map.values()
+  ];
 }
 
 /* -------------------------------------------------------------------------- */
 /* STOCK MULTI-ITEM PARSER                                                    */
 /* -------------------------------------------------------------------------- */
 
-export function parseMultiStockItems(body, allProducts) {
-  const rawTokens = norm(body)
-    .split(/\s+/)
-    .filter(Boolean);
+export function parseMultiStockItems(
+  body,
+  allProducts
+) {
+  const rawTokens =
+    norm(body)
+      .split(/\s+/)
+      .filter(Boolean);
 
   const items = [];
+
   let i = 0;
 
-  while (i < rawTokens.length) {
-    /* Skip command/filler words */
+  while (
+    i < rawTokens.length
+  ) {
     while (
       i < rawTokens.length &&
       (
-        isFiller(rawTokens[i]) ||
-        isPriceIndicator(rawTokens[i]) ||
-        isStockActionWord(rawTokens[i])
+        isFiller(
+          rawTokens[i]
+        ) ||
+        isPriceIndicator(
+          rawTokens[i]
+        ) ||
+        isStockActionWord(
+          rawTokens[i]
+        )
       )
     ) {
       i++;
     }
 
-    if (i >= rawTokens.length) break;
-
-    /* -------------------------------------------------------------- */
-    /* Quantity                                                        */
-    /* -------------------------------------------------------------- */
+    if (
+      i >= rawTokens.length
+    ) {
+      break;
+    }
 
     const qtyTokens = [];
 
     while (
       i < rawTokens.length &&
-      isNumberToken(rawTokens[i])
+      isNumberToken(
+        rawTokens[i]
+      )
     ) {
-      qtyTokens.push(rawTokens[i]);
+      qtyTokens.push(
+        rawTokens[i]
+      );
+
       i++;
     }
 
-    if (!qtyTokens.length) {
+    if (
+      !qtyTokens.length
+    ) {
       i++;
       continue;
     }
 
-    const qty = evaluateNumberTokens(qtyTokens);
+    const qty =
+      evaluateNumberTokens(
+        qtyTokens
+      );
 
-    if (!Number.isFinite(qty) || qty <= 0) {
+    if (
+      !Number.isFinite(qty) ||
+      qty <= 0
+    ) {
       return [];
     }
 
-    /* -------------------------------------------------------------- */
-    /* Product name                                                    */
-    /* -------------------------------------------------------------- */
-
-    const knownProduct = findProductStartingAt(
-      rawTokens,
-      i,
-      allProducts
-    );
+    const knownProduct =
+      findProductStartingAt(
+        rawTokens,
+        i,
+        allProducts
+      );
 
     let product = null;
     let productName = '';
 
     if (knownProduct) {
-      product = knownProduct.product;
-      productName = product.name;
-      i += knownProduct.length;
+      product =
+        knownProduct.product;
+
+      productName =
+        product.name;
+
+      i +=
+        knownProduct.length;
     } else {
       const nameTokens = [];
 
-      while (i < rawTokens.length) {
-        const token = rawTokens[i];
+      while (
+        i < rawTokens.length
+      ) {
+        const token =
+          rawTokens[i];
 
-        if (isNumberToken(token)) {
+        if (
+          isNumberToken(token)
+        ) {
           break;
         }
 
         if (
-          isStockActionWord(token) ||
-          isPriceIndicator(token)
+          isStockActionWord(
+            token
+          ) ||
+          isPriceIndicator(
+            token
+          )
         ) {
           break;
         }
@@ -1448,30 +1919,45 @@ export function parseMultiStockItems(body, allProducts) {
           nameTokens.length > 0
         ) {
           if (
-            i + 1 < rawTokens.length &&
-            isNumberToken(rawTokens[i + 1])
+            i + 1 <
+              rawTokens.length &&
+            isNumberToken(
+              rawTokens[i + 1]
+            )
           ) {
             break;
           }
         }
 
-        nameTokens.push(token);
+        nameTokens.push(
+          token
+        );
+
         i++;
       }
 
-      productName = nameTokens.join(' ').trim();
+      productName =
+        nameTokens
+          .join(' ')
+          .trim();
 
       if (!productName) {
         break;
       }
 
-      const exact = allProducts.find(
-        p => norm(p.name) === norm(productName)
-      );
+      const exact =
+        allProducts.find(
+          p =>
+            norm(p.name) ===
+            norm(productName)
+        );
 
       if (exact) {
-        product = exact;
-        productName = exact.name;
+        product =
+          exact;
+
+        productName =
+          exact.name;
       }
     }
 
@@ -1479,21 +1965,26 @@ export function parseMultiStockItems(body, allProducts) {
       break;
     }
 
-    /* -------------------------------------------------------------- */
-    /* Price                                                           */
-    /* -------------------------------------------------------------- */
-
     while (
       i < rawTokens.length &&
       (
-        isPriceIndicator(rawTokens[i]) ||
-        isFiller(rawTokens[i])
+        isPriceIndicator(
+          rawTokens[i]
+        ) ||
+        isFiller(
+          rawTokens[i]
+        )
       )
     ) {
       if (
-        isFiller(rawTokens[i]) &&
-        i + 1 < rawTokens.length &&
-        isNumberToken(rawTokens[i + 1])
+        isFiller(
+          rawTokens[i]
+        ) &&
+        i + 1 <
+          rawTokens.length &&
+        isNumberToken(
+          rawTokens[i + 1]
+        )
       ) {
         break;
       }
@@ -1505,128 +1996,152 @@ export function parseMultiStockItems(body, allProducts) {
 
     while (
       i < rawTokens.length &&
-      isNumberToken(rawTokens[i])
+      isNumberToken(
+        rawTokens[i]
+      )
     ) {
-      if (priceTokens.length) {
+      if (
+        priceTokens.length
+      ) {
         break;
       }
 
-      priceTokens.push(rawTokens[i]);
+      priceTokens.push(
+        rawTokens[i]
+      );
+
       i++;
     }
 
     let price = NaN;
 
-    if (priceTokens.length) {
-      price = evaluateNumberTokens(priceTokens);
+    if (
+      priceTokens.length
+    ) {
+      price =
+        evaluateNumberTokens(
+          priceTokens
+        );
     }
 
-    const finalPrice = Number.isFinite(price)
-      ? price
-      : (
-        product
-          ? Number(product.cost || 0)
-          : 0
-      );
+    const finalPrice =
+      Number.isFinite(price)
+        ? price
+        : (
+          product
+            ? Number(
+              product.cost || 0
+            )
+            : 0
+        );
 
     items.push({
-      name: productName,
-      product: product || null,
-      qty: Math.floor(qty),
-      price: Math.max(0, Number(finalPrice) || 0)
+      name:
+        productName,
+
+      product:
+        product || null,
+
+      qty:
+        Math.floor(qty),
+
+      price:
+        Math.max(
+          0,
+          Number(finalPrice) || 0
+        )
     });
   }
 
-  return mergeStockItems(items, allProducts);
+  return mergeStockItems(
+    items,
+    allProducts
+  );
 }
 
 /* -------------------------------------------------------------------------- */
 /* SALE MULTI-ITEM PARSER                                                     */
 /* -------------------------------------------------------------------------- */
 
-/*
- * Supported examples:
- *
- *   1 lamp 3 frame sale karo
- *
- *   1 lamp and 3 frame sale karo
- *
- *   1 lamp 3 frame 4 charger sale karo
- *
- *   1 lamp 300 3 frame 600 sale karo
- *
- * The important rule is:
- *
- *   NUMBER + PRODUCT + NUMBER + PRODUCT
- *
- * means:
- *
- *   first NUMBER  = first product quantity
- *   second NUMBER = next product quantity
- *
- * unless the number is followed by no known product, in which case
- * it is treated as the current product's custom selling price.
- */
-export function parseMultiSaleItems(body, allProducts) {
-  const rawTokens = norm(body)
-    .split(/\s+/)
-    .filter(Boolean);
+export function parseMultiSaleItems(
+  body,
+  allProducts
+) {
+  const rawTokens =
+    norm(body)
+      .split(/\s+/)
+      .filter(Boolean);
 
   const items = [];
+
   let i = 0;
 
-  while (i < rawTokens.length) {
-    /* -------------------------------------------------------------- */
-    /* Skip fillers / sale / price words                              */
-    /* -------------------------------------------------------------- */
-
+  while (
+    i < rawTokens.length
+  ) {
     while (
       i < rawTokens.length &&
       (
-        isFiller(rawTokens[i]) ||
-        isSaleWord(rawTokens[i]) ||
-        isPriceIndicator(rawTokens[i])
+        isFiller(
+          rawTokens[i]
+        ) ||
+        isSaleWord(
+          rawTokens[i]
+        ) ||
+        isPriceIndicator(
+          rawTokens[i]
+        )
       )
     ) {
       i++;
     }
 
-    if (i >= rawTokens.length) {
+    if (
+      i >= rawTokens.length
+    ) {
       break;
     }
 
-    /* -------------------------------------------------------------- */
-    /* Quantity                                                        */
-    /* -------------------------------------------------------------- */
-
     let qty = 1;
+
     const qtyTokens = [];
 
     while (
       i < rawTokens.length &&
-      isNumberToken(rawTokens[i])
+      isNumberToken(
+        rawTokens[i]
+      )
     ) {
-      qtyTokens.push(rawTokens[i]);
+      qtyTokens.push(
+        rawTokens[i]
+      );
+
       i++;
     }
 
-    if (qtyTokens.length) {
+    if (
+      qtyTokens.length
+    ) {
       const parsedQty =
-        evaluateNumberTokens(qtyTokens);
+        evaluateNumberTokens(
+          qtyTokens
+        );
 
       if (
-        Number.isFinite(parsedQty) &&
+        Number.isFinite(
+          parsedQty
+        ) &&
         parsedQty > 0
       ) {
-        qty = Math.floor(parsedQty);
+        qty =
+          Math.floor(
+            parsedQty
+          );
       }
     }
 
-    /* -------------------------------------------------------------- */
-    /* Product                                                         */
-    /* -------------------------------------------------------------- */
-
-    let matchedProduct = null;
+    let matchedProduct =
+      null;
 
     const productMatch =
       findProductStartingAt(
@@ -1636,20 +2151,23 @@ export function parseMultiSaleItems(body, allProducts) {
       );
 
     if (productMatch) {
-      matchedProduct = productMatch.product;
-      i += productMatch.length;
+      matchedProduct =
+        productMatch.product;
+
+      i +=
+        productMatch.length;
     } else {
-      /*
-       * Unknown products cannot safely be sold.
-       *
-       * Gather the product name so the caller can report it.
-       */
       const nameTokens = [];
 
-      while (i < rawTokens.length) {
-        const token = rawTokens[i];
+      while (
+        i < rawTokens.length
+      ) {
+        const token =
+          rawTokens[i];
 
-        if (isNumberToken(token)) {
+        if (
+          isNumberToken(token)
+        ) {
           break;
         }
 
@@ -1665,36 +2183,54 @@ export function parseMultiSaleItems(body, allProducts) {
           nameTokens.length > 0
         ) {
           if (
-            i + 1 < rawTokens.length &&
-            isNumberToken(rawTokens[i + 1])
+            i + 1 <
+              rawTokens.length &&
+            isNumberToken(
+              rawTokens[i + 1]
+            )
           ) {
             break;
           }
         }
 
-        nameTokens.push(token);
+        nameTokens.push(
+          token
+        );
+
         i++;
       }
 
       const fallbackName =
-        nameTokens.join(' ').trim();
+        nameTokens
+          .join(' ')
+          .trim();
 
       if (!fallbackName) {
         break;
       }
 
-      const exact = allProducts.find(
-        p => norm(p.name) === norm(fallbackName)
-      );
+      const exact =
+        allProducts.find(
+          p =>
+            norm(p.name) ===
+            norm(fallbackName)
+        );
 
       if (exact) {
-        matchedProduct = exact;
+        matchedProduct =
+          exact;
       } else {
         items.push({
-          name: fallbackName,
-          product: null,
+          name:
+            fallbackName,
+
+          product:
+            null,
+
           qty,
-          unitPrice: undefined
+
+          unitPrice:
+            undefined
         });
 
         continue;
@@ -1705,24 +2241,18 @@ export function parseMultiSaleItems(body, allProducts) {
       break;
     }
 
-    /* -------------------------------------------------------------- */
-    /* After product: determine PRICE or NEXT QUANTITY                */
-    /* -------------------------------------------------------------- */
-
     while (
       i < rawTokens.length &&
-      isFiller(rawTokens[i])
+      isFiller(
+        rawTokens[i]
+      )
     ) {
-      /*
-       * Keep:
-       *
-       *   3 frame
-       *
-       * together.
-       */
       if (
-        i + 1 < rawTokens.length &&
-        isNumberToken(rawTokens[i + 1])
+        i + 1 <
+          rawTokens.length &&
+        isNumberToken(
+          rawTokens[i + 1]
+        )
       ) {
         break;
       }
@@ -1730,18 +2260,18 @@ export function parseMultiSaleItems(body, allProducts) {
       i++;
     }
 
-    /*
-     * "price 300"
-     *
-     * explicitly means current product price.
-     */
-    let explicitPriceIndicator = false;
+    let explicitPriceIndicator =
+      false;
 
     while (
       i < rawTokens.length &&
-      isPriceIndicator(rawTokens[i])
+      isPriceIndicator(
+        rawTokens[i]
+      )
     ) {
-      explicitPriceIndicator = true;
+      explicitPriceIndicator =
+        true;
+
       i++;
     }
 
@@ -1749,20 +2279,13 @@ export function parseMultiSaleItems(body, allProducts) {
 
     if (
       i < rawTokens.length &&
-      isNumberToken(rawTokens[i])
+      isNumberToken(
+        rawTokens[i]
+      )
     ) {
-      const numberIndex = i;
+      const numberIndex =
+        i;
 
-      /*
-       * Check whether the number starts another item:
-       *
-       *   1 lamp 3 frame
-       *
-       * number = 3
-       * product after number = frame
-       *
-       * Therefore 3 = frame quantity.
-       */
       const nextProduct =
         findProductStartingAt(
           rawTokens,
@@ -1780,51 +2303,70 @@ export function parseMultiSaleItems(body, allProducts) {
           ]);
 
         if (
-          Number.isFinite(parsedPrice) &&
+          Number.isFinite(
+            parsedPrice
+          ) &&
           parsedPrice >= 0
         ) {
-          customUnitPrice = parsedPrice;
+          customUnitPrice =
+            parsedPrice;
+
           i++;
         }
       }
-
-      /*
-       * If nextProduct exists and there was no explicit price word,
-       * leave the number untouched.
-       *
-       * The next loop will use it as the next product quantity.
-       */
     }
 
     items.push({
-      name: matchedProduct.name,
-      product: matchedProduct,
+      name:
+        matchedProduct.name,
+
+      product:
+        matchedProduct,
+
       qty,
-      unitPrice: customUnitPrice
+
+      unitPrice:
+        customUnitPrice
     });
   }
 
-  return mergeSaleItems(items);
+  return mergeSaleItems(
+    items
+  );
 }
 
 /* -------------------------------------------------------------------------- */
 /* EXECUTION                                                                  */
 /* -------------------------------------------------------------------------- */
 
-export async function execute(action) {
+export async function execute(
+  action
+) {
   requireUser();
 
-  const validation = validateAction(action);
+  const validation =
+    validateAction(action);
 
   if (!validation.valid) {
-    throw new Error(validation.error);
+    throw new Error(
+      validation.error
+    );
   }
 
-  const db = window.db;
-  const doc = window.doc;
-  const collection = window.collection;
+  const db =
+    window.db;
 
-  if (!db || !doc || !collection) {
+  const doc =
+    window.doc;
+
+  const collection =
+    window.collection;
+
+  if (
+    !db ||
+    !doc ||
+    !collection
+  ) {
     throw new Error(
       'The database interface is not available.'
     );
@@ -1838,68 +2380,112 @@ export async function execute(action) {
     action.type === 'addStock' ||
     action.type === 'removeStock'
   ) {
-    const ref = doc(
-      db,
-      'products',
-      action.product.id
-    );
+    const ref =
+      doc(
+        db,
+        'products',
+        action.product.id
+      );
 
     let newStock = 0;
 
-    await window.runAtomicOrOffline(async tx => {
-      const snap = await tx.get(ref);
+    await window.runAtomicOrOffline(
+      async tx => {
+        const snap =
+          await tx.get(ref);
 
-      if (!snap.exists()) {
-        throw new Error(
-          'Product no longer exists.'
+        if (!snap.exists()) {
+          throw new Error(
+            'Product no longer exists.'
+          );
+        }
+
+        const data =
+          snap.data();
+
+        if (
+          data.ownerId !==
+          ownerId()
+        ) {
+          throw new Error(
+            'Unauthorized product.'
+          );
+        }
+
+        const current =
+          Number(data.stock) || 0;
+
+        newStock =
+          action.type ===
+          'addStock'
+            ? current +
+              Number(
+                action.qty
+              )
+            : current -
+              Number(
+                action.qty
+              );
+
+        if (newStock < 0) {
+          throw new Error(
+            `Not enough stock. Available: ${current}, requested: ${action.qty}.`
+          );
+        }
+
+        tx.update(
+          ref,
+          {
+            stock:
+              newStock,
+
+            updatedAt:
+              new Date().toISOString()
+          }
+        );
+
+        const adjustmentRef =
+          doc(
+            collection(
+              db,
+              'stockAdjustments'
+            )
+          );
+
+        tx.set(
+          adjustmentRef,
+          {
+            ownerId:
+              ownerId(),
+
+            productId:
+              action.product.id,
+
+            type:
+              action.type ===
+              'addStock'
+                ? 'add'
+                : 'remove',
+
+            quantity:
+              Number(
+                action.qty
+              ),
+
+            date:
+              new Date().toISOString(),
+
+            note:
+              'AI agent'
+          }
         );
       }
-
-      const data = snap.data();
-
-      if (data.ownerId !== ownerId()) {
-        throw new Error(
-          'Unauthorized product.'
-        );
-      }
-
-      const current =
-        Number(data.stock) || 0;
-
-      newStock =
-        action.type === 'addStock'
-          ? current + Number(action.qty)
-          : current - Number(action.qty);
-
-      if (newStock < 0) {
-        throw new Error(
-          `Not enough stock. Available: ${current}, requested: ${action.qty}.`
-        );
-      }
-
-      tx.update(ref, {
-        stock: newStock,
-        updatedAt: new Date().toISOString()
-      });
-
-      const adjustmentRef =
-        doc(collection(db, 'stockAdjustments'));
-
-      tx.set(adjustmentRef, {
-        ownerId: ownerId(),
-        productId: action.product.id,
-        type:
-          action.type === 'addStock'
-            ? 'add'
-            : 'remove',
-        quantity: Number(action.qty),
-        date: new Date().toISOString(),
-        note: 'AI agent'
-      });
-    });
+    );
 
     rememberContext({
-      product: action.product,
+      product:
+        action.product,
+
       action
     });
 
@@ -1911,75 +2497,104 @@ export async function execute(action) {
   }
 
   /* ---------------------------------------------------------------------- */
-  /* Batch Stock Add / Auto-Create Missing Products                           */
+  /* Batch Stock Add                                                         */
   /* ---------------------------------------------------------------------- */
 
-  if (action.type === 'addStockBatch') {
+  if (
+    action.type ===
+    'addStockBatch'
+  ) {
     const results = [];
 
-    const mergedItems = mergeStockItems(
-      action.items,
-      products()
-    );
+    const mergedItems =
+      mergeStockItems(
+        action.items,
+        products()
+      );
 
-    await window.runAtomicOrOffline(async tx => {
-      const productState = new Map();
+    await window.runAtomicOrOffline(
+      async tx => {
+        /*
+         * IMPORTANT FIRESTORE RULE:
+         *
+         * ALL reads happen here first.
+         * NO tx.update / tx.set before every tx.get is finished.
+         */
 
-      for (const item of mergedItems) {
-        const name =
-          String(item.name || '').trim();
+        const productStates =
+          new Map();
 
-        const qty =
-          Number(item.qty);
+        const currentProducts =
+          products();
 
-        const price =
-          Number(item.price);
+        /* -------------------------------------------------------------- */
+        /* READ PHASE                                                      */
+        /* -------------------------------------------------------------- */
 
-        if (!name) {
-          throw new Error(
-            'A stock item has no product name.'
-          );
-        }
-
-        if (
-          !Number.isFinite(qty) ||
-          qty <= 0
+        for (
+          const item of mergedItems
         ) {
-          throw new Error(
-            `Invalid quantity for ${name}.`
-          );
-        }
+          const name =
+            String(
+              item.name || ''
+            ).trim();
 
-        if (
-          !Number.isFinite(price) ||
-          price < 0
-        ) {
-          throw new Error(
-            `Invalid price for ${name}.`
-          );
-        }
+          const qty =
+            Number(item.qty);
 
-        let existing =
-          products().find(
-            p => norm(p.name) === norm(name)
-          );
+          const price =
+            Number(item.price);
 
-        const existingKey =
-          existing
-            ? String(existing.id)
-            : `new:${norm(name)}`;
+          if (!name) {
+            throw new Error(
+              'A stock item has no product name.'
+            );
+          }
 
-        if (existing) {
-          const ref = doc(
-            db,
-            'products',
-            existing.id
-          );
+          if (
+            !Number.isFinite(qty) ||
+            qty <= 0
+          ) {
+            throw new Error(
+              `Invalid quantity for ${name}.`
+            );
+          }
 
-          let state =
-            productState.get(existingKey);
+          if (
+            !Number.isFinite(price) ||
+            price < 0
+          ) {
+            throw new Error(
+              `Invalid price for ${name}.`
+            );
+          }
 
-          if (!state) {
+          const existing =
+            currentProducts.find(
+              p =>
+                norm(p.name) ===
+                norm(name)
+            );
+
+          if (existing) {
+            const key =
+              String(existing.id);
+
+            if (
+              productStates.has(
+                key
+              )
+            ) {
+              continue;
+            }
+
+            const ref =
+              doc(
+                db,
+                'products',
+                existing.id
+              );
+
             const snap =
               await tx.get(ref);
 
@@ -1989,144 +2604,284 @@ export async function execute(action) {
               );
             }
 
-            const data = snap.data();
+            const data =
+              snap.data();
 
             if (
-              data.ownerId !== ownerId()
+              data.ownerId !==
+              ownerId()
             ) {
               throw new Error(
                 `Unauthorized product ${name}.`
               );
             }
 
-            state = {
-              ref,
-              name: data.name || name,
-              stock: Number(data.stock) || 0,
-              cost: Number(data.cost) || 0,
-              price: Number(data.price) || 0,
-              wholesalePrice:
-                Number(
-                  data.wholesalePrice ??
-                  data.price ??
-                  0
-                ),
-              retailPrice:
-                Number(
-                  data.retailPrice ??
-                  data.price ??
-                  0
-                )
-            };
+            productStates.set(
+              key,
+              {
+                ref,
+                existingId:
+                  existing.id,
 
-            productState.set(
-              existingKey,
-              state
+                name:
+                  data.name ||
+                  name,
+
+                stock:
+                  Number(
+                    data.stock
+                  ) || 0,
+
+                cost:
+                  Number(
+                    data.cost
+                  ) || 0,
+
+                price:
+                  Number(
+                    data.price
+                  ) || 0,
+
+                wholesalePrice:
+                  Number(
+                    data.wholesalePrice ??
+                    data.price ??
+                    0
+                  ),
+
+                retailPrice:
+                  Number(
+                    data.retailPrice ??
+                    data.price ??
+                    0
+                  ),
+
+                existing:
+                  true
+              }
             );
           }
+        }
 
-          state.stock += qty;
+        /*
+         * No transaction reads are allowed after this point.
+         */
 
-          const updates = {
-            stock: state.stock,
-            updatedAt:
-              new Date().toISOString()
-          };
+        /* -------------------------------------------------------------- */
+        /* WRITE / CALCULATION PHASE                                      */
+        /* -------------------------------------------------------------- */
 
-          if (price > 0) {
-            state.cost = price;
-            state.price = price;
-            state.wholesalePrice = price;
-            state.retailPrice = price;
+        for (
+          const item of mergedItems
+        ) {
+          const name =
+            String(
+              item.name || ''
+            ).trim();
 
-            updates.cost = price;
-            updates.price = price;
-            updates.wholesalePrice = price;
-            updates.retailPrice = price;
-          }
+          const qty =
+            Number(item.qty);
 
-          tx.update(
-            state.ref,
-            updates
-          );
+          const price =
+            Number(item.price);
 
-          const adjustmentRef =
-            doc(collection(db, 'stockAdjustments'));
+          const existing =
+            currentProducts.find(
+              p =>
+                norm(p.name) ===
+                norm(name)
+            );
 
-          tx.set(adjustmentRef, {
-            ownerId: ownerId(),
-            productId: existing.id,
-            type: 'add',
-            quantity: qty,
-            price,
-            date:
-              new Date().toISOString(),
-            note:
-              'AI agent batch stock add'
-          });
+          if (existing) {
+            const key =
+              String(existing.id);
 
-          results.push(
-            `${state.name}: +${qty} stock ` +
-            `(new stock: ${state.stock}) ` +
-            `at ${money(price)}`
-          );
+            const state =
+              productStates.get(
+                key
+              );
 
-        } else {
-          const productRef =
-            doc(collection(db, 'products'));
-
-          tx.set(productRef, {
-            name,
-            barcode: '',
-            cost: price,
-            price,
-            wholesalePrice: price,
-            retailPrice: price,
-            minStock: 5,
-            stock: qty,
-            ownerId: ownerId(),
-            createdAt:
-              new Date().toISOString(),
-            updatedAt:
-              new Date().toISOString()
-          });
-
-          const adjustmentRef =
-            doc(collection(db, 'stockAdjustments'));
-
-          tx.set(adjustmentRef, {
-            ownerId: ownerId(),
-            productId: productRef.id,
-            type: 'add',
-            quantity: qty,
-            price,
-            date:
-              new Date().toISOString(),
-            note:
-              'AI agent product auto-creation'
-          });
-
-          productState.set(
-            `new:${norm(name)}`,
-            {
-              ref: productRef,
-              name,
-              stock: qty
+            if (!state) {
+              throw new Error(
+                `Product state for ${name} is unavailable.`
+              );
             }
-          );
 
-          results.push(
-            `${name}: created with ${qty} stock ` +
-            `at ${money(price)}`
-          );
+            state.stock +=
+              qty;
+
+            const updates = {
+              stock:
+                state.stock,
+
+              updatedAt:
+                new Date().toISOString()
+            };
+
+            if (price > 0) {
+              state.cost =
+                price;
+
+              state.price =
+                price;
+
+              state.wholesalePrice =
+                price;
+
+              state.retailPrice =
+                price;
+
+              updates.cost =
+                price;
+
+              updates.price =
+                price;
+
+              updates.wholesalePrice =
+                price;
+
+              updates.retailPrice =
+                price;
+            }
+
+            tx.update(
+              state.ref,
+              updates
+            );
+
+            const adjustmentRef =
+              doc(
+                collection(
+                  db,
+                  'stockAdjustments'
+                )
+              );
+
+            tx.set(
+              adjustmentRef,
+              {
+                ownerId:
+                  ownerId(),
+
+                productId:
+                  existing.id,
+
+                type:
+                  'add',
+
+                quantity:
+                  qty,
+
+                price,
+
+                date:
+                  new Date().toISOString(),
+
+                note:
+                  'AI agent batch stock add'
+              }
+            );
+
+            results.push(
+              `${state.name}: +${qty} stock ` +
+              `(new stock: ${state.stock}) ` +
+              `at ${money(price)}`
+            );
+          } else {
+            const productRef =
+              doc(
+                collection(
+                  db,
+                  'products'
+                )
+              );
+
+            tx.set(
+              productRef,
+              {
+                name,
+
+                barcode:
+                  '',
+
+                cost:
+                  price,
+
+                price:
+                  price,
+
+                wholesalePrice:
+                  price,
+
+                retailPrice:
+                  price,
+
+                minStock:
+                  5,
+
+                stock:
+                  qty,
+
+                ownerId:
+                  ownerId(),
+
+                createdAt:
+                  new Date().toISOString(),
+
+                updatedAt:
+                  new Date().toISOString()
+              }
+            );
+
+            const adjustmentRef =
+              doc(
+                collection(
+                  db,
+                  'stockAdjustments'
+                )
+              );
+
+            tx.set(
+              adjustmentRef,
+              {
+                ownerId:
+                  ownerId(),
+
+                productId:
+                  productRef.id,
+
+                type:
+                  'add',
+
+                quantity:
+                  qty,
+
+                price,
+
+                date:
+                  new Date().toISOString(),
+
+                note:
+                  'AI agent product auto-creation'
+              }
+            );
+
+            results.push(
+              `${name}: created with ${qty} stock ` +
+              `at ${money(price)}`
+            );
+          }
         }
       }
-    });
+    );
 
     return (
       `Added to stock successfully:\n` +
       results
-        .map(r => `• ${r}`)
+        .map(
+          r =>
+            `• ${r}`
+        )
         .join('\n')
     );
   }
@@ -2135,24 +2890,40 @@ export async function execute(action) {
   /* Single Product Sale                                                     */
   /* ---------------------------------------------------------------------- */
 
-  if (action.type === 'sellProduct') {
+  if (
+    action.type ===
+    'sellProduct'
+  ) {
     const items = [
       {
-        product: action.product,
-        qty: Number(action.qty),
+        product:
+          action.product,
+
+        qty:
+          Number(
+            action.qty
+          ),
+
         unitPrice:
-          action.unitPrice !== undefined
-            ? Number(action.unitPrice)
+          action.unitPrice !==
+          undefined
+            ? Number(
+              action.unitPrice
+            )
             : undefined
       }
     ];
 
     return await executeBatchSale({
       items,
+
       customer:
-        action.customer || null,
+        action.customer ||
+        null,
+
       saleType:
-        action.saleType || 'retail'
+        action.saleType ||
+        'retail'
     });
   }
 
@@ -2160,8 +2931,13 @@ export async function execute(action) {
   /* Batch Sale                                                              */
   /* ---------------------------------------------------------------------- */
 
-  if (action.type === 'sellProductBatch') {
-    return await executeBatchSale(action);
+  if (
+    action.type ===
+    'sellProductBatch'
+  ) {
+    return await executeBatchSale(
+      action
+    );
   }
 
   /* ---------------------------------------------------------------------- */
@@ -2169,110 +2945,162 @@ export async function execute(action) {
   /* ---------------------------------------------------------------------- */
 
   if (
-    action.type === 'receiveCustomer' ||
-    action.type === 'giveCustomer'
+    action.type ===
+      'receiveCustomer' ||
+    action.type ===
+      'giveCustomer'
   ) {
-    const ref = doc(
-      db,
-      'customers',
-      action.customer.id
-    );
+    const ref =
+      doc(
+        db,
+        'customers',
+        action.customer.id
+      );
 
     const transactionRef =
-      doc(collection(db, 'customerTransactions'));
+      doc(
+        collection(
+          db,
+          'customerTransactions'
+        )
+      );
 
     let newBalance = 0;
 
-    await window.runAtomicOrOffline(async tx => {
-      const snap = await tx.get(ref);
+    await window.runAtomicOrOffline(
+      async tx => {
+        const snap =
+          await tx.get(ref);
 
-      if (!snap.exists()) {
-        throw new Error(
-          'Customer no longer exists.'
-        );
-      }
+        if (!snap.exists()) {
+          throw new Error(
+            'Customer no longer exists.'
+          );
+        }
 
-      const data = snap.data();
+        const data =
+          snap.data();
 
-      if (data.ownerId !== ownerId()) {
-        throw new Error(
-          'Unauthorized customer.'
-        );
-      }
+        if (
+          data.ownerId !==
+          ownerId()
+        ) {
+          throw new Error(
+            'Unauthorized customer.'
+          );
+        }
 
-      const current =
-        Math.max(
-          0,
-          Number(data.balance) || 0
-        );
-
-      if (
-        action.type === 'receiveCustomer' &&
-        Number(action.amount) > current
-      ) {
-        throw new Error(
-          `Amount exceeds customer due of ${money(current)}.`
-        );
-      }
-
-      newBalance =
-        action.type === 'receiveCustomer'
-          ? Math.max(
+        const current =
+          Math.max(
             0,
-            current - Number(action.amount)
-          )
-          : current + Number(action.amount);
+            Number(
+              data.balance
+            ) || 0
+          );
 
-      tx.update(ref, {
-        balance: newBalance,
-        updatedAt:
-          new Date().toISOString()
-      });
+        if (
+          action.type ===
+            'receiveCustomer' &&
+          Number(
+            action.amount
+          ) > current
+        ) {
+          throw new Error(
+            `Amount exceeds customer due of ${money(current)}.`
+          );
+        }
 
-      tx.set(transactionRef, {
-        ownerId: ownerId(),
-        customerId:
-          action.customer.id,
+        newBalance =
+          action.type ===
+          'receiveCustomer'
+            ? Math.max(
+              0,
+              current -
+              Number(
+                action.amount
+              )
+            )
+            : current +
+              Number(
+                action.amount
+              );
 
-        type:
-          action.type === 'receiveCustomer'
-            ? 'payment'
-            : 'manual_debt',
+        tx.update(
+          ref,
+          {
+            balance:
+              newBalance,
 
-        amount:
-          Number(action.amount),
+            updatedAt:
+              new Date().toISOString()
+          }
+        );
 
-        amountPaid:
-          action.type === 'receiveCustomer'
-            ? Number(action.amount)
-            : 0,
+        tx.set(
+          transactionRef,
+          {
+            ownerId:
+              ownerId(),
 
-        debitAmount:
-          action.type === 'receiveCustomer'
-            ? 0
-            : Number(action.amount),
+            customerId:
+              action.customer.id,
 
-        creditAmount:
-          action.type === 'receiveCustomer'
-            ? Number(action.amount)
-            : 0,
+            type:
+              action.type ===
+              'receiveCustomer'
+                ? 'payment'
+                : 'manual_debt',
 
-        balanceAfter:
-          newBalance,
+            amount:
+              Number(
+                action.amount
+              ),
 
-        date:
-          new Date().toISOString(),
+            amountPaid:
+              action.type ===
+              'receiveCustomer'
+                ? Number(
+                  action.amount
+                )
+                : 0,
 
-        note: 'AI agent',
+            debitAmount:
+              action.type ===
+              'receiveCustomer'
+                ? 0
+                : Number(
+                  action.amount
+                ),
 
-        createdBy:
-          window.authUserId ||
-          window.currentUserId
-      });
-    });
+            creditAmount:
+              action.type ===
+              'receiveCustomer'
+                ? Number(
+                  action.amount
+                )
+                : 0,
+
+            balanceAfter:
+              newBalance,
+
+            date:
+              new Date().toISOString(),
+
+            note:
+              'AI agent',
+
+            createdBy:
+              window.authUserId ||
+              window.currentUserId
+          }
+        );
+      }
+    );
 
     rememberContext({
-      customer: action.customer,
+      customer:
+        action.customer,
+
       action
     });
 
@@ -2288,7 +3116,10 @@ export async function execute(action) {
   /* Add Customer                                                            */
   /* ---------------------------------------------------------------------- */
 
-  if (action.type === 'addCustomer') {
+  if (
+    action.type ===
+    'addCustomer'
+  ) {
     const existing =
       customers().filter(
         c =>
@@ -2304,24 +3135,43 @@ export async function execute(action) {
     }
 
     await window.addDoc(
-      collection(db, 'customers'),
+      collection(
+        db,
+        'customers'
+      ),
       {
-        name: action.name,
-        phone: action.phone || '',
-        address: '',
-        notes: '',
-        dueDate: null,
-        balance: 0,
+        name:
+          action.name,
+
+        phone:
+          action.phone || '',
+
+        address:
+          '',
+
+        notes:
+          '',
+
+        dueDate:
+          null,
+
+        balance:
+          0,
+
         createdAt:
           new Date().toISOString(),
-        ownerId: ownerId()
+
+        ownerId:
+          ownerId()
       }
     );
 
     rememberContext({
       customer: {
-        name: action.name
+        name:
+          action.name
       },
+
       action
     });
 
@@ -2335,7 +3185,10 @@ export async function execute(action) {
   /* Add Product                                                             */
   /* ---------------------------------------------------------------------- */
 
-  if (action.type === 'addProduct') {
+  if (
+    action.type ===
+    'addProduct'
+  ) {
     const existing =
       products().filter(
         p =>
@@ -2351,30 +3204,53 @@ export async function execute(action) {
     }
 
     const cost =
-      Number(action.cost) || 0;
+      Number(
+        action.cost
+      ) || 0;
 
     const wholesalePrice =
-      Number(action.wholesalePrice) ||
-      cost;
+      Number(
+        action.wholesalePrice
+      ) || cost;
 
     const retailPrice =
-      Number(action.retailPrice) ||
-      wholesalePrice;
+      Number(
+        action.retailPrice
+      ) || wholesalePrice;
 
     await window.addDoc(
-      collection(db, 'products'),
+      collection(
+        db,
+        'products'
+      ),
       {
-        name: action.name,
-        barcode: action.barcode || '',
+        name:
+          action.name,
+
+        barcode:
+          action.barcode || '',
+
         cost,
-        price: wholesalePrice,
+
+        price:
+          wholesalePrice,
+
         wholesalePrice,
+
         retailPrice,
+
         minStock:
-          Number(action.minStock) || 5,
+          Number(
+            action.minStock
+          ) || 5,
+
         stock:
-          Number(action.stock) || 0,
-        ownerId: ownerId()
+          Number(
+            action.stock
+          ) || 0,
+
+        ownerId:
+          ownerId()
       }
     );
 
@@ -2389,91 +3265,134 @@ export async function execute(action) {
   /* ---------------------------------------------------------------------- */
 
   if (
-    action.type === 'supplierPayment' ||
-    action.type === 'supplierDebt'
+    action.type ===
+      'supplierPayment' ||
+    action.type ===
+      'supplierDebt'
   ) {
-    const ref = doc(
-      db,
-      'suppliers',
-      action.supplier.id
-    );
+    const ref =
+      doc(
+        db,
+        'suppliers',
+        action.supplier.id
+      );
 
     const transactionRef =
-      doc(collection(db, 'supplierTransactions'));
+      doc(
+        collection(
+          db,
+          'supplierTransactions'
+        )
+      );
 
     let newBalance = 0;
 
-    await window.runAtomicOrOffline(async tx => {
-      const snap = await tx.get(ref);
+    await window.runAtomicOrOffline(
+      async tx => {
+        const snap =
+          await tx.get(ref);
 
-      if (!snap.exists()) {
-        throw new Error(
-          'Supplier no longer exists.'
-        );
-      }
+        if (!snap.exists()) {
+          throw new Error(
+            'Supplier no longer exists.'
+          );
+        }
 
-      const data = snap.data();
+        const data =
+          snap.data();
 
-      if (data.ownerId !== ownerId()) {
-        throw new Error(
-          'Unauthorized supplier.'
-        );
-      }
+        if (
+          data.ownerId !==
+          ownerId()
+        ) {
+          throw new Error(
+            'Unauthorized supplier.'
+          );
+        }
 
-      const current =
-        Math.max(
-          0,
-          Number(data.balance) || 0
-        );
-
-      if (
-        action.type === 'supplierPayment' &&
-        Number(action.amount) > current
-      ) {
-        throw new Error(
-          `Payment exceeds supplier payable of ${money(current)}.`
-        );
-      }
-
-      newBalance =
-        action.type === 'supplierPayment'
-          ? Math.max(
+        const current =
+          Math.max(
             0,
-            current - Number(action.amount)
-          )
-          : current + Number(action.amount);
+            Number(
+              data.balance
+            ) || 0
+          );
 
-      tx.update(ref, {
-        balance: newBalance,
-        updatedAt:
-          new Date().toISOString()
-      });
+        if (
+          action.type ===
+            'supplierPayment' &&
+          Number(
+            action.amount
+          ) > current
+        ) {
+          throw new Error(
+            `Payment exceeds supplier payable of ${money(current)}.`
+          );
+        }
 
-      tx.set(transactionRef, {
-        ownerId: ownerId(),
-        supplierId:
-          action.supplier.id,
+        newBalance =
+          action.type ===
+          'supplierPayment'
+            ? Math.max(
+              0,
+              current -
+              Number(
+                action.amount
+              )
+            )
+            : current +
+              Number(
+                action.amount
+              );
 
-        type:
-          action.type === 'supplierPayment'
-            ? 'payment'
-            : 'manual_debt',
+        tx.update(
+          ref,
+          {
+            balance:
+              newBalance,
 
-        amount:
-          Number(action.amount),
+            updatedAt:
+              new Date().toISOString()
+          }
+        );
 
-        balanceAfter:
-          newBalance,
+        tx.set(
+          transactionRef,
+          {
+            ownerId:
+              ownerId(),
 
-        date:
-          new Date().toISOString(),
+            supplierId:
+              action.supplier.id,
 
-        note: 'AI agent'
-      });
-    });
+            type:
+              action.type ===
+              'supplierPayment'
+                ? 'payment'
+                : 'manual_debt',
+
+            amount:
+              Number(
+                action.amount
+              ),
+
+            balanceAfter:
+              newBalance,
+
+            date:
+              new Date().toISOString(),
+
+            note:
+              'AI agent'
+          }
+        );
+      }
+    );
 
     rememberContext({
-      supplier: action.supplier,
+      supplier:
+        action.supplier,
+
       action
     });
 
@@ -2489,24 +3408,34 @@ export async function execute(action) {
   /* Expense                                                                 */
   /* ---------------------------------------------------------------------- */
 
-  if (action.type === 'expense') {
+  if (
+    action.type ===
+    'expense'
+  ) {
     await window.addDoc(
-      collection(db, 'expenses'),
+      collection(
+        db,
+        'expenses'
+      ),
       {
         amount:
-          Number(action.amount),
+          Number(
+            action.amount
+          ),
 
         date:
           new Date().toISOString(),
 
         category:
-          action.category || 'AI expense',
+          action.category ||
+          'AI expense',
 
         note:
           action.note ||
           'Added by AI agent',
 
-        ownerId: ownerId()
+        ownerId:
+          ownerId()
       }
     );
 
@@ -2530,21 +3459,34 @@ export async function execute(action) {
 /* ATOMIC BATCH SALE                                                         */
 /* -------------------------------------------------------------------------- */
 
-async function executeBatchSale(action) {
+async function executeBatchSale(
+  action
+) {
   requireUser();
 
-  const db = window.db;
-  const doc = window.doc;
-  const collection = window.collection;
+  const db =
+    window.db;
 
-  if (!db || !doc || !collection) {
+  const doc =
+    window.doc;
+
+  const collection =
+    window.collection;
+
+  if (
+    !db ||
+    !doc ||
+    !collection
+  ) {
     throw new Error(
       'The database interface is not available.'
     );
   }
 
   if (
-    !Array.isArray(action.items) ||
+    !Array.isArray(
+      action.items
+    ) ||
     !action.items.length
   ) {
     throw new Error(
@@ -2553,9 +3495,13 @@ async function executeBatchSale(action) {
   }
 
   const mergedItems =
-    mergeSaleItems(action.items);
+    mergeSaleItems(
+      action.items
+    );
 
-  if (!mergedItems.length) {
+  if (
+    !mergedItems.length
+  ) {
     throw new Error(
       'No valid sale products were provided.'
     );
@@ -2570,8 +3516,16 @@ async function executeBatchSale(action) {
       )
       : null;
 
+  const settingsRef =
+    doc(
+      db,
+      'settings',
+      ownerId()
+    );
+
   const isWholesale =
-    action.saleType === 'wholesale';
+    action.saleType ===
+    'wholesale';
 
   let grandTotal = 0;
   let grandProfit = 0;
@@ -2579,419 +3533,673 @@ async function executeBatchSale(action) {
   const summaryLines = [];
   const saleItems = [];
 
-  await window.runAtomicOrOffline(async tx => {
-    const productStates = [];
+  let newCustomerBalance = 0;
+  let billNumber = 1;
 
-    for (const item of mergedItems) {
-      if (!item?.product?.id) {
-        throw new Error(
-          `Product "${item?.name || 'unknown'}" could not be identified.`
+  await window.runAtomicOrOffline(
+    async tx => {
+      /*
+       * ====================================================================
+       * FIRESTORE TRANSACTION READ PHASE
+       * ====================================================================
+       *
+       * ABSOLUTELY NO transaction.update/set/delete is allowed before
+       * ALL transaction.get() calls below have completed.
+       */
+
+      const productStates = [];
+
+      /*
+       * First collect product refs.
+       * This does NOT perform any write.
+       */
+      const productRefs =
+        mergedItems.map(
+          item => {
+            if (
+              !item?.product?.id
+            ) {
+              throw new Error(
+                `Product "${item?.name || 'unknown'}" could not be identified.`
+              );
+            }
+
+            return {
+              item,
+
+              ref:
+                doc(
+                  db,
+                  'products',
+                  item.product.id
+                )
+            };
+          }
         );
-      }
 
-      const pRef =
-        doc(
-          db,
-          'products',
-          item.product.id
-        );
-
-      const pSnap =
-        await tx.get(pRef);
-
-      if (!pSnap.exists()) {
-        throw new Error(
-          `Product ${item.product.name} no longer exists.`
-        );
-      }
-
-      const pData =
-        pSnap.data();
-
-      if (
-        pData.ownerId !== ownerId()
+      /*
+       * ---------------------------------------------------------------
+       * READ ALL PRODUCT DOCUMENTS FIRST
+       * ---------------------------------------------------------------
+       */
+      for (
+        const entry of productRefs
       ) {
-        throw new Error(
-          `Unauthorized product ${item.product.name}.`
-        );
-      }
-
-      const availableStock =
-        Number(pData.stock) || 0;
-
-      const requestedQty =
-        Number(item.qty);
-
-      if (
-        !Number.isFinite(requestedQty) ||
-        requestedQty <= 0
-      ) {
-        throw new Error(
-          `Invalid quantity for ${pData.name}.`
-        );
-      }
-
-      if (
-        requestedQty > availableStock
-      ) {
-        throw new Error(
-          `Not enough stock for ${pData.name}. ` +
-          `Available: ${availableStock}, requested: ${requestedQty}.`
-        );
-      }
-
-      const normalRetail =
-        Number(
-          pData.retailPrice ??
-          pData.price ??
-          0
-        );
-
-      const normalWholesale =
-        Number(
-          pData.wholesalePrice ??
-          pData.price ??
-          0
-        );
-
-      const cost =
-        Number(pData.cost) || 0;
-
-      const normalPrice =
-        isWholesale
-          ? normalWholesale
-          : normalRetail;
-
-      let unitPrice =
-        item.unitPrice !== undefined
-          ? Number(item.unitPrice)
-          : normalPrice;
-
-      if (
-        !Number.isFinite(unitPrice) ||
-        unitPrice < 0
-      ) {
-        throw new Error(
-          `Invalid selling price for ${pData.name}.`
-        );
-      }
-
-      const itemTotal =
-        unitPrice * requestedQty;
-
-      const itemCostTotal =
-        cost * requestedQty;
-
-      const itemProfit =
-        itemTotal - itemCostTotal;
-
-      const discountPerUnit =
-        !isWholesale
-          ? Math.max(
-            0,
-            normalRetail - unitPrice
-          )
-          : Math.max(
-            0,
-            normalWholesale - unitPrice
+        const pSnap =
+          await tx.get(
+            entry.ref
           );
 
-      const itemDiscount =
-        discountPerUnit *
-        requestedQty;
-
-      productStates.push({
-        item,
-        pRef,
-        pData,
-        availableStock,
-        requestedQty,
-        unitPrice,
-        normalPrice,
-        cost,
-        itemTotal,
-        itemCostTotal,
-        itemProfit,
-        itemDiscount
-      });
-    }
-
-    for (const state of productStates) {
-      grandTotal += state.itemTotal;
-      grandProfit += state.itemProfit;
-
-      saleItems.push({
-        id: state.item.product.id,
-        name: state.pData.name,
-        price: state.unitPrice,
-        normalPrice: state.normalPrice,
-        cost: state.cost,
-        qty: state.requestedQty,
-        discount: state.itemDiscount,
-        returnedQty: 0
-      });
-
-      summaryLines.push(
-        `${state.requestedQty} × ${state.pData.name} ` +
-        `at ${money(state.unitPrice)} each ` +
-        `= ${money(state.itemTotal)}`
-      );
-    }
-
-    for (const state of productStates) {
-      tx.update(
-        state.pRef,
-        {
-          stock:
-            state.availableStock -
-            state.requestedQty,
-
-          updatedAt:
-            new Date().toISOString()
+        if (
+          !pSnap.exists()
+        ) {
+          throw new Error(
+            `Product ${entry.item.product.name} no longer exists.`
+          );
         }
-      );
-    }
 
-    /* -------------------------------------------------------------- */
-    /* Customer                                                        */
-    /* -------------------------------------------------------------- */
+        const pData =
+          pSnap.data();
 
-    let newCustomerBalance = 0;
+        if (
+          pData.ownerId !==
+          ownerId()
+        ) {
+          throw new Error(
+            `Unauthorized product ${entry.item.product.name}.`
+          );
+        }
 
-    if (customerRef) {
-      const cSnap =
-        await tx.get(customerRef);
+        const availableStock =
+          Number(
+            pData.stock
+          ) || 0;
 
-      if (!cSnap.exists()) {
-        throw new Error(
-          'Customer no longer exists.'
-        );
+        const requestedQty =
+          Number(
+            entry.item.qty
+          );
+
+        if (
+          !Number.isFinite(
+            requestedQty
+          ) ||
+          requestedQty <= 0
+        ) {
+          throw new Error(
+            `Invalid quantity for ${pData.name}.`
+          );
+        }
+
+        if (
+          requestedQty >
+          availableStock
+        ) {
+          throw new Error(
+            `Not enough stock for ${pData.name}. ` +
+            `Available: ${availableStock}, requested: ${requestedQty}.`
+          );
+        }
+
+        const normalRetail =
+          Number(
+            pData.retailPrice ??
+            pData.price ??
+            0
+          );
+
+        const normalWholesale =
+          Number(
+            pData.wholesalePrice ??
+            pData.price ??
+            0
+          );
+
+        const cost =
+          Number(
+            pData.cost
+          ) || 0;
+
+        const normalPrice =
+          isWholesale
+            ? normalWholesale
+            : normalRetail;
+
+        let unitPrice =
+          entry.item.unitPrice !==
+          undefined
+            ? Number(
+              entry.item.unitPrice
+            )
+            : normalPrice;
+
+        if (
+          !Number.isFinite(
+            unitPrice
+          ) ||
+          unitPrice < 0
+        ) {
+          throw new Error(
+            `Invalid selling price for ${pData.name}.`
+          );
+        }
+
+        const itemTotal =
+          unitPrice *
+          requestedQty;
+
+        const itemCostTotal =
+          cost *
+          requestedQty;
+
+        const itemProfit =
+          itemTotal -
+          itemCostTotal;
+
+        const discountPerUnit =
+          !isWholesale
+            ? Math.max(
+              0,
+              normalRetail -
+              unitPrice
+            )
+            : Math.max(
+              0,
+              normalWholesale -
+              unitPrice
+            );
+
+        const itemDiscount =
+          discountPerUnit *
+          requestedQty;
+
+        productStates.push({
+          item:
+            entry.item,
+
+          pRef:
+            entry.ref,
+
+          pData,
+
+          availableStock,
+
+          requestedQty,
+
+          unitPrice,
+
+          normalPrice,
+
+          cost,
+
+          itemTotal,
+
+          itemCostTotal,
+
+          itemProfit,
+
+          itemDiscount
+        });
       }
 
-      const cData =
-        cSnap.data();
+      /*
+       * ---------------------------------------------------------------
+       * READ CUSTOMER BEFORE ANY WRITE
+       * ---------------------------------------------------------------
+       */
+      let customerData =
+        null;
+
+      if (customerRef) {
+        const cSnap =
+          await tx.get(
+            customerRef
+          );
+
+        if (
+          !cSnap.exists()
+        ) {
+          throw new Error(
+            'Customer no longer exists.'
+          );
+        }
+
+        customerData =
+          cSnap.data();
+
+        if (
+          customerData.ownerId !==
+          ownerId()
+        ) {
+          throw new Error(
+            'Unauthorized customer.'
+          );
+        }
+
+        const currentBalance =
+          Math.max(
+            0,
+            Number(
+              customerData.balance
+            ) || 0
+          );
+
+        newCustomerBalance =
+          currentBalance;
+      }
+
+      /*
+       * ---------------------------------------------------------------
+       * READ INVOICE SETTINGS BEFORE ANY WRITE
+       * ---------------------------------------------------------------
+       */
+      const settingsSnap =
+        await tx.get(
+          settingsRef
+        );
+
+      /*
+       * ---------------------------------------------------------------
+       * ALL FIRESTORE READS ARE NOW FINISHED.
+       *
+       * From this exact point onward:
+       * NO tx.get()
+       * ONLY calculations + writes.
+       * ---------------------------------------------------------------
+       */
 
       if (
-        cData.ownerId !== ownerId()
+        settingsSnap.exists()
       ) {
-        throw new Error(
-          'Unauthorized customer.'
-        );
-      }
+        const settingsData =
+          settingsSnap.data();
 
-      const currentBalance =
-        Math.max(
-          0,
-          Number(cData.balance) || 0
-        );
+        const configuredNext =
+          Number(
+            settingsData.nextInvoiceNumber
+          );
 
-      newCustomerBalance =
-        currentBalance +
-        grandTotal;
-
-      tx.update(
-        customerRef,
-        {
-          balance:
-            newCustomerBalance,
-
-          updatedAt:
-            new Date().toISOString()
+        if (
+          Number.isFinite(
+            configuredNext
+          ) &&
+          configuredNext > 0
+        ) {
+          billNumber =
+            Math.floor(
+              configuredNext
+            );
         }
-      );
-    }
-
-    /* -------------------------------------------------------------- */
-    /* Invoice Number                                                  */
-    /* -------------------------------------------------------------- */
-
-    const invoiceNumbers =
-      sales()
-        .map(x =>
-          parseInt(
-            x.invoiceNumber,
-            10
-          )
-        )
-        .filter(Number.isFinite);
-
-    const billNumber =
-      Math.max(
-        0,
-        ...invoiceNumbers
-      ) + 1;
-
-    const saleRef =
-      doc(collection(db, 'sales'));
-
-    const totalDiscount =
-      saleItems.reduce(
-        (acc, item) =>
-          acc +
-          (Number(item.discount) || 0),
-        0
-      );
-
-    tx.set(
-      saleRef,
-      {
-        ownerId: ownerId(),
-
-        createdBy:
-          window.authUserId ||
-          window.currentUserId,
-
-        createdByName:
-          window.currentMemberName ||
-          'Business Owner',
-
-        customerId:
-          action.customer
-            ? action.customer.id
-            : null,
-
-        customerName:
-          action.customer
-            ? action.customer.name
-            : 'Walk-in',
-
-        saleType:
-          isWholesale
-            ? 'wholesale'
-            : 'retail',
-
-        date:
-          new Date().toISOString(),
-
-        items: saleItems,
-
-        subtotal:
-          grandTotal,
-
-        discount:
-          totalDiscount,
-
-        discountType:
-          'amount',
-
-        total:
-          grandTotal,
-
-        amountPaid:
-          action.customer
-            ? 0
-            : grandTotal,
-
-        amountDue:
-          action.customer
-            ? grandTotal
-            : 0,
-
-        totalProfit:
-          grandProfit,
-
-        profitKnown:
-          true,
-
-        note:
-          'AI agent',
-
-        returnedAmount:
-          0,
-
-        returnedProfit:
-          0,
-
-        invoiceNumber:
-          billNumber
       }
-    );
 
-    /* -------------------------------------------------------------- */
-    /* Customer Transaction                                             */
-    /* -------------------------------------------------------------- */
+      /*
+       * Preserve the previous invoice-number behavior as a fallback
+       * when the settings document does not contain a usable number.
+       */
+      if (
+        billNumber <= 1 &&
+        !settingsSnap.exists()
+      ) {
+        const invoiceNumbers =
+          sales()
+            .map(
+              x =>
+                parseInt(
+                  x.invoiceNumber,
+                  10
+                )
+            )
+            .filter(
+              Number.isFinite
+            );
 
-    if (customerRef) {
-      const transactionRef =
+        billNumber =
+          Math.max(
+            0,
+            ...invoiceNumbers
+          ) + 1;
+      }
+
+      /*
+       * If the settings document exists but has no valid number,
+       * use the existing loaded sales data as fallback.
+       */
+      if (
+        billNumber <= 1
+      ) {
+        const invoiceNumbers =
+          sales()
+            .map(
+              x =>
+                parseInt(
+                  x.invoiceNumber,
+                  10
+                )
+            )
+            .filter(
+              Number.isFinite
+            );
+
+        const fallbackNumber =
+          Math.max(
+            0,
+            ...invoiceNumbers
+          ) + 1;
+
+        if (
+          fallbackNumber >
+          billNumber
+        ) {
+          billNumber =
+            fallbackNumber;
+        }
+      }
+
+      /*
+       * ---------------------------------------------------------------
+       * CALCULATE SALE
+       * ---------------------------------------------------------------
+       */
+
+      for (
+        const state of productStates
+      ) {
+        grandTotal +=
+          state.itemTotal;
+
+        grandProfit +=
+          state.itemProfit;
+
+        saleItems.push({
+          id:
+            state.item.product.id,
+
+          name:
+            state.pData.name,
+
+          price:
+            state.unitPrice,
+
+          /*
+           * Keep explicit unitPrice too.
+           * Existing sales fields remain unchanged.
+           */
+          unitPrice:
+            state.unitPrice,
+
+          normalPrice:
+            state.normalPrice,
+
+          cost:
+            state.cost,
+
+          qty:
+            state.requestedQty,
+
+          quantity:
+            state.requestedQty,
+
+          discount:
+            state.itemDiscount,
+
+          returnedQty:
+            0
+        });
+
+        summaryLines.push(
+          `${state.requestedQty} × ${state.pData.name} ` +
+          `at ${money(state.unitPrice)} each ` +
+          `= ${money(state.itemTotal)}`
+        );
+      }
+
+      if (customerRef) {
+        newCustomerBalance =
+          Math.max(
+            0,
+            Number(
+              customerData.balance
+            ) || 0
+          ) +
+          grandTotal;
+      }
+
+      const totalDiscount =
+        saleItems.reduce(
+          (
+            acc,
+            item
+          ) =>
+            acc +
+            (
+              Number(
+                item.discount
+              ) || 0
+            ),
+          0
+        );
+
+      /*
+       * ---------------------------------------------------------------
+       * WRITE PHASE
+       * ---------------------------------------------------------------
+       */
+
+      /*
+       * 1. Update all product stock.
+       */
+      for (
+        const state of productStates
+      ) {
+        tx.update(
+          state.pRef,
+          {
+            stock:
+              state.availableStock -
+              state.requestedQty,
+
+            updatedAt:
+              new Date().toISOString()
+          }
+        );
+      }
+
+      /*
+       * 2. Update customer balance if this is a customer sale.
+       */
+      if (customerRef) {
+        tx.update(
+          customerRef,
+          {
+            balance:
+              newCustomerBalance,
+
+            updatedAt:
+              new Date().toISOString()
+          }
+        );
+      }
+
+      /*
+       * 3. Create sale document.
+       */
+      const saleRef =
         doc(
-          collection(db, 'customerTransactions')
+          collection(
+            db,
+            'sales'
+          )
         );
 
       tx.set(
-        transactionRef,
+        saleRef,
         {
-          ownerId: ownerId(),
+          ownerId:
+            ownerId(),
+
+          createdBy:
+            window.authUserId ||
+            window.currentUserId,
+
+          createdByName:
+            window.currentMemberName ||
+            'Business Owner',
 
           customerId:
-            action.customer.id,
+            action.customer
+              ? action.customer.id
+              : null,
 
-          type:
-            'sale_debt',
+          customerName:
+            action.customer
+              ? action.customer.name
+              : 'Walk-in',
 
-          amount:
-            grandTotal,
-
-          amountPaid:
-            0,
-
-          debitAmount:
-            grandTotal,
-
-          creditAmount:
-            0,
-
-          balanceAfter:
-            newCustomerBalance,
+          saleType:
+            isWholesale
+              ? 'wholesale'
+              : 'retail',
 
           date:
             new Date().toISOString(),
 
+          items:
+            saleItems,
+
+          subtotal:
+            grandTotal,
+
+          discount:
+            totalDiscount,
+
+          discountType:
+            'amount',
+
+          total:
+            grandTotal,
+
+          amountPaid:
+            action.customer
+              ? 0
+              : grandTotal,
+
+          amountDue:
+            action.customer
+              ? grandTotal
+              : 0,
+
+          totalProfit:
+            grandProfit,
+
+          profitKnown:
+            true,
+
           note:
-            `Bill No. ${billNumber}`,
+            'AI agent',
 
-          billNo:
-            String(billNumber),
+          returnedAmount:
+            0,
 
-          saleId:
-            saleRef.id,
+          returnedProfit:
+            0,
 
-          createdBy:
-            window.authUserId ||
-            window.currentUserId
+          invoiceNumber:
+            billNumber
+        }
+      );
+
+      /*
+       * 4. Customer transaction.
+       */
+      if (customerRef) {
+        const transactionRef =
+          doc(
+            collection(
+              db,
+              'customerTransactions'
+            )
+          );
+
+        tx.set(
+          transactionRef,
+          {
+            ownerId:
+              ownerId(),
+
+            customerId:
+              action.customer.id,
+
+            type:
+              'sale_debt',
+
+            amount:
+              grandTotal,
+
+            amountPaid:
+              0,
+
+            debitAmount:
+              grandTotal,
+
+            creditAmount:
+              0,
+
+            balanceAfter:
+              newCustomerBalance,
+
+            date:
+              new Date().toISOString(),
+
+            note:
+              `Bill No. ${billNumber}`,
+
+            billNo:
+              String(
+                billNumber
+              ),
+
+            saleId:
+              saleRef.id,
+
+            createdBy:
+              window.authUserId ||
+              window.currentUserId
+          }
+        );
+      }
+
+      /*
+       * 5. Update invoice counter.
+       */
+      tx.set(
+        settingsRef,
+        {
+          nextInvoiceNumber:
+            billNumber + 1
+        },
+        {
+          merge:
+            true
         }
       );
     }
-
-    /* -------------------------------------------------------------- */
-    /* Invoice Counter                                                  */
-    /* -------------------------------------------------------------- */
-
-    tx.set(
-      doc(
-        db,
-        'settings',
-        ownerId()
-      ),
-      {
-        nextInvoiceNumber:
-          billNumber + 1
-      },
-      {
-        merge: true
-      }
-    );
-  });
+  );
 
   rememberContext({
     customer:
-      action.customer || undefined,
+      action.customer ||
+      undefined,
+
     action
   });
 
   return (
     `Done. Sold:\n` +
     summaryLines
-      .map(s => `• ${s}`)
+      .map(
+        s =>
+          `• ${s}`
+      )
       .join('\n') +
     `\nTotal: ${money(grandTotal)}` +
     ` | Total Profit: ${money(grandProfit)}` +
@@ -3007,12 +4215,20 @@ async function executeBatchSale(action) {
 /* INFORMATION COMMANDS                                                       */
 /* -------------------------------------------------------------------------- */
 
-export function parseInformationCommand(input) {
-  const text = norm(input);
+export function parseInformationCommand(
+  input
+) {
+  const text =
+    norm(input);
 
-  const allProducts = products();
-  const allCustomers = customers();
-  const allSales = sales();
+  const allProducts =
+    products();
+
+  const allCustomers =
+    customers();
+
+  const allSales =
+    sales();
 
   const productResult =
     resolveEntity(
@@ -3026,8 +4242,11 @@ export function parseInformationCommand(input) {
     RX.stock.test(text)
   ) {
     return {
-      kind: 'clarification',
-      text: productResult.question
+      kind:
+        'clarification',
+
+      text:
+        productResult.question
     };
   }
 
@@ -3036,16 +4255,23 @@ export function parseInformationCommand(input) {
     RX.stock.test(text) &&
     !rx(
       WORDS.addStock
-        .concat(WORDS.removeStock)
-        .concat(WORDS.sale)
+        .concat(
+          WORDS.removeStock
+        )
+        .concat(
+          WORDS.sale
+        )
     ).test(text)
   ) {
     rememberContext({
-      product: productResult.item
+      product:
+        productResult.item
     });
 
     return {
-      kind: 'answer',
+      kind:
+        'answer',
+
       text:
         `${productResult.item.name}: ` +
         `current stock ` +
@@ -3053,38 +4279,52 @@ export function parseInformationCommand(input) {
     };
   }
 
-  if (RX.lowStock.test(text)) {
+  if (
+    RX.lowStock.test(text)
+  ) {
     const low =
       allProducts.filter(
         p =>
-          Number(p.stock || 0) <=
-          Number(p.minStock || 5)
+          Number(
+            p.stock || 0
+          ) <=
+          Number(
+            p.minStock || 5
+          )
       );
 
     return {
-      kind: 'answer',
-      text: low.length
-        ? `Low stock: ${low
-          .map(
-            p =>
-              `${p.name} (${p.stock})`
-          )
-          .join(', ')}`
-        : 'No low-stock products found.'
+      kind:
+        'answer',
+
+      text:
+        low.length
+          ? `Low stock: ${low
+            .map(
+              p =>
+                `${p.name} (${p.stock})`
+            )
+            .join(', ')}`
+          : 'No low-stock products found.'
     };
   }
 
-  if (RX.productsList.test(text)) {
+  if (
+    RX.productsList.test(text)
+  ) {
     return {
-      kind: 'answer',
-      text: allProducts.length
-        ? allProducts
-          .map(
-            p =>
-              `${p.name}: ${p.stock} in stock`
-          )
-          .join('\n')
-        : 'No products found.'
+      kind:
+        'answer',
+
+      text:
+        allProducts.length
+          ? allProducts
+            .map(
+              p =>
+                `${p.name}: ${p.stock} in stock`
+            )
+            .join('\n')
+          : 'No products found.'
     };
   }
 
@@ -3100,15 +4340,20 @@ export function parseInformationCommand(input) {
     RX.balance.test(text)
   ) {
     return {
-      kind: 'clarification',
-      text: customerResult.question
+      kind:
+        'clarification',
+
+      text:
+        customerResult.question
     };
   }
 
   if (
     customerResult.found &&
     RX.balance.test(text) &&
-    !Number.isFinite(amountFrom(text))
+    !Number.isFinite(
+      amountFrom(text)
+    )
   ) {
     rememberContext({
       customer:
@@ -3116,7 +4361,9 @@ export function parseInformationCommand(input) {
     });
 
     return {
-      kind: 'answer',
+      kind:
+        'answer',
+
       text:
         `${customerResult.item.name}: due ` +
         `${money(customerResult.item.balance || 0)}.`
@@ -3136,19 +4383,24 @@ export function parseInformationCommand(input) {
     const due =
       allCustomers.filter(
         c =>
-          Number(c.balance || 0) > 0
+          Number(
+            c.balance || 0
+          ) > 0
       );
 
     return {
-      kind: 'answer',
-      text: due.length
-        ? due
-          .map(
-            c =>
-              `${c.name}: ${money(c.balance)}`
-          )
-          .join('\n')
-        : 'No customer dues found.'
+      kind:
+        'answer',
+
+      text:
+        due.length
+          ? due
+            .map(
+              c =>
+                `${c.name}: ${money(c.balance)}`
+            )
+            .join('\n')
+          : 'No customer dues found.'
     };
   }
 
@@ -3156,7 +4408,8 @@ export function parseInformationCommand(input) {
     RX.sale.test(text) &&
     RX.today.test(text)
   ) {
-    const date = todayDate();
+    const date =
+      todayDate();
 
     const rows =
       allSales.filter(
@@ -3169,14 +4422,21 @@ export function parseInformationCommand(input) {
 
     const total =
       rows.reduce(
-        (sum, s) =>
+        (
+          sum,
+          s
+        ) =>
           sum +
-          Number(s.total || 0),
+          Number(
+            s.total || 0
+          ),
         0
       );
 
     return {
-      kind: 'answer',
+      kind:
+        'answer',
+
       text:
         `Today's sales: ${rows.length} sale(s), ` +
         `total ${money(total)}.`
@@ -3201,14 +4461,21 @@ export function parseInformationCommand(input) {
 
     const total =
       rows.reduce(
-        (sum, s) =>
+        (
+          sum,
+          s
+        ) =>
           sum +
-          Number(s.total || 0),
+          Number(
+            s.total || 0
+          ),
         0
       );
 
     return {
-      kind: 'answer',
+      kind:
+        'answer',
+
       text:
         `Yesterday's sales: ${rows.length} sale(s), ` +
         `total ${money(total)}.`
@@ -3233,14 +4500,21 @@ export function parseInformationCommand(input) {
 
     const profit =
       rows.reduce(
-        (sum, s) =>
+        (
+          sum,
+          s
+        ) =>
           sum +
-          Number(s.totalProfit || 0),
+          Number(
+            s.totalProfit || 0
+          ),
         0
       );
 
     return {
-      kind: 'answer',
+      kind:
+        'answer',
+
       text:
         `Today's recorded profit: ${money(profit)}.`
     };
@@ -3256,7 +4530,9 @@ export function parseInformationCommand(input) {
     let rows =
       expenses();
 
-    if (RX.today.test(text)) {
+    if (
+      RX.today.test(text)
+    ) {
       const today =
         todayDate();
 
@@ -3272,14 +4548,21 @@ export function parseInformationCommand(input) {
 
     const total =
       rows.reduce(
-        (sum, e) =>
+        (
+          sum,
+          e
+        ) =>
           sum +
-          Number(e.amount || 0),
+          Number(
+            e.amount || 0
+          ),
         0
       );
 
     return {
-      kind: 'answer',
+      kind:
+        'answer',
+
       text:
         `Total expenses: ${money(total)}.`
     };
@@ -3292,7 +4575,9 @@ export function parseInformationCommand(input) {
 /* MAIN COMMAND PARSER                                                        */
 /* -------------------------------------------------------------------------- */
 
-export function parseCommand(input) {
+export function parseCommand(
+  input
+) {
   const original =
     String(input || '').trim();
 
@@ -3315,36 +4600,29 @@ export function parseCommand(input) {
   clearOldContext();
 
   const info =
-    parseInformationCommand(original);
+    parseInformationCommand(
+      original
+    );
 
   if (info) {
     return info;
   }
 
-  /*
-   * IMPORTANT FIX:
-   *
-   * Multi-item sale parsing MUST happen before global product
-   * ambiguity resolution.
-   *
-   * Example:
-   *
-   *   1 lamp 3 frame sale karo
-   *
-   * resolveEntity() sees both "lamp" and "frame" and previously
-   * returned an ambiguity clarification before parseMultiSaleItems()
-   * had a chance to understand the command.
-   *
-   * We now parse the complete sale first. Each product is resolved
-   * separately by findProductStartingAt().
-   */
+  /* ---------------------------------------------------------------------- */
+  /* SALE INTENT MUST BE PARSED FIRST                                       */
+  /* ---------------------------------------------------------------------- */
+
   const isSaleIntent =
     rx(WORDS.sale).test(text) &&
-    !rx(WORDS.addStock).test(text);
+    !rx(
+      WORDS.addStock
+    ).test(text);
 
   if (isSaleIntent) {
     const isWholesale =
-      rx(WORDS.wholesale).test(text);
+      rx(
+        WORDS.wholesale
+      ).test(text);
 
     const saleType =
       isWholesale
@@ -3358,7 +4636,9 @@ export function parseCommand(input) {
           ' '
         )
         .replace(
-          rx(WORDS.wholesale),
+          rx(
+            WORDS.wholesale
+          ),
           ' '
         )
         .replace(
@@ -3373,11 +4653,17 @@ export function parseCommand(input) {
         allProducts
       );
 
-    if (saleItems.length > 0) {
-      for (const item of saleItems) {
+    if (
+      saleItems.length > 0
+    ) {
+      for (
+        const item of saleItems
+      ) {
         if (!item.product) {
           return {
-            kind: 'answer',
+            kind:
+              'answer',
+
             text:
               `I couldn't find the product ` +
               `"${item.name}" in your inventory.`
@@ -3385,11 +4671,6 @@ export function parseCommand(input) {
         }
       }
 
-      /*
-       * Resolve customer only after the sale products have
-       * been parsed. This prevents product names from being
-       * globally interpreted as one ambiguous entity.
-       */
       const customerResult =
         resolveEntity(
           allCustomers,
@@ -3400,33 +4681,52 @@ export function parseCommand(input) {
       if (
         customerResult.ambiguous &&
         (
-          RX.customer.test(text) ||
-          RX.balance.test(text) ||
+          RX.customer.test(
+            text
+          ) ||
+          RX.balance.test(
+            text
+          ) ||
           rx(
             WORDS.receiveCustomer
-              .concat(WORDS.giveCustomer)
+              .concat(
+                WORDS.giveCustomer
+              )
           ).test(text)
         )
       ) {
         return {
-          kind: 'clarification',
-          text: customerResult.question
+          kind:
+            'clarification',
+
+          text:
+            customerResult.question
         };
       }
 
       let totalAmount = 0;
+
       const lines = [];
 
-      for (const item of saleItems) {
+      for (
+        const item of saleItems
+      ) {
         const prod =
           item.product;
 
         const available =
-          Number(prod.stock) || 0;
+          Number(
+            prod.stock
+          ) || 0;
 
-        if (item.qty > available) {
+        if (
+          item.qty >
+          available
+        ) {
           return {
-            kind: 'answer',
+            kind:
+              'answer',
+
             text:
               `Not enough stock for ${prod.name}. ` +
               `Available: ${available}, ` +
@@ -3435,7 +4735,8 @@ export function parseCommand(input) {
         }
 
         const normalPrice =
-          saleType === 'wholesale'
+          saleType ===
+          'wholesale'
             ? Number(
               prod.wholesalePrice ??
               prod.price ??
@@ -3448,25 +4749,34 @@ export function parseCommand(input) {
             );
 
         const unit =
-          item.unitPrice !== undefined
-            ? Number(item.unitPrice)
+          item.unitPrice !==
+          undefined
+            ? Number(
+              item.unitPrice
+            )
             : normalPrice;
 
         if (
-          !Number.isFinite(unit) ||
+          !Number.isFinite(
+            unit
+          ) ||
           unit < 0
         ) {
           return {
-            kind: 'answer',
+            kind:
+              'answer',
+
             text:
               `Invalid selling price for ${prod.name}.`
           };
         }
 
         const lineTotal =
-          unit * item.qty;
+          unit *
+          item.qty;
 
-        totalAmount += lineTotal;
+        totalAmount +=
+          lineTotal;
 
         lines.push(
           `• ${item.qty} × ${prod.name} ` +
@@ -3483,16 +4793,20 @@ export function parseCommand(input) {
 
       rememberContext({
         customer:
-          customer || undefined
+          customer ||
+          undefined
       });
 
       return {
-        kind: 'confirm',
+        kind:
+          'confirm',
 
         action: {
-          type: 'sellProductBatch',
+          type:
+            'sellProductBatch',
 
-          items: saleItems,
+          items:
+            saleItems,
 
           customer,
 
@@ -3512,10 +4826,10 @@ export function parseCommand(input) {
     }
   }
 
-  /*
-   * Only resolve generic entities AFTER multi-item sales have had
-   * their chance to parse.
-   */
+  /* ---------------------------------------------------------------------- */
+  /* GENERIC ENTITY RESOLUTION                                              */
+  /* ---------------------------------------------------------------------- */
+
   let productResult =
     resolveEntity(
       allProducts,
@@ -3540,8 +4854,12 @@ export function parseCommand(input) {
   const hasProductVerb =
     rx(
       WORDS.addStock
-        .concat(WORDS.removeStock)
-        .concat(WORDS.sale)
+        .concat(
+          WORDS.removeStock
+        )
+        .concat(
+          WORDS.sale
+        )
     ).test(text);
 
   if (
@@ -3556,7 +4874,9 @@ export function parseCommand(input) {
       found: true,
       ambiguous: false,
       item: product,
-      matches: [product]
+      matches: [
+        product
+      ]
     };
   }
 
@@ -3565,7 +4885,9 @@ export function parseCommand(input) {
     (
       rx(
         WORDS.receiveCustomer
-          .concat(WORDS.giveCustomer)
+          .concat(
+            WORDS.giveCustomer
+          )
       ).test(text) ||
       /(?:same customer|this customer|that customer|usi customer|is customer|اس گاہک|اسی گاہک)/i.test(text)
     ) &&
@@ -3578,7 +4900,9 @@ export function parseCommand(input) {
       found: true,
       ambiguous: false,
       item: customer,
-      matches: [customer]
+      matches: [
+        customer
+      ]
     };
   }
 
@@ -3586,7 +4910,9 @@ export function parseCommand(input) {
     !supplierResult.found &&
     rx(
       WORDS.supplierPayment
-        .concat(WORDS.supplierDebt)
+        .concat(
+          WORDS.supplierDebt
+        )
     ).test(text) &&
     contextSupplier()
   ) {
@@ -3597,7 +4923,9 @@ export function parseCommand(input) {
       found: true,
       ambiguous: false,
       item: supplier,
-      matches: [supplier]
+      matches: [
+        supplier
+      ]
     };
   }
 
@@ -3609,7 +4937,9 @@ export function parseCommand(input) {
     )
   ) {
     return {
-      kind: 'clarification',
+      kind:
+        'clarification',
+
       text:
         productResult.question
     };
@@ -3621,12 +4951,16 @@ export function parseCommand(input) {
       RX.balance.test(text) ||
       rx(
         WORDS.receiveCustomer
-          .concat(WORDS.giveCustomer)
+          .concat(
+            WORDS.giveCustomer
+          )
       ).test(text)
     )
   ) {
     return {
-      kind: 'clarification',
+      kind:
+        'clarification',
+
       text:
         customerResult.question
     };
@@ -3636,23 +4970,29 @@ export function parseCommand(input) {
     supplierResult.ambiguous &&
     rx(
       WORDS.supplierPayment
-        .concat(WORDS.supplierDebt)
+        .concat(
+          WORDS.supplierDebt
+        )
     ).test(text)
   ) {
     return {
-      kind: 'clarification',
+      kind:
+        'clarification',
+
       text:
         supplierResult.question
     };
   }
 
-  /* ------------------------------------------------------------------------ */
+  /* ---------------------------------------------------------------------- */
   /* MULTI-ITEM STOCK ADD                                                     */
-  /* ------------------------------------------------------------------------ */
+  /* ---------------------------------------------------------------------- */
 
   const isStockIntent =
     (
-      rx(WORDS.addStock).test(text) &&
+      rx(
+        WORDS.addStock
+      ).test(text) &&
       (
         RX.stock.test(text) ||
         /(?:keemat|qeemat|price|rate|قیمت)/i.test(text)
@@ -3667,7 +5007,9 @@ export function parseCommand(input) {
     let cleanBody =
       text
         .replace(
-          rx(WORDS.addStock),
+          rx(
+            WORDS.addStock
+          ),
           ' '
         )
         .replace(
@@ -3686,28 +5028,35 @@ export function parseCommand(input) {
         allProducts
       );
 
-    if (stockItems.length > 0) {
+    if (
+      stockItems.length > 0
+    ) {
       const summaryItems =
-        stockItems.map(item => {
-          const pDesc =
-            item.product
-              ? `${item.product.name} ` +
-              `(current stock ${Number(item.product.stock) || 0})`
-              : `${item.name} (new product)`;
+        stockItems.map(
+          item => {
+            const pDesc =
+              item.product
+                ? `${item.product.name} ` +
+                `(current stock ${Number(item.product.stock) || 0})`
+                : `${item.name} (new product)`;
 
-          return (
-            `• ${item.qty} × ${pDesc} ` +
-            `at ${money(item.price)}`
-          );
-        });
+            return (
+              `• ${item.qty} × ${pDesc} ` +
+              `at ${money(item.price)}`
+            );
+          }
+        );
 
       return {
-        kind: 'confirm',
+        kind:
+          'confirm',
 
         action: {
-          type: 'addStockBatch',
+          type:
+            'addStockBatch',
 
-          items: stockItems,
+          items:
+            stockItems,
 
           summary:
             `Add stock for ${stockItems.length} ` +
@@ -3718,13 +5067,15 @@ export function parseCommand(input) {
     }
   }
 
-  /* ------------------------------------------------------------------------ */
-  /* SINGLE STOCK REMOVE                                                      */
-  /* ------------------------------------------------------------------------ */
+  /* ---------------------------------------------------------------------- */
+  /* SINGLE STOCK REMOVE                                                     */
+  /* ---------------------------------------------------------------------- */
 
   if (
     productResult.found &&
-    rx(WORDS.removeStock).test(text) &&
+    rx(
+      WORDS.removeStock
+    ).test(text) &&
     (
       RX.stock.test(text) ||
       RX.quantity.test(text)
@@ -3741,7 +5092,9 @@ export function parseCommand(input) {
       qty <= 0
     ) {
       return {
-        kind: 'clarification',
+        kind:
+          'clarification',
+
         text:
           `How many ${product.name} should I remove?`
       };
@@ -3752,10 +5105,12 @@ export function parseCommand(input) {
     });
 
     return {
-      kind: 'confirm',
+      kind:
+        'confirm',
 
       action: {
-        type: 'removeStock',
+        type:
+          'removeStock',
 
         product,
 
@@ -3768,15 +5123,19 @@ export function parseCommand(input) {
     };
   }
 
-  /* ------------------------------------------------------------------------ */
-  /* CUSTOMER PAYMENT                                                         */
-  /* ------------------------------------------------------------------------ */
+  /* ---------------------------------------------------------------------- */
+  /* CUSTOMER PAYMENT                                                       */
+  /* ---------------------------------------------------------------------- */
 
   const receiveWords =
-    rx(WORDS.receiveCustomer);
+    rx(
+      WORDS.receiveCustomer
+    );
 
   const giveWords =
-    rx(WORDS.giveCustomer);
+    rx(
+      WORDS.giveCustomer
+    );
 
   const isCreditPhrase =
     /(?:udhaar|udhar|qarz|ادھار|قرض)/i.test(text);
@@ -3789,9 +5148,13 @@ export function parseCommand(input) {
     const amount =
       amountFrom(text);
 
-    if (!Number.isFinite(amount)) {
+    if (
+      !Number.isFinite(amount)
+    ) {
       return {
-        kind: 'clarification',
+        kind:
+          'clarification',
+
         text:
           `How much should I receive from ${customerResult.item.name}?`
       };
@@ -3805,9 +5168,13 @@ export function parseCommand(input) {
         ) || 0
       );
 
-    if (amount > current) {
+    if (
+      amount > current
+    ) {
       return {
-        kind: 'answer',
+        kind:
+          'answer',
+
         text:
           `${customerResult.item.name}'s current due is ` +
           `${money(current)}. ` +
@@ -3822,10 +5189,12 @@ export function parseCommand(input) {
     });
 
     return {
-      kind: 'confirm',
+      kind:
+        'confirm',
 
       action: {
-        type: 'receiveCustomer',
+        type:
+          'receiveCustomer',
 
         customer:
           customerResult.item,
@@ -3840,9 +5209,9 @@ export function parseCommand(input) {
     };
   }
 
-  /* ------------------------------------------------------------------------ */
-  /* CUSTOMER CREDIT / DEBT                                                   */
-  /* ------------------------------------------------------------------------ */
+  /* ---------------------------------------------------------------------- */
+  /* CUSTOMER CREDIT / DEBT                                                 */
+  /* ---------------------------------------------------------------------- */
 
   if (
     customerResult.found &&
@@ -3851,9 +5220,13 @@ export function parseCommand(input) {
     const amount =
       amountFrom(text);
 
-    if (!Number.isFinite(amount)) {
+    if (
+      !Number.isFinite(amount)
+    ) {
       return {
-        kind: 'clarification',
+        kind:
+          'clarification',
+
         text:
           `How much credit should I add to ${customerResult.item.name}?`
       };
@@ -3873,10 +5246,12 @@ export function parseCommand(input) {
     });
 
     return {
-      kind: 'confirm',
+      kind:
+        'confirm',
 
       action: {
-        type: 'giveCustomer',
+        type:
+          'giveCustomer',
 
         customer:
           customerResult.item,
@@ -3891,20 +5266,26 @@ export function parseCommand(input) {
     };
   }
 
-  /* ------------------------------------------------------------------------ */
-  /* SUPPLIER PAYMENT                                                         */
-  /* ------------------------------------------------------------------------ */
+  /* ---------------------------------------------------------------------- */
+  /* SUPPLIER PAYMENT                                                       */
+  /* ---------------------------------------------------------------------- */
 
   if (
     supplierResult.found &&
-    rx(WORDS.supplierPayment).test(text)
+    rx(
+      WORDS.supplierPayment
+    ).test(text)
   ) {
     const amount =
       amountFrom(text);
 
-    if (!Number.isFinite(amount)) {
+    if (
+      !Number.isFinite(amount)
+    ) {
       return {
-        kind: 'clarification',
+        kind:
+          'clarification',
+
         text:
           `How much should I pay ${supplierResult.item.name}?`
       };
@@ -3918,9 +5299,13 @@ export function parseCommand(input) {
         ) || 0
       );
 
-    if (amount > current) {
+    if (
+      amount > current
+    ) {
       return {
-        kind: 'answer',
+        kind:
+          'answer',
+
         text:
           `${supplierResult.item.name}'s current payable is ` +
           `${money(current)}. ` +
@@ -3934,10 +5319,12 @@ export function parseCommand(input) {
     });
 
     return {
-      kind: 'confirm',
+      kind:
+        'confirm',
 
       action: {
-        type: 'supplierPayment',
+        type:
+          'supplierPayment',
 
         supplier:
           supplierResult.item,
@@ -3952,20 +5339,26 @@ export function parseCommand(input) {
     };
   }
 
-  /* ------------------------------------------------------------------------ */
-  /* SUPPLIER DEBT                                                            */
-  /* ------------------------------------------------------------------------ */
+  /* ---------------------------------------------------------------------- */
+  /* SUPPLIER DEBT                                                          */
+  /* ---------------------------------------------------------------------- */
 
   if (
     supplierResult.found &&
-    rx(WORDS.supplierDebt).test(text)
+    rx(
+      WORDS.supplierDebt
+    ).test(text)
   ) {
     const amount =
       amountFrom(text);
 
-    if (!Number.isFinite(amount)) {
+    if (
+      !Number.isFinite(amount)
+    ) {
       return {
-        kind: 'clarification',
+        kind:
+          'clarification',
+
         text:
           `How much payable should I add for ${supplierResult.item.name}?`
       };
@@ -3985,10 +5378,12 @@ export function parseCommand(input) {
     });
 
     return {
-      kind: 'confirm',
+      kind:
+        'confirm',
 
       action: {
-        type: 'supplierDebt',
+        type:
+          'supplierDebt',
 
         supplier:
           supplierResult.item,
@@ -4003,29 +5398,37 @@ export function parseCommand(input) {
     };
   }
 
-  /* ------------------------------------------------------------------------ */
-  /* EXPENSE                                                                  */
-  /* ------------------------------------------------------------------------ */
+  /* ---------------------------------------------------------------------- */
+  /* EXPENSE                                                                */
+  /* ---------------------------------------------------------------------- */
 
   if (
-    rx(WORDS.expense).test(text)
+    rx(
+      WORDS.expense
+    ).test(text)
   ) {
     const amount =
       amountFrom(text);
 
-    if (!Number.isFinite(amount)) {
+    if (
+      !Number.isFinite(amount)
+    ) {
       return {
-        kind: 'clarification',
+        kind:
+          'clarification',
+
         text:
           'How much is the expense?'
       };
     }
 
     return {
-      kind: 'confirm',
+      kind:
+        'confirm',
 
       action: {
-        type: 'expense',
+        type:
+          'expense',
 
         amount,
 
@@ -4041,12 +5444,14 @@ export function parseCommand(input) {
     };
   }
 
-  /* ------------------------------------------------------------------------ */
-  /* CREATE CUSTOMER                                                          */
-  /* ------------------------------------------------------------------------ */
+  /* ---------------------------------------------------------------------- */
+  /* CREATE CUSTOMER                                                        */
+  /* ---------------------------------------------------------------------- */
 
   if (
-    rx(WORDS.addCustomer).test(text) &&
+    rx(
+      WORDS.addCustomer
+    ).test(text) &&
     RX.customer.test(text)
   ) {
     let name =
@@ -4071,7 +5476,9 @@ export function parseCommand(input) {
 
     if (!name) {
       return {
-        kind: 'clarification',
+        kind:
+          'clarification',
+
         text:
           'What is the customer name?'
       };
@@ -4086,17 +5493,21 @@ export function parseCommand(input) {
 
     if (duplicate) {
       return {
-        kind: 'answer',
+        kind:
+          'answer',
+
         text:
           `Customer "${duplicate.name}" already exists.`
       };
     }
 
     return {
-      kind: 'confirm',
+      kind:
+        'confirm',
 
       action: {
-        type: 'addCustomer',
+        type:
+          'addCustomer',
 
         name,
 
@@ -4106,24 +5517,28 @@ export function parseCommand(input) {
     };
   }
 
-  /* ------------------------------------------------------------------------ */
-  /* CREATE PRODUCT EXPLICITLY                                                */
-  /* ------------------------------------------------------------------------ */
+  /* ---------------------------------------------------------------------- */
+  /* CREATE PRODUCT EXPLICITLY                                              */
+  /* ---------------------------------------------------------------------- */
 
   if (
-    rx(WORDS.addProduct).test(text) &&
+    rx(
+      WORDS.addProduct
+    ).test(text) &&
     /(?:product|item|پروڈکٹ|آئٹم)/i.test(text)
   ) {
     return {
-      kind: 'clarification',
+      kind:
+        'clarification',
+
       text:
         'Please provide the product name and its price before I create it.'
     };
   }
 
-  /* ------------------------------------------------------------------------ */
-  /* FOLLOW-UPS                                                               */
-  /* ------------------------------------------------------------------------ */
+  /* ---------------------------------------------------------------------- */
+  /* FOLLOW-UPS                                                             */
+  /* ---------------------------------------------------------------------- */
 
   const context =
     getContext();
@@ -4133,7 +5548,9 @@ export function parseCommand(input) {
     /^(?:receive it|receive|collect it|liya|le liya|وصول کرلو)$/i.test(text)
   ) {
     return {
-      kind: 'clarification',
+      kind:
+        'clarification',
+
       text:
         `How much should I receive from ${context.customer.name}?`
     };
@@ -4144,7 +5561,9 @@ export function parseCommand(input) {
     /^(?:add more|add aur|aur add karo|aur daal do|مزید شامل کرو)$/i.test(text)
   ) {
     return {
-      kind: 'clarification',
+      kind:
+        'clarification',
+
       text:
         `How many more ${context.product.name} should I add?`
     };
@@ -4157,7 +5576,9 @@ export function parseCommand(input) {
 /* MULTI-ACTION COMMAND DETECTION                                             */
 /* -------------------------------------------------------------------------- */
 
-export function splitMultiCommand(input) {
+export function splitMultiCommand(
+  input
+) {
   const text =
     String(input || '').trim();
 
@@ -4165,16 +5586,14 @@ export function splitMultiCommand(input) {
     return [];
   }
 
-  /*
-   * Multi-product stock/sale commands are parsed as a complete command
-   * before this function is reached.
-   */
   const parts =
     text
       .split(
         /\s+(?:and|aur|phir|then|اور|پھر)\s+/i
       )
-      .map(x => x.trim())
+      .map(
+        x => x.trim()
+      )
       .filter(Boolean);
 
   return parts.length > 1
@@ -4186,13 +5605,16 @@ export function splitMultiCommand(input) {
 /* PUBLIC AGENT HANDLER                                                       */
 /* -------------------------------------------------------------------------- */
 
-export async function handleAgentCommand(input) {
+export async function handleAgentCommand(
+  input
+) {
   const text =
     String(input || '').trim();
 
   if (!text) {
     return {
       handled: true,
+
       text:
         'Please enter a command.'
     };
@@ -4201,19 +5623,24 @@ export async function handleAgentCommand(input) {
   clearOldContext();
 
   /* ---------------------------------------------------------------------- */
-  /* PENDING CONFIRMATION                                                     */
+  /* PENDING CONFIRMATION                                                    */
   /* ---------------------------------------------------------------------- */
 
-  if (window.__myBusinessAiPending) {
+  if (
+    window.__myBusinessAiPending
+  ) {
     const pending =
       window.__myBusinessAiPending;
 
     if (isYes(text)) {
-      window.__myBusinessAiPending = null;
+      window.__myBusinessAiPending =
+        null;
 
       try {
         const result =
-          await execute(pending);
+          await execute(
+            pending
+          );
 
         return {
           handled: true,
@@ -4222,6 +5649,7 @@ export async function handleAgentCommand(input) {
       } catch (error) {
         return {
           handled: true,
+
           text:
             `I could not complete that task: ` +
             `${error?.message || error}`
@@ -4230,10 +5658,12 @@ export async function handleAgentCommand(input) {
     }
 
     if (isNo(text)) {
-      window.__myBusinessAiPending = null;
+      window.__myBusinessAiPending =
+        null;
 
       return {
         handled: true,
+
         text:
           'Cancelled. No changes were made.'
       };
@@ -4241,6 +5671,7 @@ export async function handleAgentCommand(input) {
 
     return {
       handled: true,
+
       text:
         'Please reply "yes" to confirm or "no" to cancel.'
     };
@@ -4254,29 +5685,39 @@ export async function handleAgentCommand(input) {
     parseCommand(text);
 
   if (
-    parsed?.kind === 'answer'
+    parsed?.kind ===
+    'answer'
   ) {
     return {
       handled: true,
-      text: parsed.text
+
+      text:
+        parsed.text
     };
   }
 
   if (
-    parsed?.kind === 'clarification'
+    parsed?.kind ===
+    'clarification'
   ) {
     return {
       handled: true,
-      text: parsed.text
+
+      text:
+        parsed.text
     };
   }
 
   if (
-    parsed?.kind === 'confirm'
+    parsed?.kind ===
+    'confirm'
   ) {
     return {
       handled: true,
-      confirmation: true,
+
+      confirmation:
+        true,
+
       text:
         confirmationText(
           parsed.action
@@ -4291,11 +5732,15 @@ export async function handleAgentCommand(input) {
   const multi =
     splitMultiCommand(text);
 
-  if (multi.length > 1) {
+  if (
+    multi.length > 1
+  ) {
     const parsedParts =
       multi.map(
         part =>
-          parseCommand(part)
+          parseCommand(
+            part
+          )
       );
 
     const unsupported =
@@ -4306,22 +5751,31 @@ export async function handleAgentCommand(input) {
             'answer',
             'confirm',
             'clarification'
-          ].includes(part.kind)
+          ].includes(
+            part.kind
+          )
       );
 
     if (!unsupported) {
       const clarifications =
         parsedParts.filter(
           p =>
-            p.kind === 'clarification'
+            p.kind ===
+            'clarification'
         );
 
-      if (clarifications.length) {
+      if (
+        clarifications.length
+      ) {
         return {
           handled: true,
+
           text:
             clarifications
-              .map(x => x.text)
+              .map(
+                x =>
+                  x.text
+              )
               .join('\n')
         };
       }
@@ -4329,7 +5783,8 @@ export async function handleAgentCommand(input) {
       const answers =
         parsedParts.filter(
           p =>
-            p.kind === 'answer'
+            p.kind ===
+            'answer'
         );
 
       if (
@@ -4338,9 +5793,13 @@ export async function handleAgentCommand(input) {
       ) {
         return {
           handled: true,
+
           text:
             answers
-              .map(x => x.text)
+              .map(
+                x =>
+                  x.text
+              )
               .join('\n')
         };
       }
@@ -4349,16 +5808,20 @@ export async function handleAgentCommand(input) {
         parsedParts
           .filter(
             p =>
-              p.kind === 'confirm'
+              p.kind ===
+              'confirm'
           )
           .map(
             p =>
               p.action
           );
 
-      if (actions.length) {
+      if (
+        actions.length
+      ) {
         return {
           handled: true,
+
           text:
             'I understood multiple actions, but I need to process them one at a time to keep the business data safe.'
         };
@@ -4385,38 +5848,30 @@ export function agentContext() {
   return [
     'MyBusiness local agent context:',
 
-    `Products: ${data.products?.length || 0
-    }`,
+    `Products: ${data.products?.length || 0}`,
 
-    `Customers: ${data.customers?.length || 0
-    }`,
+    `Customers: ${data.customers?.length || 0}`,
 
-    `Suppliers: ${data.suppliers?.length || 0
-    }`,
+    `Suppliers: ${data.suppliers?.length || 0}`,
 
-    `Sales: ${data.sales?.length || 0
-    }`,
+    `Sales: ${data.sales?.length || 0}`,
 
-    `Expenses: ${data.expenses?.length || 0
-    }`,
+    `Expenses: ${data.expenses?.length || 0}`,
 
     `Product names: ${names(
       data.products || [],
       20
-    ) || 'none'
-    }`,
+    ) || 'none'}`,
 
     `Customer names: ${names(
       data.customers || [],
       20
-    ) || 'none'
-    }`,
+    ) || 'none'}`,
 
     `Supplier names: ${names(
       data.suppliers || [],
       20
-    ) || 'none'
-    }`,
+    ) || 'none'}`,
 
     context.product
       ? `Current product context: ${context.product.name}`
@@ -4430,21 +5885,28 @@ export function agentContext() {
       ? `Current supplier context: ${context.supplier.name}`
       : '',
 
-    `Language: ${typeof document !== 'undefined'
-      ? (
-        document.documentElement.lang ||
-        'en'
-      )
-      : 'en'
+    `Language: ${
+      typeof document !== 'undefined'
+        ? (
+          document.documentElement.lang ||
+          'en'
+        )
+        : 'en'
     }`,
 
     'Registered actions:',
 
-    Object.keys(ACTIONS).join(', '),
+    Object.keys(
+      ACTIONS
+    ).join(', '),
 
     'Multi-item stock: supported.',
 
     'Multi-item sales: supported.',
+
+    'Custom sale prices: supported.',
+
+    'Multiple product transaction reads are completed before writes.',
 
     'Safety: Deterministic execution only.'
   ]
