@@ -605,3 +605,21 @@ body{padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bot
         margin-bottom: 5px;
     }
 }
+/* Fast WhatsApp/Google-style voice feedback */
+.ai-voice-btn{overflow:visible;min-width:56px;position:relative;display:inline-flex;align-items:center;justify-content:center;gap:6px;will-change:transform,box-shadow;}
+.ai-voice-btn.active{background:var(--primary);color:#fff;transform:scale(1.06);box-shadow:0 0 0 6px color-mix(in srgb,var(--primary) 14%,transparent),0 8px 24px color-mix(in srgb,var(--primary) 25%,transparent)}
+.ai-voice-btn.active:before,.ai-voice-btn.active:after{content:"";position:absolute;inset:-5px;border:2px solid color-mix(in srgb,var(--primary) 28%,transparent);border-radius:inherit;animation:aiVoiceRing .95s ease-out infinite;pointer-events:none}
+.ai-voice-btn.active:after{animation-delay:.47s}
+.ai-voice-btn.active i{animation:aiMicBounce .55s ease-in-out infinite alternate}
+.ai-voice-live{font-size:10px;font-weight:800;letter-spacing:.2px;animation:aiVoiceText 1s ease-in-out infinite}
+.ai-voice-btn.locked{background:var(--primary);color:#fff;transform:scale(1.06);box-shadow:0 0 0 7px color-mix(in srgb,var(--primary) 18%,transparent),0 8px 26px color-mix(in srgb,var(--primary) 28%,transparent)}
+.ai-voice-btn.locked i{animation:aiLockPulse .9s ease-in-out infinite}
+.ai-voice-btn.transcribing{background:var(--surface-2);color:var(--primary);border-color:var(--primary);box-shadow:0 0 0 4px color-mix(in srgb,var(--primary) 10%,transparent)}
+.ai-voice-btn.transcribing i{animation:aiSpin .7s linear infinite}
+.ai-voice-processing{font-size:10px;font-weight:800;white-space:nowrap}
+@keyframes aiVoiceRing{0%{transform:scale(.92);opacity:.7}100%{transform:scale(1.18);opacity:0}}
+@keyframes aiMicBounce{from{transform:translateY(1px) scale(.96)}to{transform:translateY(-1px) scale(1.08)}}
+@keyframes aiLockPulse{50%{transform:scale(1.18)}}
+@keyframes aiVoiceText{50%{opacity:.55}}
+@keyframes aiSpin{to{transform:rotate(360deg)}}
+@media(max-width:600px){.ai-voice-btn{min-width:58px}.ai-voice-live,.ai-voice-processing{font-size:9px}}

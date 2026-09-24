@@ -229,7 +229,7 @@ class LocalWhisper(
         try {
             audioFile.parentFile?.mkdirs()
             recorder = AudioRecord(
-                MediaRecorder.AudioSource.MIC,
+                MediaRecorder.AudioSource.VOICE_RECOGNITION,
                 SAMPLE_RATE,
                 AudioFormat.CHANNEL_IN_MONO,
                 AudioFormat.ENCODING_PCM_16BIT,
@@ -251,21 +251,21 @@ class LocalWhisper(
                 try {
                     RandomAccessFile(audioFile, "rw").use { out ->
                         writeWavHeader(out, 0)
-                        val buffer = ShortArray(4096)
+                        val buffer = ShortArray(8192)
+                        val bytes = ByteArray(buffer.size * 2)
 
                         while (recording.get() && !closed.get()) {
                             val count = recorder?.read(buffer, 0, buffer.size, AudioRecord.READ_BLOCKING) ?: -1
                             if (count <= 0) continue
 
-                            val bytes = ByteArray(count * 2)
                             var j = 0
                             for (i in 0 until count) {
                                 val value = buffer[i].toInt()
                                 bytes[j++] = (value and 0xff).toByte()
                                 bytes[j++] = ((value shr 8) and 0xff).toByte()
                             }
-                            out.write(bytes)
-                            pcmBytesWritten += bytes.size
+                            out.write(bytes, 0, j)
+                            pcmBytesWritten += j
                         }
 
                         out.seek(0)

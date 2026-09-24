@@ -11,6 +11,8 @@ let voicePointerId=null;
 let voiceStartY=0;
 let voiceMovedUp=false;
 let voiceIgnoreClick=false;
+let voiceTimer=null;
+let voiceStartedAt=0;
 try{ chatHistory = JSON.parse(localStorage.getItem('mybusiness-ai-chat')||'[]'); }catch(_){ chatHistory = []; }
 function saveChatHistory(){ try{ localStorage.setItem('mybusiness-ai-chat', JSON.stringify(chatHistory)); }catch(_){} }
 export function clearAIChat(){
@@ -65,15 +67,17 @@ window.NativeWhisper._event=(kind,raw)=>{let d={};try{d=JSON.parse(raw||'{}')}ca
   voiceLocked=false;
   const voice=document.getElementById('ai-voice-btn');
   voice?.classList.remove('active','locked');
-  if(voice) voice.innerHTML='<i class="fas fa-microphone"></i>';
+  voice?.classList.add('transcribing');
+  if(voice){voice.innerHTML='<i class="fas fa-spinner"></i><span class="ai-voice-processing">Processing…</span>';voice.title='Processing speech…';voice.setAttribute('aria-label','Processing speech');}
 }updateCombinedAIAvailability();return;}
  if(kind==='result'){
   const text=String(d.text||'').trim();
   voiceRecording=false;
   voiceLocked=false;
   const voice=document.getElementById('ai-voice-btn');
-  voice?.classList.remove('active','locked');
-  if(voice) voice.innerHTML='<i class="fas fa-microphone"></i>';
+  voice?.classList.remove('active','locked','transcribing');
+  clearInterval(voiceTimer);voiceTimer=null;
+  if(voice){voice.innerHTML='<i class="fas fa-microphone"></i>';voice.title='Hold to speak • Swipe up to lock';voice.setAttribute('aria-label','Hold to speak');}
   if(text){
     const input=aiInput();
     if(input){
@@ -90,8 +94,9 @@ window.NativeWhisper._event=(kind,raw)=>{let d={};try{d=JSON.parse(raw||'{}')}ca
   voiceRecording=false;
   voiceLocked=false;
   const voice=document.getElementById('ai-voice-btn');
-  voice?.classList.remove('active','locked');
-  if(voice) voice.innerHTML='<i class="fas fa-microphone"></i>';
+  voice?.classList.remove('active','locked','transcribing');
+  clearInterval(voiceTimer);voiceTimer=null;
+  if(voice){voice.innerHTML='<i class="fas fa-microphone"></i>';voice.title='Hold to speak • Swipe up to lock';voice.setAttribute('aria-label','Hold to speak');}
   p?.classList.add('hidden');
   if(s){s.textContent=d.message||'Voice error';s.dataset.state='error';}
 }
@@ -130,8 +135,20 @@ export function renderAI(container){
    voiceRecording=true;
    voiceLocked=false;
    voiceMovedUp=false;
+   voice.classList.remove('transcribing','locked');
    voice.classList.add('active');
-   voice.innerHTML='<i class="fas fa-microphone"></i>';
+   voice.innerHTML='<i class="fas fa-microphone"></i><span class="ai-voice-live">0:00</span>';
+   voice.title='Release to stop • Swipe up to lock';
+   voice.setAttribute('aria-label','Recording • Release to stop');
+   voiceStartedAt=Date.now();
+   clearInterval(voiceTimer);
+   voiceTimer=setInterval(()=>{
+     if(!voiceRecording){clearInterval(voiceTimer);voiceTimer=null;return;}
+     const secs=Math.floor((Date.now()-voiceStartedAt)/1000);
+     const mins=Math.floor(secs/60), rem=String(secs%60).padStart(2,'0');
+     const live=voice.querySelector('.ai-voice-live');
+     if(live) live.textContent=`${mins}:${rem}`;
+   },250);
    try{ AndroidWhisper.startRecording(); }catch(e){
      voiceRecording=false;
      voice.classList.remove('active');
@@ -143,7 +160,12 @@ export function renderAI(container){
    voiceRecording=false;
    voiceLocked=false;
    voice.classList.remove('active','locked');
-   voice.innerHTML='<i class="fas fa-microphone"></i>';
+   clearInterval(voiceTimer);
+   voiceTimer=null;
+   voice.classList.add('transcribing');
+   voice.innerHTML='<i class="fas fa-spinner"></i><span class="ai-voice-processing">Processing…</span>';
+   voice.title='Processing speech…';
+   voice.setAttribute('aria-label','Processing speech');
    try{ AndroidWhisper.stopRecording(); }catch(e){ setAIError(e.message||'Could not stop microphone.'); }
  };
  voice.addEventListener('pointerdown',e=>{
@@ -168,7 +190,9 @@ export function renderAI(container){
      voiceLocked=true;
      voiceMovedUp=true;
      voice.classList.add('locked');
-     voice.innerHTML='<i class="fas fa-lock"></i>';
+     const elapsed=Math.max(0,Math.floor((Date.now()-voiceStartedAt)/1000));
+     const mins=Math.floor(elapsed/60), rem=String(elapsed%60).padStart(2,'0');
+     voice.innerHTML=`<i class="fas fa-lock"></i><span class="ai-voice-live">${mins}:${rem}</span>`;
      voice.title='Locked recording • Tap to stop';
      voice.setAttribute('aria-label','Locked recording • Tap to stop');
      if(navigator.vibrate) try{navigator.vibrate(20);}catch(_){}
