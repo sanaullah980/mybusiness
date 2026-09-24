@@ -8,6 +8,7 @@ import android.media.MediaRecorder
 import android.net.Uri
 import android.webkit.JavascriptInterface
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import dev.ffmpegkit.whisper.Whisper
 import dev.ffmpegkit.whisper.WhisperConfig
 import dev.ffmpegkit.whisper.WhisperModel
@@ -144,12 +145,33 @@ class LocalWhisper(
                 if (!hasGgmlMagic(tempFile)) {
                     throw IllegalArgumentException("The selected file is not a Whisper GGML model (missing 'ggml' header).")
                 }
+                val hash = sha256(tempFile)
+                if (!hash.equals(MODEL_SHA256, ignoreCase = true)) {
+                    // The file is a real ggml file (magic bytes matched) and the right
+                    // size, but its content doesn't match the known-good download —
+                    // almost always a partial/corrupted download rather than a bug.
+                    throw IllegalArgumentException(
+                        "The selected file failed SHA-256 verification (got $hash). " +
+                            "It's likely a corrupted or incomplete download — please re-download " +
+                            "$MODEL_NAME from $MODEL_URL and try again."
+                    )
+                }
 
                 notifyJs("state", JSONObject().put("status", "verifying").put("message", "Verifying Whisper model with the native Whisper loader...").toString())
                 val newLoaded = try {
                     Whisper.loadModel(activity, tempFile.absolutePath)
                 } catch (e: Throwable) {
-                    throw IllegalArgumentException("The selected file could not be loaded as a valid Whisper GGML base model.", e)
+                    // Surface the real underlying failure (exception type + message, and
+                    // its root cause) instead of a generic message, since this is often
+                    // the only diagnostic a user can get without adb/logcat access.
+                    var root: Throwable = e
+                    while (root.cause != null && root.cause !== root) root = root.cause!!
+                    val detail = "${e.javaClass.simpleName}: ${e.message ?: "no message"}" +
+                        if (root !== e) " | caused by ${root.javaClass.simpleName}: ${root.message ?: "no message"}" else ""
+                    throw IllegalArgumentException(
+                        "The selected file could not be loaded as a valid Whisper GGML base model. [$detail]",
+                        e
+                    )
                 }
                 val backup = File(modelDir, "$MODEL_NAME.previous")
                 backup.delete()
@@ -385,7 +407,7 @@ class LocalWhisper(
         if (!modelFile.exists() || !markerFile.exists()) return false
         val marker = runCatching { markerFile.readText() }.getOrNull() ?: return false
         return modelFile.length() in MIN_REASONABLE_BYTES..MAX_REASONABLE_BYTES &&
-            marker.equals(sha256(modelFile), ignoreCase = true)
+            marker.startsWith(MODEL_SHA256, ignoreCase = true)
     }
 
     private fun hasGgmlMagic(file: File): Boolean {
