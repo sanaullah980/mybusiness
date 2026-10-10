@@ -296,12 +296,12 @@ class LocalAi(
     private val eventListener: (String, String) -> Unit
 ) {
     companion object {
-        const val MODEL_NAME = "Qwen3-0.6B-Q4_0.gguf"
-        const val MODEL_URL = "https://huggingface.co/ggml-org/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_0.gguf?download=true"
-        const val MODEL_SHA256 = "da2572f16c06133561ce56accaa822216f2391ef4d37fba427801cd6736417d4"
-        const val EXPECTED_BYTES = 429_000_000L
-        const val MIN_REASONABLE_BYTES = 400_000_000L
-        const val MAX_REASONABLE_BYTES = 500_000_000L
+        const val MODEL_NAME = "mybusiness-qwen3-0.6b-q4_0.gguf"
+        const val MODEL_URL = "https://huggingface.co/sanaullah980/mybusiness-qwen3-0.6b-gguf-q4-0/resolve/main/mybusiness-qwen3-0.6b-q4_0.gguf?download=true"
+        const val MODEL_SHA256 = "fa210aea30ad5ab1ec5e324b6a6cce1f07125e4a4f7a8b8203db03dab813ffea"
+        const val EXPECTED_BYTES = 381_565_728L
+        const val MIN_REASONABLE_BYTES = 300_000_000L
+        const val MAX_REASONABLE_BYTES = 450_000_000L
     }
 
     private var model: dev.ffmpegkit.llama.LlamaModel? = null
@@ -428,6 +428,8 @@ class LocalAi(
                 runCatching { if (oldLoaded != null) Llama.releaseModel(oldLoaded) }
                 markerFile.writeText("$MODEL_SHA256\n${modelFile.length()}\n")
                 backup.delete()
+                // Remove the superseded stock Qwen file (if any) so the old ~429 MB copy does not waste storage.
+                runCatching { File(modelDir, "Qwen3-0.6B-Q4_0.gguf").delete(); File(modelDir, "Qwen3-0.6B-Q4_0.gguf.verified").delete() }
                 loading.set(false)
 
                 notifyJs("state", JSONObject().put("status", "ready").put("message", "AI Ready").put("model", MODEL_NAME).toString())
